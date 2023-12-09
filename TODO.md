@@ -1,0 +1,27 @@
+# TODO
+
+- [x]  Finish implementing code generation
+- [x]  Fix return values not being included in the function body
+- [x]  Convert function identifier to FuncId without extra state tracking
+- [x]  Fix adding more than two arguments to main causing strange results
+- [x]  Improve context/ir/disassembly API
+- [x]  Support parsing a function with no return values
+- [x]  Do not require an underscore assignment when calling a function with no return values
+- [ ]  Create a `Block` type that is just `Vec<Statement>`, but has a consistent syntax of `: statment statment;`
+- [ ]  Use the `Block` type for functions
+- [ ]  Pattern matching for ints
+- [ ]  Add range operator
+- [ ]  Support tuples
+- [ ]  Bool condition loop (while loop)
+- [ ]  Range loop (for loop)
+- [ ]  Support optionally getting the index and/or value when iterating over a range
+- [ ]  Improve error messaging to include line numbers (codespan-reporting crate? save for semantic analysis layer?)
+- [ ]  Add unit tests for grammar parsing
+- [ ]  Ensure that function definition order does not matter (declare a function when calling)
+- [ ]  Validate number of parameters = number of arguments, ensure this is not reported as a compiler bug
+- [ ]  Take a second pass over doc comments, and add more where necessary
+- [ ]  Support lambdas/nested functions (might need to add func keyword for this?)
+- [ ]  Add scenario tests for testing each feature of the language
+- [ ]  Decide how variable shadowing should be handled
+- [ ]  Update crate name and all instances of TODO_LANG_NAME with the name of the language.
+- [ ]  Implement imports to allow splitting up code across multiple source files

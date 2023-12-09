@@ -1,0 +1,23 @@
+[package]
+name = "cranelift-toy-langauge"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bin]]
+name = "main"
+path = "src/main.rs"
+
+[lib]
+name = "lib"
+path = "src/lib.rs"
+
+[dependencies]
+cranelift = "0.101"
+cranelift-jit = "0.101"
+cranelift-module = "0.101"
+cranelift-native = "0.101"
+cranelift-object = "0.101"
+peg = "0.8"
+thiserror = "1.0"

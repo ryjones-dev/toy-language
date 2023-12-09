@@ -1,0 +1,10 @@
+add(arg1, arg2):
+    -> arg1 + arg2
+
+print(output):
+    -> _
+
+main(calc_small_sum, print_sum):
+    sum = calc_small_sum? add(1, 2) / add(100, 200);
+    print_sum? print(sum);
+    -> sum
