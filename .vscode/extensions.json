@@ -1,6 +1,7 @@
 {
     "recommendations": [
         "ms-vscode-remote.remote-wsl",
-        "rust-lang.rust-analyzer"
+        "rust-lang.rust-analyzer",
+        "vadimcn.vscode-lldb"
     ]
 }
