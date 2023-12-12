@@ -10,6 +10,6 @@ vector_add(lhs1, rhs1, lhs2, rhs2):
     -> sum1, sum2
 
 main(arg1, arg2):
-    val = noop()
+    noop()
     sum1, sum2 = vector_add(arg1, arg2, arg1, arg2)
     -> add(sum1, sum2)
