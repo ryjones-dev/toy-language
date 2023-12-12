@@ -1,16 +1,17 @@
 fizzbuzz(n):
-    i, 0..n@:
-        (i % 3, i % 5)?:
+    (i, 0..n)@:
+        (i % 3 == 0, i % 5 == 0)?:
             (true, true): print("FizzBuzz");
             (true, false): print("Fizz");
             (false, true): print("Buzz");
             _: print(i);
         ;
-    -> _
+    ;
+;
 
 main():
     fizzbuzz(20)
-    -> _
+    -> _;
 
 # Output should be:
 # [1 2 Fizz 4 Buzz Fizz 7 8 Fizz Buzz 11 Fizz 13 14 FizzBuzz 16 17 Fizz 19 Buzz]
