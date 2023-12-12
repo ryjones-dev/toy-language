@@ -6,6 +6,10 @@ use std::{fmt::Display, num::ParseIntError, str::FromStr};
 /// It is intended to be used in places where it semantically makes sense to represent
 /// a parsed identifier from source code.
 /// If [`String`] was used directly, this context would be lost on the reader.
+///
+/// While there are contexts where using the discard identifier ("_") makes sense, it is not universal,
+/// so instead of building it in to the type, the discard identifier is individually considered in the contexts
+/// it make sense.
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub struct Identifier(String);
 
@@ -100,6 +104,16 @@ pub(crate) enum UnaryMathOperationType {
     Negate,
 }
 
+/// A container type that represents a function call.
+///
+/// Because a function call can either be an expression or statement depending on the context,
+/// it is helpful to have an underlying type that captures the info needed to make the function call.
+#[derive(Debug)]
+pub(crate) struct FunctionCall {
+    pub(crate) name: Identifier,
+    pub(crate) arguments: Vec<Expression>,
+}
+
 /// A TODO_LANG_NAME expression that, when evaluated, can return zero or more values.
 ///
 /// An [`Expression`] can be thought of in terms of rvalues in C++ semantics -
@@ -125,7 +139,7 @@ pub(crate) enum Expression {
     BooleanComparison(BooleanComparisonType, Box<Expression>, Box<Expression>),
     BinaryMathOperation(BinaryMathOperationType, Box<Expression>, Box<Expression>),
     UnaryMathOperation(UnaryMathOperationType, Box<Expression>),
-    FunctionCall(Identifier, Vec<Expression>),
+    FunctionCall(FunctionCall),
     Variable(Identifier),
     IntLiteral(IntLiteral),
 }
@@ -141,8 +155,12 @@ pub(crate) enum Expression {
 /// Anything in a function that is not just an expression is often a statement.
 #[derive(Debug)]
 pub(crate) enum Statement {
-    Assignment(Vec<Identifier>, Expression),
-    FunctionCall(Vec<Expression>),
+    /// An assignment identifier can either be a variable name, or the discard identifier ("_").
+    /// [`Option::None`] represents the discard identifier.
+    Assignment(Vec<Option<Identifier>>, Expression),
+    /// Call a function with no return values as a free-standing statement.
+    /// The function must return no values, otherwise a [`Statement::Assignment`] must be used.
+    FunctionCall(FunctionCall),
     Return(Vec<Expression>),
 }
 
@@ -154,7 +172,8 @@ pub(crate) enum Statement {
 /// so the return values and types of the function must be determined by evaluating the return expressions at compile time.
 #[derive(Debug)]
 pub struct Function {
-    pub(crate) name: Identifier,
+    /// Functions may not have a name if they are anonymous.
+    pub(crate) name: Option<Identifier>,
     pub(crate) params: Vec<Identifier>,
     pub(crate) body: Vec<Statement>,
 }

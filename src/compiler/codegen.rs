@@ -3,7 +3,7 @@ use thiserror::Error;
 
 use crate::ast_parser::{
     grammar::parser,
-    types::{Function, Statement},
+    types::{Expression, Function, Identifier, Statement},
 };
 
 use super::{
@@ -44,6 +44,8 @@ pub enum AssignmentError {
 pub enum FunctionCallError {
     #[error("Error evaluating expression: {0}")]
     EvaluateExpressionError(EvaluateExpressionError),
+    #[error("Function \"{0}\" returns values that are not stored in a variable. If this is intentional, use the discard identifier (\"_\")")]
+    NonZeroReturnError(Identifier),
 }
 
 /// An error that is thrown when compiling [`Statement::Return`].
@@ -263,8 +265,8 @@ impl<M: CompilerModule> Compiler<M> {
             builder.def_var(variable, value)
         }
 
-        // Copy the function name since compiling the function body consumes the function
-        let function_name = String::from(function.name.clone());
+        // Copy the function name as a string since compiling the function body consumes the function
+        let function_name = function.name.clone().map(|name| String::from(name));
 
         // Now we can compile the function body to get the number of return values
         let return_values = self.compile_function_body(builder, &mut variables, function)?;
@@ -275,17 +277,20 @@ impl<M: CompilerModule> Compiler<M> {
         }
 
         // Now that the function signature is completely known, we can finally declare it.
-        let function_id = self
-            .module
-            .declare_function(
-                &function_name,
-                cranelift_module::Linkage::Local,
-                &context.func.signature,
-            )
-            .map_err(|err| {
-                Self::check_codegen_error(&err);
-                CompileError::FunctionDeclarationError(function_name.clone(), err.to_string())
-            })?;
+        let function_id = match &function_name {
+            Some(function_name) => self
+                .module
+                .declare_function(
+                    function_name,
+                    cranelift_module::Linkage::Local,
+                    &context.func.signature,
+                )
+                .map_err(|err| {
+                    Self::check_codegen_error(&err);
+                    CompileError::FunctionDeclarationError(function_name.clone(), err.to_string())
+                })?,
+            None => todo!("Declare anonymous function"),
+        };
 
         // We have already compiled the function body, so we can immediately mark the function as defined
         // and finalize the function.
@@ -293,16 +298,24 @@ impl<M: CompilerModule> Compiler<M> {
             .define_function(function_id, context)
             .map_err(|err| {
                 Self::check_codegen_error(&err);
-                CompileError::FunctionDefinitionError(function_name.clone(), err.to_string())
+                CompileError::FunctionDefinitionError(
+                    match function_name.clone() {
+                        Some(function_name) => function_name,
+                        None => "".to_string(),
+                    },
+                    err.to_string(),
+                )
             })?;
 
         // Take note if this is the main function
-        if function_name == "main" {
-            if let Some(_) = self.main_function_id {
-                return Err(CompileError::DuplicateMainError);
-            }
+        if let Some(function_name) = function_name {
+            if function_name == "main" {
+                if let Some(_) = self.main_function_id {
+                    return Err(CompileError::DuplicateMainError);
+                }
 
-            self.main_function_id = Some(function_id);
+                self.main_function_id = Some(function_id);
+            }
         }
 
         // Assume IR is requested first to appease context lifetimes
@@ -369,57 +382,63 @@ impl<M: CompilerModule> Compiler<M> {
 
                 // Declare and define the variables
                 for (i, variable_name) in variable_names.into_iter().enumerate() {
-                    let variable = *match variables.get(&variable_name) {
-                        Some(variable) => variable,
-                        None => {
-                            let variable = variables.insert(&variable_name);
+                    // Only declare and define variable identifiers if they are not the discard identifier.
+                    if let Some(variable_name) = variable_name {
+                        let variable = *match variables.get(&variable_name) {
+                            Some(variable) => variable,
+                            None => {
+                                let variable = variables.insert(&variable_name);
 
-                            // Declare the variable in Cranelift if it was not in the variable map
-                            builder
-                                .try_declare_var(variable.clone().into(), int_type)
-                                .map_err(|err| {
-                                    CompileError::VariableDeclarationError(
-                                        String::from(variable_name.clone()),
-                                        err.to_string(),
-                                    )
-                                })?;
+                                // Declare the variable in Cranelift if it was not in the variable map
+                                builder
+                                    .try_declare_var(variable.clone().into(), int_type)
+                                    .map_err(|err| {
+                                        CompileError::VariableDeclarationError(
+                                            String::from(variable_name.clone()),
+                                            err.to_string(),
+                                        )
+                                    })?;
 
-                            variable
-                        }
-                    };
+                                variable
+                            }
+                        };
 
-                    // Define the variable's value to the corresponding return value of the expression
-                    builder
-                        .try_def_var(variable.into(), values[i].into())
-                        .map_err(|err| {
-                            CompileError::VariableDefinitionError(
-                                String::from(variable_name),
-                                err.to_string(),
-                            )
-                        })?;
+                        // Define the variable's value to the corresponding return value of the expression
+                        builder
+                            .try_def_var(variable.into(), values[i].into())
+                            .map_err(|err| {
+                                CompileError::VariableDefinitionError(
+                                    String::from(variable_name),
+                                    err.to_string(),
+                                )
+                            })?;
+                    }
                 }
 
                 Ok(Vec::new())
             }
-            Statement::FunctionCall(expressions) => {
-                let mut function_values = Vec::new();
+            Statement::FunctionCall(function_call) => {
+                let mut expression_evaluator =
+                    ExpressionEvaluator::new(&mut self.module, builder, &variables);
 
-                for expression in expressions {
-                    let mut values;
-                    {
-                        let mut expression_evaluator =
-                            ExpressionEvaluator::new(&mut self.module, builder, &variables);
-                        values = expression_evaluator.evaluate(expression).map_err(|err| {
-                            CompileError::FunctionCallError(
-                                FunctionCallError::EvaluateExpressionError(err),
-                            )
-                        })?;
-                    }
+                let function_name = function_call.name.clone();
 
-                    function_values.append(&mut values);
+                let return_values = expression_evaluator
+                    .evaluate(Expression::FunctionCall(function_call))
+                    .map_err(|err| {
+                        CompileError::FunctionCallError(FunctionCallError::EvaluateExpressionError(
+                            err,
+                        ))
+                    })?;
+
+                // Function calls can only be treated as statements if the function does not return anything.
+                if !return_values.is_empty() {
+                    return Err(CompileError::FunctionCallError(
+                        FunctionCallError::NonZeroReturnError(function_name),
+                    ));
                 }
 
-                Ok(function_values)
+                Ok(Vec::new())
             }
             Statement::Return(expressions) => {
                 let mut return_values = Vec::new();

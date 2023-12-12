@@ -1,5 +1,6 @@
 use crate::ast_parser::types::{
-    BinaryMathOperationType, BooleanComparisonType, Expression, Identifier, UnaryMathOperationType,
+    BinaryMathOperationType, BooleanComparisonType, Expression, FunctionCall, Identifier,
+    UnaryMathOperationType,
 };
 use cranelift::prelude::*;
 use thiserror::Error;
@@ -32,11 +33,11 @@ impl From<Value> for ExpressionValue {
 pub enum EvaluateExpressionError {
     #[error("incorrect number of values: expected {expected}, got {actual}")]
     IncorrectNumValuesError { expected: usize, actual: usize },
-    #[error("unknown function {name}")]
+    #[error("unknown function \"{name}\"")]
     UnknownFunctionError { name: Identifier },
-    #[error("unknown variable {name}")]
+    #[error("unknown variable \"{name}\"")]
     UnknownVariableError { name: Identifier },
-    #[error("variable {name} used before it was defined")]
+    #[error("variable \"{name}\" used before it was defined")]
     UseVariableError { name: Identifier },
 }
 
@@ -105,7 +106,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
             Expression::UnaryMathOperation(operation_type, expression) => Ok(vec![
                 self.evaluate_unary_operation(operation_type, *expression)?
             ]),
-            Expression::FunctionCall(name, parameters) => self.evaluate_call(name, parameters),
+            Expression::FunctionCall(function_call) => self.evaluate_call(function_call),
             Expression::Variable(name) => {
                 let variable = self
                     .variables
@@ -222,8 +223,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
 
     fn evaluate_call(
         &mut self,
-        name: Identifier,
-        params: Vec<Expression>,
+        FunctionCall { name, arguments }: FunctionCall,
     ) -> Result<Vec<ExpressionValue>, EvaluateExpressionError> {
         // Find the function identifier in the list of declared functions
         let func_id_to_call = self
@@ -247,15 +247,15 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
             .declare_func_in_func(func_id_to_call, self.builder.func);
 
         // Evaluate parameter expressions
-        let mut param_values = Vec::with_capacity(params.len());
-        for param in params {
-            let values = self.evaluate(param)?;
+        let mut arg_values = Vec::with_capacity(arguments.len());
+        for arg in arguments {
+            let values = self.evaluate(arg)?;
             let value = Self::expect_single_value(&values)?;
-            param_values.push(Value::from(*value));
+            arg_values.push(Value::from(*value));
         }
 
         // Call function
-        let call = self.builder.ins().call(func_ref_to_call, &param_values);
+        let call = self.builder.ins().call(func_ref_to_call, &arg_values);
 
         // Return function return values
         Ok(self

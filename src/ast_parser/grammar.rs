@@ -1,6 +1,6 @@
 use crate::ast_parser::types::{
-    BinaryMathOperationType, BooleanComparisonType, Expression, Function, Identifier, IntLiteral,
-    Statement, UnaryMathOperationType,
+    BinaryMathOperationType, BooleanComparisonType, Expression, Function, FunctionCall, Identifier,
+    IntLiteral, Statement, UnaryMathOperationType,
 };
 
 peg::parser!(pub grammar parser() for str {
@@ -14,7 +14,8 @@ peg::parser!(pub grammar parser() for str {
         = _ i:identifier() _ "(" _ p:((_ i:identifier() _ {i}) ** ",") _ ")" _ ":" _ s:(s:statements() r:return_statement() _ {
             Vec::from_iter(s.into_iter().chain(std::iter::once(r))) // Append return statement to the vector of statements
         }) {
-            Function { name: i, params: p, body: s }
+            // TODO: support anonymous functions
+            Function { name: Some(i), params: p, body: s }
         }
 
     rule statements() -> Vec<Statement>
@@ -22,14 +23,14 @@ peg::parser!(pub grammar parser() for str {
 
     rule statement() -> Statement
         = _ a:assignment() _  { a }
-        / _ c:call_function() _ { Statement::FunctionCall(c.1) }
+        / _ c:call_function() _ { Statement::FunctionCall(c) }
 
     // Handle return statements separately, since a function should only have one at the end of the body.
     rule return_statement() -> Statement
         = _ "->" _ r:("_" {Vec::new()} / e:((_ e:expression() _ {e}) ** ",")) _ { Statement::Return(r) }
 
     rule assignment() -> Statement
-        = idents:((_ i:identifier() _ {i}) ** ",") _ "=" _ e:expression() {Statement::Assignment(idents, e)}
+        = idents:((_ i:identifier() _ { Some(i) } / _ "_" _ { None }) ** ",") _ "=" _ e:expression() { Statement::Assignment(idents, e) }
 
     // Each level of precedence is notated by a "--" line. Precedence is in ascending order.
     // Expressions between the same "--" lines have the same level of precedence.
@@ -49,21 +50,18 @@ peg::parser!(pub grammar parser() for str {
         --
         "-" e:@ { Expression::UnaryMathOperation(UnaryMathOperationType::Negate, Box::new(e)) }
         --
-        c:call_function_expr() { c }
+        c:call_function() { Expression::FunctionCall(c) }
         --
         "(" _ e:expression() _ ")" { e }
         l:int_literal() { Expression::IntLiteral(l) }
         i:identifier() { Expression::Variable(i) }
     }
 
-    rule call_function_expr() -> Expression
-        = c:call_function() { Expression::FunctionCall(c.0, c.1) }
-
-    rule call_function() -> (Identifier, Vec<Expression>)
-        = i:identifier() _ "(" _ args:((_ e:expression() _ {e}) ** ",") _ ")" { (i, args) }
+    rule call_function() -> FunctionCall
+        = i:identifier() _ "(" _ args:((_ e:expression() _ {e}) ** ",") _ ")" { FunctionCall {name: i, arguments: args } }
 
     rule identifier() -> Identifier
-            = quiet!{ n:$(['a'..='z' | 'A'..='Z']['a'..='z' | 'A'..='Z' | '0'..='9' | '_']*) { Identifier::from(n.to_owned()) } }
+            = quiet!{ n:$(['a'..='z' | 'A'..='Z']['a'..='z' | 'A'..='Z' | '0'..='9' | '_']*) { Identifier::from(n.to_string()) } }
             / expected!("identifier")
 
     rule int_literal() -> IntLiteral
