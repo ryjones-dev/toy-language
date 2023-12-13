@@ -10,7 +10,7 @@ use super::{
     context::CompilerContext,
     expression_evaluator::{EvaluateExpressionError, ExpressionEvaluator, ExpressionValue},
     options::{CompileOptions, OptimizationLevel},
-    variable_map::VariableMap,
+    scope::Scope,
 };
 
 /// An error that is thrown when parsing source code fails.
@@ -187,7 +187,7 @@ impl<M: CompilerModule> Compiler<M> {
         let mut function_context = FunctionBuilderContext::new();
         for function in functions {
             let (function_ir, function_disasm) =
-                self.compile_function(&mut context, &mut function_context, function)?;
+                self.compile_function(&mut context, &mut function_context, None, function)?;
 
             match function_ir {
                 Some(function_ir) => ir.push_str(format!("{}\n", function_ir).as_str()),
@@ -226,6 +226,7 @@ impl<M: CompilerModule> Compiler<M> {
         &mut self,
         compiler_context: &mut CompilerContext,
         function_context: &mut FunctionBuilderContext,
+        outer_scope: Option<&Scope>,
         function: Function,
     ) -> Result<(Option<String>, Option<String>), CompileError> {
         // Pull out the wrapped context
@@ -252,11 +253,11 @@ impl<M: CompilerModule> Compiler<M> {
         // return values or their types as a part of the function's signature, by design.
         // Because of this, we need to start compiling the function body first, and then we can declare the return types.
 
-        // To compile the function body, we first need to declare the parameter variables
-        // that the function may reference.
-        let mut variables = VariableMap::new();
+        // To start compiling the function body, we first need to create a new scope and
+        // add the parameter variables to the scope so that the function may access them.
+        let mut scope = Scope::new(outer_scope);
         for (i, name) in function.params.iter().enumerate() {
-            let variable = cranelift::frontend::Variable::from(*(variables.insert(name)));
+            let variable = cranelift::frontend::Variable::from(*(scope.insert_var(name)));
             builder.declare_var(variable, int_type);
 
             // Because we know the values of the parameters from the calling function,
@@ -269,7 +270,7 @@ impl<M: CompilerModule> Compiler<M> {
         let function_name = function.name.clone().map(|name| String::from(name));
 
         // Now we can compile the function body to get the number of return values
-        let return_values = self.compile_function_body(builder, &mut variables, function)?;
+        let return_values = self.compile_function_body(builder, scope, function)?;
 
         // Set up the return types for the function
         for _ in 0..return_values.len() {
@@ -334,14 +335,14 @@ impl<M: CompilerModule> Compiler<M> {
     fn compile_function_body(
         &mut self,
         mut builder: FunctionBuilder,
-        variables: &mut VariableMap,
+        mut scope: Scope,
         function: Function,
     ) -> Result<Vec<ExpressionValue>, CompileError> {
         let mut return_values = Vec::new();
 
         // Emit IR code for each statement in the function
         for statement in function.body {
-            let mut values = self.compile_statement(&mut builder, variables, statement)?;
+            let mut values = self.compile_statement(&mut builder, &mut scope, statement)?;
             return_values.append(&mut values);
         }
 
@@ -352,7 +353,7 @@ impl<M: CompilerModule> Compiler<M> {
     fn compile_statement(
         &mut self,
         builder: &mut FunctionBuilder,
-        variables: &mut VariableMap,
+        scope: &mut Scope,
         statement: Statement,
     ) -> Result<Vec<ExpressionValue>, CompileError> {
         // TODO: only support 64-bit integer types for now
@@ -364,7 +365,7 @@ impl<M: CompilerModule> Compiler<M> {
                 let values;
                 {
                     let mut expression_evaluator =
-                        ExpressionEvaluator::new(&mut self.module, builder, &variables);
+                        ExpressionEvaluator::new(&mut self.module, builder, scope);
                     values = expression_evaluator.evaluate(expression).map_err(|err| {
                         CompileError::AssignmentError(AssignmentError::EvaluateExpressionError(err))
                     })?;
@@ -384,12 +385,12 @@ impl<M: CompilerModule> Compiler<M> {
                 for (i, variable_name) in variable_names.into_iter().enumerate() {
                     // Only declare and define variable identifiers if they are not the discard identifier.
                     if let Some(variable_name) = variable_name {
-                        let variable = *match variables.get(&variable_name) {
+                        let variable = *match scope.get_var(&variable_name) {
                             Some(variable) => variable,
                             None => {
-                                let variable = variables.insert(&variable_name);
+                                let variable = scope.insert_var(&variable_name);
 
-                                // Declare the variable in Cranelift if it was not in the variable map
+                                // Declare the variable in Cranelift if it was not in scope
                                 builder
                                     .try_declare_var(variable.clone().into(), int_type)
                                     .map_err(|err| {
@@ -419,7 +420,7 @@ impl<M: CompilerModule> Compiler<M> {
             }
             Statement::FunctionCall(function_call) => {
                 let mut expression_evaluator =
-                    ExpressionEvaluator::new(&mut self.module, builder, &variables);
+                    ExpressionEvaluator::new(&mut self.module, builder, scope);
 
                 let function_name = function_call.name.clone();
 
@@ -448,7 +449,7 @@ impl<M: CompilerModule> Compiler<M> {
                     let mut values;
                     {
                         let mut expression_evaluator =
-                            ExpressionEvaluator::new(&mut self.module, builder, &variables);
+                            ExpressionEvaluator::new(&mut self.module, builder, scope);
                         values = expression_evaluator.evaluate(expression).map_err(|err| {
                             CompileError::ReturnError(ReturnError::EvaluateExpressionError(err))
                         })?;

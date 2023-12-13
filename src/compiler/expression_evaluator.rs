@@ -5,7 +5,7 @@ use crate::ast_parser::types::{
 use cranelift::prelude::*;
 use thiserror::Error;
 
-use super::variable_map::VariableMap;
+use super::scope::Scope;
 
 /// A distinct type that is used to represent name the value of an evaluated [`Expression`].
 ///
@@ -51,26 +51,26 @@ pub(super) struct ExpressionEvaluator<
     'module,
     'ctx: 'builder,
     'builder,
-    'var,
+    'scope,
     M: cranelift_module::Module + 'module,
 > {
     builder: &'builder mut FunctionBuilder<'ctx>,
     module: &'module mut M,
-    variables: &'var VariableMap,
+    scope: &'scope Scope<'scope>,
 }
 
-impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module>
-    ExpressionEvaluator<'module, 'ctx, 'builder, 'var, M>
+impl<'module, 'ctx: 'builder, 'builder, 'scope, M: cranelift_module::Module>
+    ExpressionEvaluator<'module, 'ctx, 'builder, 'scope, M>
 {
     pub(super) fn new(
         module: &'module mut M,
         builder: &'builder mut FunctionBuilder<'ctx>,
-        variables: &'var VariableMap,
+        scope: &'scope Scope<'scope>,
     ) -> Self {
         Self {
             builder,
             module,
-            variables,
+            scope,
         }
     }
 }
@@ -109,8 +109,8 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
             Expression::FunctionCall(function_call) => self.evaluate_call(function_call),
             Expression::Variable(name) => {
                 let variable = self
-                    .variables
-                    .get(&name)
+                    .scope
+                    .get_var(&name)
                     .ok_or(EvaluateExpressionError::UnknownVariableError { name: name.clone() })?;
                 self.builder
                     .try_use_var(cranelift::frontend::Variable::from(*variable))
@@ -461,10 +461,8 @@ mod tests {
         builder.switch_to_block(entry_block);
         builder.seal_block(entry_block);
 
-        let variables = VariableMap::new();
-
-        let mut expression_evaluator =
-            ExpressionEvaluator::new(&mut module, &mut builder, &variables);
+        let scope = Scope::new(None);
+        let mut expression_evaluator = ExpressionEvaluator::new(&mut module, &mut builder, &scope);
 
         let value = expression_evaluator.evaluate_unary_operation(
             UnaryMathOperationType::Negate,
