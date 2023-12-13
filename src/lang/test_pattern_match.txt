@@ -1,8 +1,7 @@
 add(arg1, arg2):
-    -> arg1 + arg2
+    -> arg1 + arg2;
 
-print(output):
-    -> _
+print(output):;
 
 main(early_out, calc_small_sum):
     # Boolean pattern matching has special syntactic sugar:
@@ -11,7 +10,7 @@ main(early_out, calc_small_sum):
     # Which is equivalent to:
     # early_out?:
     #     true: -> 0;
-    #     false: _
+    #     false:;
     # ;
 
     sum = calc_small_sum?:
@@ -31,4 +30,4 @@ main(early_out, calc_small_sum):
         # Need to have logic that prevents overlapping match arms
     ;
     
-    -> sum
+    -> sum;
