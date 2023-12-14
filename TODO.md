@@ -7,9 +7,14 @@
 - [x]  Improve context/ir/disassembly API
 - [x]  Support parsing a function with no return values
 - [x]  Do not require an underscore assignment when calling a function with no return values
-- [ ]  Create a `Block` type that is just `Vec<Statement>`, but has a consistent syntax of `: statment statment;`
-- [ ]  Use the `Block` type for functions
+- [ ]  Develop a `semantic` module that is only concerned with error checking
+- [ ]  Check that a function always returns, or add an empty return statement at the end if it doesn't
+- [ ]  Move any current error checking to the `semantic` module where it makes sense
+- [ ]  Check that all blocks in a function return the same number and type of values
+- [ ]  Use a new `subject: body;` syntax to represent functions and statements that have scopes
 - [ ]  Pattern matching for ints
+- [ ]  Add bool type
+- [ ]  Add syntactic sugar for pattern matching on a bool with only a true arm, akin to an if statement
 - [ ]  Add range operator
 - [ ]  Support tuples
 - [ ]  Bool condition loop (while loop)

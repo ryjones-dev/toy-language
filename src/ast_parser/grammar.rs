@@ -11,23 +11,21 @@ peg::parser!(pub grammar parser() for str {
         = f:function()* { f }
 
     rule function() -> Function
-        = _ i:identifier() _ "(" _ p:((_ i:identifier() _ {i}) ** ",") _ ")" _ ":" _ s:(s:statements() r:return_statement() _ {
-            Vec::from_iter(s.into_iter().chain(std::iter::once(r))) // Append return statement to the vector of statements
-        }) {
+        = _ i:identifier() _ "(" _ p:((_ i:identifier() _ {i}) ** ",") _ ")" _ s:statements() _ {
             // TODO: support anonymous functions
             Function { name: Some(i), params: p, body: s }
         }
 
     rule statements() -> Vec<Statement>
-        = s:statement()* { s }
+        = ":" _ s:statement()* _ ";" { s }
 
     rule statement() -> Statement
         = _ a:assignment() _  { a }
         / _ c:call_function() _ { Statement::FunctionCall(c) }
+        / _ r:return_statement() _ { r }
 
-    // Handle return statements separately, since a function should only have one at the end of the body.
     rule return_statement() -> Statement
-        = _ "->" _ r:("_" {Vec::new()} / e:((_ e:expression() _ {e}) ** ",")) _ { Statement::Return(r) }
+        = _ "->" _ r:(e:((_ e:expression() _ {e}) ** ",")) _ { Statement::Return(r) }
 
     rule assignment() -> Statement
         = idents:((_ i:identifier() _ { Some(i) } / _ "_" _ { None }) ** ",") _ "=" _ e:expression() { Statement::Assignment(idents, e) }
