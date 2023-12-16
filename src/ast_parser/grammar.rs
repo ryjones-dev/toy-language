@@ -1,22 +1,24 @@
 use crate::ast_parser::types::{
-    BinaryMathOperationType, BooleanComparisonType, Expression, Function, FunctionCall, Identifier,
-    IntLiteral, Statement, UnaryMathOperationType,
+    AbstractSyntaxTree, BinaryMathOperationType, BooleanComparisonType, Expression, Function,
+    FunctionCall, FunctionSignature, Identifier, IntLiteral, Statement, Type,
+    UnaryMathOperationType,
 };
 
 peg::parser!(pub grammar parser() for str {
     /// Parses the given input source code into the relevant syntax tree types.
     ///
-    /// The resulting types contain all of the information that the compiler needs to generate the IR code.
-    pub rule code() -> Vec<Function>
-        = f:function()* { f }
+    /// The resulting types contain all of the information that the compiler needs
+    /// to perform semantic analysis and generate the IR code.
+    pub rule code() -> AbstractSyntaxTree
+        = f:function()* { AbstractSyntaxTree(f) }
 
     rule function() -> Function
-        = _ i:identifier() _ "(" _ p:((_ i:identifier() _ {i}) ** ",") _ ")" _ s:statements() _ {
+        = _ i:identifier() _ "(" _ p:((_ i:identifier() _ {i}) ** ",") _ ")" r:(_ "->" r:((_ "int" _ {Type::Int}) ++ ",") {r})? _ s:scope() _ {
             // TODO: support anonymous functions
-            Function { name: Some(i), params: p, body: s }
+            Function { signature: FunctionSignature { name: Some(i), params: p, returns: r.unwrap_or(Vec::default()) }, body: s }
         }
 
-    rule statements() -> Vec<Statement>
+    rule scope() -> Vec<Statement>
         = ":" _ s:statement()* _ ";" { s }
 
     rule statement() -> Statement

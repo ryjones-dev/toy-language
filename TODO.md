@@ -7,11 +7,15 @@
 - [x]  Improve context/ir/disassembly API
 - [x]  Support parsing a function with no return values
 - [x]  Do not require an underscore assignment when calling a function with no return values
-- [ ]  Develop a `semantic` module that is only concerned with error checking
-- [ ]  Check that a function always returns, or add an empty return statement at the end if it doesn't
-- [ ]  Move any current error checking to the `semantic` module where it makes sense
+- [x]  Develop a `semantic` module that is only concerned with error checking
+- [ ]  Check that assignment statements have the correct types of variables compared to the expression results
+- [x]  Check that a standalone function call statement does not return values
+- [x]  Check that a function's return statements are consistent
+- [ ]  Clean up semantic module code structure
+- [ ]  Make `FunctionSignature` generic with fixed sized arrays
+- [ ]  Remove any current error checking that the `semantic` module already covers
 - [ ]  Check that all blocks in a function return the same number and type of values
-- [ ]  Use a new `subject: body;` syntax to represent functions and statements that have scopes
+- [x]  Use a new `subject: body;` syntax to represent functions and statements that have scopes
 - [ ]  Pattern matching for ints
 - [ ]  Add bool type
 - [ ]  Add syntactic sugar for pattern matching on a bool with only a true arm, akin to an if statement

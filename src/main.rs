@@ -6,6 +6,7 @@ use crate::compiler::codegen::Compiler;
 mod ast_parser;
 mod compiler;
 mod error;
+mod semantic;
 
 // For debugging syntax errors
 fn print_parsed_ast(source_code: &str) -> Result<(), error::ParseError> {
@@ -33,7 +34,7 @@ macro_rules! execute_jit {
 }
 
 fn compile(source_code: &str) -> Result<*const u8, CompileError> {
-    let compile_options = CompileOptions::new().with_ir(true).with_disassembly(true);
+    let compile_options = CompileOptions::new().with_ir(true).with_disassembly(false);
     let mut compiler = Compiler::new(compile_options)?;
 
     let (ir, disassembly) = compiler.compile(source_code)?;

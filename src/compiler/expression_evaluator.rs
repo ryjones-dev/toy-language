@@ -1,11 +1,12 @@
-use crate::ast_parser::types::{
-    BinaryMathOperationType, BooleanComparisonType, Expression, FunctionCall, Identifier,
-    UnaryMathOperationType,
+use crate::{
+    ast_parser::types::{
+        BinaryMathOperationType, BooleanComparisonType, Expression, FunctionCall, Identifier,
+        UnaryMathOperationType,
+    },
+    semantic::scope::Scope,
 };
 use cranelift::prelude::*;
 use thiserror::Error;
-
-use super::scope::Scope;
 
 /// A distinct type that is used to represent name the value of an evaluated [`Expression`].
 ///

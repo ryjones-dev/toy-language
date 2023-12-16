@@ -1,16 +1,21 @@
 use cranelift::prelude::*;
 use thiserror::Error;
 
-use crate::ast_parser::{
-    grammar::parser,
-    types::{Expression, Function, Identifier, Statement},
+use crate::{
+    ast_parser::{
+        grammar::parser,
+        types::{Expression, Function, Identifier, Statement},
+    },
+    semantic::{
+        error_checker::{check, SemanticError},
+        scope::Scope,
+    },
 };
 
 use super::{
     context::CompilerContext,
     expression_evaluator::{EvaluateExpressionError, ExpressionEvaluator, ExpressionValue},
     options::{CompileOptions, OptimizationLevel},
-    scope::Scope,
 };
 
 /// An error that is thrown when parsing source code fails.
@@ -58,6 +63,8 @@ pub enum ReturnError {
 /// An error that captures all errors that can be thrown during compilation.
 #[derive(Debug, Error)]
 pub enum CompileError {
+    #[error("Semantic error: {}", .0.iter().fold(String::new(), |acc, err| format!("{acc}\n{}", err)))]
+    SemanticErrors(Vec<SemanticError>),
     #[error("Error creating compiler: {0}")]
     CreateError(cranelift_module::ModuleError),
     #[error("Error parsing source code: {0}")]
@@ -180,12 +187,14 @@ impl<M: CompilerModule> Compiler<M> {
         let mut ir = String::new();
         let mut disassembly = String::new();
         // Parse the source code into AST nodes
-        let functions =
-            parser::code(source_code).map_err(|err| CompileError::ParseError(err.into()))?;
+        let ast = parser::code(source_code).map_err(|err| CompileError::ParseError(err.into()))?;
+
+        // Check that the code is semantically correct before attempting to generate code
+        check(&ast).map_err(|errs| CompileError::SemanticErrors(errs))?;
 
         // Compile each function individually, and build up the disassembly if requested in the context
         let mut function_context = FunctionBuilderContext::new();
-        for function in functions {
+        for function in ast {
             let (function_ir, function_disasm) =
                 self.compile_function(&mut context, &mut function_context, None, function)?;
 
@@ -236,7 +245,7 @@ impl<M: CompilerModule> Compiler<M> {
         let int_type = codegen::ir::Type::int(64).unwrap();
 
         // Set up the parameter types for the function
-        for _ in &function.params {
+        for _ in &function.signature.params {
             context.func.signature.params.push(AbiParam::new(int_type));
         }
 
@@ -256,7 +265,7 @@ impl<M: CompilerModule> Compiler<M> {
         // To start compiling the function body, we first need to create a new scope and
         // add the parameter variables to the scope so that the function may access them.
         let mut scope = Scope::new(outer_scope);
-        for (i, name) in function.params.iter().enumerate() {
+        for (i, name) in function.signature.params.iter().enumerate() {
             let variable = cranelift::frontend::Variable::from(*(scope.insert_var(name)));
             builder.declare_var(variable, int_type);
 
@@ -267,7 +276,11 @@ impl<M: CompilerModule> Compiler<M> {
         }
 
         // Copy the function name as a string since compiling the function body consumes the function
-        let function_name = function.name.clone().map(|name| String::from(name));
+        let function_name = function
+            .signature
+            .name
+            .clone()
+            .map(|name| String::from(name));
 
         // Now we can compile the function body to get the number of return values
         let return_values = self.compile_function_body(builder, scope, function)?;

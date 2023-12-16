@@ -1,5 +1,12 @@
 use std::{fmt::Display, num::ParseIntError, str::FromStr};
 
+/// TODO_LANG_NAME built-in data types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Type {
+    Int,
+    Bool,
+}
+
 /// A distinct type that is used to represent names of functions and variables.
 ///
 /// This is just a wrapper around [`String`] and is completely convertable to and from [`String`].
@@ -139,7 +146,9 @@ pub(crate) enum Expression {
     BooleanComparison(BooleanComparisonType, Box<Expression>, Box<Expression>),
     BinaryMathOperation(BinaryMathOperationType, Box<Expression>, Box<Expression>),
     UnaryMathOperation(UnaryMathOperationType, Box<Expression>),
+
     FunctionCall(FunctionCall),
+
     Variable(Identifier),
     IntLiteral(IntLiteral),
 }
@@ -164,18 +173,53 @@ pub(crate) enum Statement {
     Return(Vec<Expression>),
 }
 
-/// A TODO_LANG_NAME function is a set of parameterized statements that can be executed from other parts of the program.
+/// The signature of a TODO_LANG_NAME function.
 ///
-/// This struct contains all of the information that can be parsed from the source code directly.
-/// This includes the function's signature, which is the function's name and parameters, as well as all of the statements
-/// in the function's body. Note that the return values are not part of the function's signature in TODO_LANG_NAME,
-/// so the return values and types of the function must be determined by evaluating the return expressions at compile time.
-#[derive(Debug)]
-pub struct Function {
+/// This includes the function's name, parameters, and return types.
+#[derive(Debug, Clone)]
+pub(crate) struct FunctionSignature {
     /// Functions may not have a name if they are anonymous.
     pub(crate) name: Option<Identifier>,
     pub(crate) params: Vec<Identifier>,
+    pub(crate) returns: Vec<Type>,
+}
+
+/// A TODO_LANG_NAME function is a set of parameterized statements that can be executed from other parts of the program.
+///
+/// This struct contains all of the information that can be parsed from the source code directly.
+/// This includes the function's signature as well as all of the statements in the function's body.
+#[derive(Debug)]
+pub(crate) struct Function {
+    pub(crate) signature: FunctionSignature,
     pub(crate) body: Vec<Statement>,
+}
+
+impl Function {
+    fn is_anonymous(&self) -> bool {
+        self.signature.name.is_none()
+    }
+}
+
+/// Represents the complete abstract syntax tree parsed from source code.
+///
+/// Having a type that represents the tree is more convenient and expressive than passing around a list of nodes.
+pub(crate) struct AbstractSyntaxTree(pub(super) Vec<Function>);
+
+impl IntoIterator for AbstractSyntaxTree {
+    type Item = Function;
+    type IntoIter = std::vec::IntoIter<Function>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl std::ops::Deref for AbstractSyntaxTree {
+    type Target = Vec<Function>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 #[cfg(test)]

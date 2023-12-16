@@ -1,2 +1,2 @@
-pub mod grammar;
-pub mod types;
+pub(super) mod grammar;
+pub(super) mod types;

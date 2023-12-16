@@ -1,14 +1,15 @@
-add(left, right):
+add(left, right) -> int:
     -> left + right;
 
-noop():;
+# TODO: Support empty function body
+# noop():;
 
-vector_add(lhs1, rhs1, lhs2, rhs2):
+vector_add(lhs1, rhs1, lhs2, rhs2) -> int, int:
     sum1 = add(lhs1, rhs1)
     sum2 = add(lhs2, rhs2)
     -> sum1, sum2;
 
-main(arg1, arg2):
-    noop()
+main(arg1, arg2) -> int:
+    # noop()
     sum1, sum2 = vector_add(arg1, arg2, arg1, arg2)
     -> add(sum1, sum2);
