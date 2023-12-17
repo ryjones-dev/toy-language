@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::ast_parser::types::{AbstractSyntaxTree, Identifier, Statement, Type};
+use crate::ast_parser::types::{AbstractSyntaxTree, Identifier, Statement, Type, Types};
 
 use self::{
     expression::{analyze_expression, analyze_function_call, ExpressionError},
@@ -67,14 +67,11 @@ pub(crate) fn semantic_analysis(ast: &AbstractSyntaxTree) -> Result<(), Vec<Sema
                     match analyze_expression(&expression, &function_scope) {
                         Ok(types) => {
                             // TODO: check variable types against returned types instead of just the length
-                            if variable_names.len() != types.len() {
+                            if types.len() != variable_names.len() {
                                 errors.push(SemanticError::ExpressionError(
-                                    ExpressionError::MismatchedExpressionResultsError {
-                                        expected: variable_names
-                                            .iter()
-                                            .map(|_| Type::Int)
-                                            .collect(), // TODO: THIS IS A HACK. Need to actually know the types of the variables here.
-                                        actual: types,
+                                    ExpressionError::MismatchedAssignmentError {
+                                        expected: types,
+                                        actual: variable_names.iter().map(|_| Type::Int).collect(), // TODO: THIS IS A HACK. Need to actually know the types of the variables here.
                                     },
                                 ));
                             }
@@ -103,7 +100,7 @@ pub(crate) fn semantic_analysis(ast: &AbstractSyntaxTree) -> Result<(), Vec<Sema
                     }
                 }
                 Statement::Return(expressions) => {
-                    let mut return_types = Vec::new();
+                    let mut return_types = Types::new();
                     let mut has_expression_error = false;
 
                     for expression in expressions {
@@ -123,7 +120,8 @@ pub(crate) fn semantic_analysis(ast: &AbstractSyntaxTree) -> Result<(), Vec<Sema
                     // add irrelevant errors to the error list.
                     if !has_expression_error && function.signature.returns != return_types {
                         errors.push(SemanticError::ExpressionError(
-                            ExpressionError::MismatchedExpressionResultsError {
+                            ExpressionError::MismatchedReturnError {
+                                function_name: function.signature.name.clone(),
                                 expected: function.signature.returns.clone(),
                                 actual: return_types,
                             },

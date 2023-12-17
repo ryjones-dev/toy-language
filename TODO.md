@@ -17,7 +17,7 @@
 - [x]  Use a new `subject: body;` syntax to represent functions and statements that have scopes
 - [x]  Pull out the entry point to the compiler to its own module
 - [x]  Validate number of parameters = number of arguments in function calls, ensure this is not reported as a compiler bug
-- [ ]  Replace `MismatchedExpressionResultsError` with more specific error types
+- [x]  Replace `MismatchedExpressionResultsError` with more specific error types
 - [ ]  Add bool type
 - [ ]  Check that assignment statements have the correct types of variables compared to the expression results
 - [ ]  Pattern matching

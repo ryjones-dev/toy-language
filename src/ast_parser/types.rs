@@ -1,5 +1,3 @@
-use std::{fmt::Display, num::ParseIntError, str::FromStr};
-
 use thiserror::Error;
 
 /// An error that is thrown when parsing source code fails.
@@ -24,6 +22,82 @@ impl<L: std::fmt::Display> From<peg::error::ParseError<L>> for ParseError {
 pub enum Type {
     Int,
     Bool,
+}
+
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::Int => write!(f, "int"),
+            Type::Bool => write!(f, "bool"),
+        }
+    }
+}
+
+/// A list of related types.
+///
+/// A custom type is helpful to display better output in error messages when listing types.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Types(Vec<Type>);
+
+impl Types {
+    pub(crate) fn new() -> Self {
+        Self(Vec::new())
+    }
+}
+
+impl From<Vec<Type>> for Types {
+    fn from(value: Vec<Type>) -> Self {
+        Self(value)
+    }
+}
+
+impl FromIterator<Type> for Types {
+    fn from_iter<T: IntoIterator<Item = Type>>(iter: T) -> Self {
+        Self(Vec::from_iter(iter))
+    }
+}
+
+impl<'a> IntoIterator for &'a Types {
+    type Item = &'a Type;
+    type IntoIter = std::slice::Iter<'a, Type>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl std::ops::Deref for Types {
+    type Target = Vec<Type>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for Types {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl std::fmt::Display for Types {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.0.len() == 1 {
+            return write!(f, "{}", self.0[0]);
+        }
+
+        write!(f, "(")?;
+        for (i, ty) in self.0.iter().enumerate() {
+            write!(f, "{}", ty)?;
+
+            if i < self.0.len() - 1 {
+                write!(f, ", ")?;
+            }
+        }
+        write!(f, ")")?;
+
+        Ok(())
+    }
 }
 
 /// A distinct type that is used to represent names of functions and variables.
@@ -59,7 +133,7 @@ impl From<&str> for Identifier {
     }
 }
 
-impl Display for Identifier {
+impl std::fmt::Display for Identifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -75,8 +149,8 @@ impl Display for Identifier {
 #[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
 pub(crate) struct IntLiteral(i64);
 
-impl FromStr for IntLiteral {
-    type Err = ParseIntError;
+impl std::str::FromStr for IntLiteral {
+    type Err = std::num::ParseIntError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let value = s.parse()?;
@@ -200,7 +274,7 @@ pub(crate) struct FunctionSignature {
     /// Functions may not have a name if they are anonymous.
     pub(crate) name: Option<Identifier>,
     pub(crate) params: Vec<Identifier>,
-    pub(crate) returns: Vec<Type>,
+    pub(crate) returns: Types,
 }
 
 /// A TODO_LANG_NAME function is a set of parameterized statements that can be executed from other parts of the program.
@@ -270,9 +344,9 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_int_literal() -> Result<(), ParseIntError> {
+    fn test_parse_int_literal() -> Result<(), std::num::ParseIntError> {
         let num_str = "10";
-        let int_literal = IntLiteral::from_str(num_str)?;
+        let int_literal = <IntLiteral as std::str::FromStr>::from_str(num_str)?;
         assert_eq!(int_literal.0, 10);
         Ok(())
     }
