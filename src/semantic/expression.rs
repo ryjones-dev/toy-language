@@ -75,12 +75,21 @@ pub(super) fn analyze_function_call(
     scope: &Scope,
 ) -> Result<Vec<Type>, ExpressionError> {
     match scope.get_func_sig(&function_call.name) {
-        Some(func_sig) => Ok(func_sig.returns.to_vec()),
-        None => {
-            return Err(ExpressionError::UnknownFunctionError(
-                function_call.name.clone(),
-            ))
+        Some(func_sig) => {
+            // Check that the function parameters match the function call arguments
+            // TODO: validate types as well
+            if func_sig.params.len() != function_call.arguments.len() {
+                Err(ExpressionError::MismatchedExpressionResultsError {
+                    expected: func_sig.params.iter().map(|_| Type::Int).collect(),
+                    actual: vec![Type::Int; function_call.arguments.len()],
+                })
+            } else {
+                Ok(func_sig.returns.to_vec())
+            }
         }
+        None => Err(ExpressionError::UnknownFunctionError(
+            function_call.name.clone(),
+        )),
     }
 }
 
