@@ -12,7 +12,7 @@
 - [x]  Check that a standalone function call statement does not return values
 - [x]  Check that a function's return statements are consistent
 - [x]  Declare function signature when calling functions to allow for arbitrary function order
-- [ ]  Rename `expression_evaluator.rs` to be more in like with codegen
+- [x]  Rename `expression_evaluator.rs` to be more in line with codegen
 - [ ]  Pull out the entry point to the compiler to its own module
 - [ ]  Clean up semantic module code structure
 - [ ]  Make `FunctionSignature` generic with fixed sized arrays

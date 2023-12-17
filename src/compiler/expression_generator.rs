@@ -31,13 +31,8 @@ impl From<Value> for ExpressionValue {
     }
 }
 
-/// Helper type that is responsible for evaluating expressions.
-///
-/// [`ExpressionEvaluator`] only contains the context it needs to evaluate expressions, emit
-/// the relevant IR code, and return the expression's values. This makes the wider compiler more modular.
-/// TODO: This type depends on [`Module`], which would become an issue if the underlying implementation
-/// moved away from Cranelift.
-pub(super) struct ExpressionEvaluator<
+/// Helper type that is responsible for generating Cranelift IR from expressions.
+pub(super) struct ExpressionGenerator<
     'module,
     'ctx: 'builder,
     'builder,
@@ -50,7 +45,7 @@ pub(super) struct ExpressionEvaluator<
 }
 
 impl<'module, 'ctx: 'builder, 'builder, 'scope, M: cranelift_module::Module>
-    ExpressionEvaluator<'module, 'ctx, 'builder, 'scope, M>
+    ExpressionGenerator<'module, 'ctx, 'builder, 'scope, M>
 {
     pub(super) fn new(
         module: &'module mut M,
@@ -66,38 +61,38 @@ impl<'module, 'ctx: 'builder, 'builder, 'scope, M: cranelift_module::Module>
 }
 
 impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'module>
-    ExpressionEvaluator<'module, 'ctx, 'builder, 'var, M>
+    ExpressionGenerator<'module, 'ctx, 'builder, 'var, M>
 {
-    /// Evaluate a given expression and return the expression's resulting values.
+    /// Generate IR for a given expression and return the expression's resulting values.
     ///
     /// An expression can return multiple values depending on the context.
     /// This function assumes that the context has already been checked by the [`crate::semantic`] module,
     /// so no error needs to be returned.
-    pub(super) fn evaluate(&mut self, expression: Expression) -> Vec<ExpressionValue> {
+    pub(super) fn generate(&mut self, expression: Expression) -> Vec<ExpressionValue> {
         match expression {
             Expression::BooleanComparison(comparison_type, lhs, rhs) => {
-                vec![self.evaluate_boolean_comparison(comparison_type, *lhs, *rhs)]
+                vec![self.generate_boolean_comparison(comparison_type, *lhs, *rhs)]
             }
             Expression::BinaryMathOperation(operation_type, lhs, rhs) => {
-                vec![self.evaluate_binary_operation(operation_type, *lhs, *rhs)]
+                vec![self.generate_binary_operation(operation_type, *lhs, *rhs)]
             }
             Expression::UnaryMathOperation(operation_type, expression) => {
-                vec![self.evaluate_unary_operation(operation_type, *expression)]
+                vec![self.generate_unary_operation(operation_type, *expression)]
             }
-            Expression::FunctionCall(function_call) => self.evaluate_call(function_call),
-            Expression::Variable(name) => vec![self.evaluate_variable(name)],
-            Expression::IntLiteral(value) => vec![self.evaluate_int_literal(value)],
+            Expression::FunctionCall(function_call) => self.generate_function_call(function_call),
+            Expression::Variable(name) => vec![self.generate_variable(name)],
+            Expression::IntLiteral(value) => vec![self.generate_int_literal(value)],
         }
     }
 
-    fn evaluate_boolean_comparison(
+    fn generate_boolean_comparison(
         &mut self,
         comparison_type: BooleanComparisonType,
         lhs: Expression,
         rhs: Expression,
     ) -> ExpressionValue {
-        let left_values = self.evaluate(lhs);
-        let right_values = self.evaluate(rhs);
+        let left_values = self.generate(lhs);
+        let right_values = self.generate(rhs);
         semantic_assert!(
             left_values.len() == 1,
             "left boolean operand expression did not return a single value"
@@ -142,14 +137,14 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         }
     }
 
-    fn evaluate_binary_operation(
+    fn generate_binary_operation(
         &mut self,
         operation_type: BinaryMathOperationType,
         lhs: Expression,
         rhs: Expression,
     ) -> ExpressionValue {
-        let left_values = self.evaluate(lhs);
-        let right_values = self.evaluate(rhs);
+        let left_values = self.generate(lhs);
+        let right_values = self.generate(rhs);
         semantic_assert!(
             left_values.len() == 1,
             "left binary operand expression did not return a single value"
@@ -184,12 +179,12 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         }
     }
 
-    fn evaluate_unary_operation(
+    fn generate_unary_operation(
         &mut self,
         operation_type: UnaryMathOperationType,
         expression: Expression,
     ) -> ExpressionValue {
-        let values = self.evaluate(expression);
+        let values = self.generate(expression);
         semantic_assert!(
             values.len() == 1,
             "unary operand expression did not return a single value"
@@ -201,7 +196,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         }
     }
 
-    fn evaluate_call(
+    fn generate_function_call(
         &mut self,
         FunctionCall { name, arguments }: FunctionCall,
     ) -> Vec<ExpressionValue> {
@@ -230,17 +225,17 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         let func_id_to_call = self
             .module
             .declare_function(&String::from(name), cranelift_module::Linkage::Local, &sig)
-            .unwrap();
+            .unwrap(); // TODO: this could have a genuine error but it's extremely unlikely, so it's not worth changing the API right now
 
         // Get the function to be called
         let func_ref_to_call = self
             .module
             .declare_func_in_func(func_id_to_call, self.builder.func);
 
-        // Evaluate parameter expressions
+        // Generate IR for parameter expressions
         let mut arg_values = Vec::with_capacity(arguments.len());
         for arg in arguments {
-            let values = self.evaluate(arg);
+            let values = self.generate(arg);
             semantic_assert!(
                 values.len() == 1,
                 "function argument expression did not return a single value"
@@ -259,7 +254,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
             .collect::<Vec<ExpressionValue>>()
     }
 
-    fn evaluate_variable(&mut self, name: Identifier) -> ExpressionValue {
+    fn generate_variable(&mut self, name: Identifier) -> ExpressionValue {
         let variable = self.scope.get_var(&name);
         semantic_assert!(
             variable.is_some(),
@@ -273,7 +268,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         )
     }
 
-    fn evaluate_int_literal(
+    fn generate_int_literal(
         &mut self,
         value: crate::ast_parser::types::IntLiteral,
     ) -> ExpressionValue {

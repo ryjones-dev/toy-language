@@ -100,7 +100,7 @@ impl From<i64> for IntLiteral {
 ///
 /// This struct is useful when a boolean comparison needs to be addressed separately from an expression.
 /// Using a separate comparsion type instead of binding the operands to this enum
-/// makes the expression evaluation code cleaner.
+/// makes the expression generation code cleaner.
 #[derive(Debug)]
 pub(crate) enum BooleanComparisonType {
     Equal,
@@ -155,10 +155,10 @@ pub(crate) struct FunctionCall {
 /// is also an expression, since evaluating the variable means to return its currently stored value.
 ///
 /// The [`Expression`] type itself does not contain any information on what the expression returns.
-/// Its value can only be determined when the expression is evaluated.
-/// Instead, the type stores the information needed to evaluate the expression.
+/// Its value can only be determined when the expression is evaluated at runtime.
+/// Instead, the type stores the information needed to generate the Cranelift IR to represent the expression.
 ///
-/// Expressions support recursive evaluation, and in those cases the inner expression must be wrapped
+/// Expressions support recursive generation, and in those cases the inner expression must be wrapped
 /// in a container type such as [`Box`] or [`Vec`].
 #[derive(Debug)]
 pub(crate) enum Expression {

@@ -15,7 +15,7 @@ use crate::{
 
 use super::{
     context::CompilerContext,
-    expression_evaluator::ExpressionEvaluator,
+    expression_generator::ExpressionGenerator,
     options::{CompileOptions, OptimizationLevel},
 };
 
@@ -319,12 +319,12 @@ impl<M: CompilerModule> Compiler<M> {
 
         match statement {
             Statement::Assignment(variable_names, expression) => {
-                // Evaluate the expression on the right-hand side of the equals sign
+                // Generate IR for the expression on the right-hand side of the equals sign
                 let values;
                 {
-                    let mut expression_evaluator =
-                        ExpressionEvaluator::new(&mut self.module, builder, scope);
-                    values = expression_evaluator.evaluate(expression);
+                    let mut expression_generator =
+                        ExpressionGenerator::new(&mut self.module, builder, scope);
+                    values = expression_generator.generate(expression);
                 }
 
                 // Declare and define the variables
@@ -349,21 +349,21 @@ impl<M: CompilerModule> Compiler<M> {
                 }
             }
             Statement::FunctionCall(function_call) => {
-                let mut expression_evaluator =
-                    ExpressionEvaluator::new(&mut self.module, builder, scope);
+                let mut expression_generator =
+                    ExpressionGenerator::new(&mut self.module, builder, scope);
 
-                expression_evaluator.evaluate(Expression::FunctionCall(function_call));
+                expression_generator.generate(Expression::FunctionCall(function_call));
             }
             Statement::Return(expressions) => {
                 let mut return_values = Vec::new();
 
                 for expression in expressions {
-                    // Evaluate the return value expressions
+                    // Generate IR for the return value expressions
                     let mut values;
                     {
-                        let mut expression_evaluator =
-                            ExpressionEvaluator::new(&mut self.module, builder, scope);
-                        values = expression_evaluator.evaluate(expression);
+                        let mut expression_generator =
+                            ExpressionGenerator::new(&mut self.module, builder, scope);
+                        values = expression_generator.generate(expression);
                     }
 
                     return_values.append(&mut values);
