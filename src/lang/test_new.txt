@@ -1,6 +1,6 @@
-add(left, right) -> int:
- -> left + right;
-
 main(arg1, arg2) -> int:
     sum = add(arg1, arg2)
     -> sum;
+
+add(left, right) -> int:
+ -> left + right;

@@ -11,9 +11,12 @@
 - [ ]  Check that assignment statements have the correct types of variables compared to the expression results
 - [x]  Check that a standalone function call statement does not return values
 - [x]  Check that a function's return statements are consistent
+- [x]  Declare function signature when calling functions to allow for arbitrary function order
+- [ ]  Rename `expression_evaluator.rs` to be more in like with codegen
+- [ ]  Pull out the entry point to the compiler to its own module
 - [ ]  Clean up semantic module code structure
 - [ ]  Make `FunctionSignature` generic with fixed sized arrays
-- [ ]  Remove any current error checking that the `semantic` module already covers
+- [x]  Remove any current error checking that the `semantic` module already covers
 - [ ]  Check that all blocks in a function return the same number and type of values
 - [x]  Use a new `subject: body;` syntax to represent functions and statements that have scopes
 - [ ]  Pattern matching for ints

@@ -9,24 +9,18 @@ use super::{
 
 #[derive(Debug, Error)]
 pub(crate) enum SemanticError {
+    #[error("main function is not defined")]
+    MissingMainError,
     #[error("function \"{name}\" is already defined in this scope")]
     FunctionAlreadyDefinedError { name: Identifier },
     #[error("anonymous functions cannot be defined in the global scope")]
     AnonymousFunctionInGlobalScopeError,
+    #[error("function \"{0}\" returns values that are not stored in a variable. If this is intentional, use the discard identifier (\"_\")")]
+    NonZeroReturnError(Identifier),
     #[error("{0}")]
     ExpressionError(#[from] ExpressionError),
     #[error("{0}")]
     ScopeError(#[from] ScopeError),
-}
-
-fn check_function_already_defined(
-    scope: &mut Scope,
-    function: &Function,
-) -> Result<(), SemanticError> {
-    scope
-        .insert_func_sig(&function.signature)
-        .map_err(|err| SemanticError::ScopeError(err))?;
-    Ok(())
 }
 
 pub(crate) fn check(ast: &AbstractSyntaxTree) -> Result<(), Vec<SemanticError>> {
@@ -34,18 +28,31 @@ pub(crate) fn check(ast: &AbstractSyntaxTree) -> Result<(), Vec<SemanticError>> 
 
     let mut global_scope = Scope::new(None);
 
-    // Check for errors in each function
+    let mut has_main_function = false;
+
+    // Insert each function signature in the global scope
     for function in ast.iter() {
-        // First, check if the function has already been defined
-        if let Some(_) = &function.signature.name {
-            if let Err(err) = check_function_already_defined(&mut global_scope, function) {
-                errors.push(err);
+        // It's not possible for anonymous functions to be defined multiple times
+        if let Some(function_name) = &function.signature.name {
+            if let Err(err) = global_scope.insert_func_sig(&function.signature) {
+                errors.push(SemanticError::ScopeError(err));
+            } else {
+                if function_name.to_string() == "main" {
+                    has_main_function = true;
+                }
             }
         } else {
             // Anonymous functions can't be defined in the global scope
             errors.push(SemanticError::AnonymousFunctionInGlobalScopeError);
         }
+    }
 
+    if !has_main_function {
+        errors.push(SemanticError::MissingMainError);
+    }
+
+    // Check for errors in each function
+    for function in ast.iter() {
         let mut function_scope = Scope::new(Some(&global_scope));
 
         // Insert parameters into function scope
@@ -86,11 +93,8 @@ pub(crate) fn check(ast: &AbstractSyntaxTree) -> Result<(), Vec<SemanticError>> 
                         Ok(types) => {
                             // Ensure that function calls do not return a value, otherwise an assignment statement needs to be used
                             if types.len() > 0 {
-                                errors.push(SemanticError::ExpressionError(
-                                    ExpressionError::MismatchedExpressionResultsError {
-                                        expected: Vec::new(),
-                                        actual: types,
-                                    },
+                                errors.push(SemanticError::NonZeroReturnError(
+                                    function_call.name.clone(),
                                 ))
                             }
                         }

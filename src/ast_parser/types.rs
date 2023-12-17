@@ -1,5 +1,24 @@
 use std::{fmt::Display, num::ParseIntError, str::FromStr};
 
+use thiserror::Error;
+
+/// An error that is thrown when parsing source code fails.
+///
+/// In the implementation, [`peg`] is used to parse source code.
+/// Because [`peg::error::ParseError`] has a generic parameter, it makes it difficult
+/// to use in this API. Therefore, [`ParseError`] here is a target type that the underlying
+/// [`peg::error::ParseError`] can be mapped to for easier error handling.
+/// [`ParseError`] is transparent and just outputs whatever error message [`peg::error::ParseError`] would have.
+#[derive(Error, Debug)]
+#[error("{0}")]
+pub struct ParseError(String);
+
+impl<L: std::fmt::Display> From<peg::error::ParseError<L>> for ParseError {
+    fn from(value: peg::error::ParseError<L>) -> Self {
+        ParseError(value.to_string())
+    }
+}
+
 /// TODO_LANG_NAME built-in data types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Type {
