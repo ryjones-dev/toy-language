@@ -18,7 +18,9 @@
 - [x]  Pull out the entry point to the compiler to its own module
 - [x]  Validate number of parameters = number of arguments in function calls, ensure this is not reported as a compiler bug
 - [x]  Replace `MismatchedExpressionResultsError` with more specific error types
-- [ ]  Add bool type
+- [ ]  Add bool type to semantic analysis
+- [ ]  Add bool type to code generation
+- [ ]  Handle boolean comparison for multiple types
 - [ ]  Check that assignment statements have the correct types of variables compared to the expression results
 - [ ]  Pattern matching
 - [ ]  Check that all blocks in a function return the same number and type of values
@@ -28,7 +30,7 @@
 - [ ]  Bool condition loop (while loop)
 - [ ]  Range loop (for loop)
 - [ ]  Support optionally getting the index and/or value when iterating over a range
-- [ ]  Improve error messaging to include line numbers (codespan-reporting crate? save for semantic analysis layer?)
+- [ ]  Improve error messaging to include line numbers (codespan-reporting crate?)
 - [ ]  Add unit tests for grammar parsing
 - [ ]  Add unit tests for semantic errors 
 - [ ]  Make `FunctionSignature` generic with fixed sized arrays
