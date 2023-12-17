@@ -1,15 +1,17 @@
-use ast_parser::grammar::parser;
-use codegen::{codegen::CompileError, options::CompileOptions};
+use ast_parser::{grammar::parser, types::ParseError};
+use codegen::options::CodeGenOptions;
+use compiler::CompileError;
 
-use crate::codegen::codegen::Compiler;
+use crate::compiler::compile_jit;
 
+// TODO: remove these?
 mod ast_parser;
 mod codegen;
-mod error;
+mod compiler;
 mod semantic;
 
 // For debugging syntax errors
-fn print_parsed_ast(source_code: &str) -> Result<(), error::ParseError> {
+fn print_parsed_ast(source_code: &str) -> Result<(), ParseError> {
     let code = parser::code(source_code)?;
     for c in code {
         println!("{:?}", c);
@@ -33,24 +35,6 @@ macro_rules! execute_jit {
     };
 }
 
-fn compile(source_code: &str) -> Result<*const u8, CompileError> {
-    let compile_options = CompileOptions::new().with_ir(true).with_disassembly(false);
-    let mut compiler = Compiler::new(compile_options)?;
-
-    let (ir, disassembly) = compiler.compile(source_code)?;
-    match ir {
-        Some(ir) => println!("{}", ir),
-        None => {}
-    }
-    match disassembly {
-        Some(disassembly) => println!("{}", disassembly),
-        None => {}
-    }
-
-    let code = compiler.get_main_function()?;
-    Ok(code)
-}
-
 // TODO: this might not be needed with codespan-reporting crate or similar
 // /// Convert a peg position to a (line, col) tuple.
 // ///
@@ -70,24 +54,36 @@ fn compile(source_code: &str) -> Result<*const u8, CompileError> {
 //     return (lineno, remaining + 1);
 // }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), CompileError> {
     let source_code = include_str!("lang/test.txt");
 
+    // TODO: move this to the compiler
     match print_parsed_ast(source_code) {
         Ok(()) => {}
         Err(err) => {
             println!("{}", err);
-            return Err(Box::new(err));
+            return Err(CompileError::ParseError(err));
         }
     }
 
-    let code = match compile(source_code) {
-        Ok(code) => code,
+    let codegen_options = CodeGenOptions::new().with_ir(true).with_disassembly(false);
+
+    let (code, ir, disassembly) = match compile_jit(source_code, codegen_options) {
+        Ok((code, ir, disassembly)) => (code, ir, disassembly),
         Err(err) => {
             println!("{}", err);
-            return Err(Box::new(err));
+            return Err(err);
         }
     };
+
+    match ir {
+        Some(ir) => println!("{}", ir),
+        None => {}
+    }
+    match disassembly {
+        Some(disassembly) => println!("{}", disassembly),
+        None => {}
+    }
 
     let arg1: i64 = 1;
     let arg2: i64 = 2;

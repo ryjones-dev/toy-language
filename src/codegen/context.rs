@@ -1,18 +1,17 @@
 use cranelift::codegen::Context;
 
-use super::codegen::CompilerModule;
+use super::codegen::CodeGeneratorModule;
 
-/// CompilerContext wraps the underlying Cranelift context.
+/// CodeGenContext wraps the underlying Cranelift context.
 ///
 /// This is done to handle some bookkeeping about setting and resetting fields in the context.
-pub(super) struct CompilerContext {
+pub(crate) struct CodeGenContext {
     context: Context,
     request_disassembly: bool,
 }
 
-impl CompilerContext {
-    pub(super) fn new<M: CompilerModule>(module: &M, request_disassembly: bool) -> Self {
-        // let mut context = Context::new();
+impl CodeGenContext {
+    pub(crate) fn new<M: CodeGeneratorModule>(module: &M, request_disassembly: bool) -> Self {
         let mut context = module.make_context();
         context.set_disasm(request_disassembly);
 
@@ -22,12 +21,12 @@ impl CompilerContext {
         }
     }
 
-    pub(super) fn clear<M: cranelift_module::Module>(&mut self, module: &M) {
+    pub(crate) fn clear<M: cranelift_module::Module>(&mut self, module: &M) {
         module.clear_context(&mut self.context);
         self.context.set_disasm(self.request_disassembly);
     }
 
-    pub(super) fn get_inner_context_mut(&mut self) -> &mut Context {
+    pub(crate) fn get_inner_context_mut(&mut self) -> &mut Context {
         &mut self.context
     }
 }

@@ -1,5 +1,5 @@
-pub mod codegen;
+pub(super) mod codegen;
 mod context;
 mod expression_generator;
-pub mod options;
+pub(super) mod options;
 mod semantic_assert;

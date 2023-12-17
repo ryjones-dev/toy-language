@@ -83,7 +83,7 @@ impl FunctionSignatureMap {
 }
 
 #[derive(Debug, Error)]
-pub(crate) enum ScopeError {
+pub enum ScopeError {
     #[error("function \"{0}\" is already defined in this scope")]
     FunctionAlreadyDefinedError(Identifier),
 }

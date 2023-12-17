@@ -15,7 +15,7 @@
 - [x]  Clean up semantic module code structure
 - [x]  Remove any current error checking that the `semantic` module already covers
 - [x]  Use a new `subject: body;` syntax to represent functions and statements that have scopes
-- [ ]  Pull out the entry point to the compiler to its own module
+- [x]  Pull out the entry point to the compiler to its own module
 - [ ]  Validate number of parameters = number of arguments in function calls, ensure this is not reported as a compiler bug
 - [ ]  Add bool type
 - [ ]  Check that assignment statements have the correct types of variables compared to the expression results

@@ -11,11 +11,9 @@ mod expression;
 pub(super) mod scope;
 
 #[derive(Debug, Error)]
-pub(crate) enum SemanticError {
+pub enum SemanticError {
     #[error("main function is not defined")]
     MissingMainError,
-    #[error("function \"{name}\" is already defined in this scope")]
-    FunctionAlreadyDefinedError { name: Identifier },
     #[error("anonymous functions cannot be defined in the global scope")]
     AnonymousFunctionInGlobalScopeError,
     #[error("function \"{0}\" returns values that are not stored in a variable. If this is intentional, use the discard identifier (\"_\")")]

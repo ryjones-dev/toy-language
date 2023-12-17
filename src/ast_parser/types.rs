@@ -21,7 +21,7 @@ impl<L: std::fmt::Display> From<peg::error::ParseError<L>> for ParseError {
 
 /// TODO_LANG_NAME built-in data types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Type {
+pub enum Type {
     Int,
     Bool,
 }
@@ -211,12 +211,6 @@ pub(crate) struct FunctionSignature {
 pub(crate) struct Function {
     pub(crate) signature: FunctionSignature,
     pub(crate) body: Vec<Statement>,
-}
-
-impl Function {
-    fn is_anonymous(&self) -> bool {
-        self.signature.name.is_none()
-    }
 }
 
 /// Represents the complete abstract syntax tree parsed from source code.

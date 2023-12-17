@@ -9,15 +9,15 @@ pub enum OptimizationLevel {
     SpeedAndSize,
 }
 
-/// Compile options to be passed to a [`Compiler`].
+/// Code generation options to be passed to [`compile`] or [`compile_jit`].
 #[derive(Default)]
-pub struct CompileOptions {
-    pub(super) optimization_level: OptimizationLevel,
-    pub(super) request_ir: bool,
-    pub(super) request_disassembly: bool,
+pub struct CodeGenOptions {
+    pub optimization_level: OptimizationLevel,
+    pub request_ir: bool,
+    pub request_disassembly: bool,
 }
 
-impl CompileOptions {
+impl CodeGenOptions {
     pub fn new() -> Self {
         Default::default()
     }

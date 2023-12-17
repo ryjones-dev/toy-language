@@ -5,7 +5,7 @@ use crate::ast_parser::types::{Expression, FunctionCall, Identifier, Type};
 use super::scope::Scope;
 
 #[derive(Debug, Error)]
-pub(super) enum ExpressionError {
+pub enum ExpressionError {
     #[error("unknown variable \"{0}\" in this scope")]
     UnknownVariableError(Identifier),
     #[error("unknown function \"{0}\" in this scope")]
