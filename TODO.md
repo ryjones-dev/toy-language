@@ -14,7 +14,7 @@
 - [x]  Declare function signature when calling functions to allow for arbitrary function order
 - [x]  Rename `expression_evaluator.rs` to be more in line with codegen
 - [ ]  Pull out the entry point to the compiler to its own module
-- [ ]  Clean up semantic module code structure
+- [x]  Clean up semantic module code structure
 - [ ]  Make `FunctionSignature` generic with fixed sized arrays
 - [x]  Remove any current error checking that the `semantic` module already covers
 - [ ]  Check that all blocks in a function return the same number and type of values

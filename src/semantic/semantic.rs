@@ -3,7 +3,7 @@ use thiserror::Error;
 use crate::ast_parser::types::{AbstractSyntaxTree, Function, Identifier, Statement, Type};
 
 use super::{
-    expression::{check_expression, check_function_call, ExpressionError},
+    expression::{analyze_expression, analyze_function_call, ExpressionError},
     scope::{Scope, ScopeError},
 };
 
@@ -23,7 +23,7 @@ pub(crate) enum SemanticError {
     ScopeError(#[from] ScopeError),
 }
 
-pub(crate) fn check(ast: &AbstractSyntaxTree) -> Result<(), Vec<SemanticError>> {
+pub(crate) fn semantic_analysis(ast: &AbstractSyntaxTree) -> Result<(), Vec<SemanticError>> {
     let mut errors = Vec::new();
 
     let mut global_scope = Scope::new(None);
@@ -63,7 +63,7 @@ pub(crate) fn check(ast: &AbstractSyntaxTree) -> Result<(), Vec<SemanticError>> 
         for statement in &function.body {
             match statement {
                 Statement::Assignment(variable_names, expression) => {
-                    match check_expression(&expression, &function_scope) {
+                    match analyze_expression(&expression, &function_scope) {
                         Ok(types) => {
                             // TODO: check variable types against returned types instead of just the length
                             if variable_names.len() != types.len() {
@@ -89,7 +89,7 @@ pub(crate) fn check(ast: &AbstractSyntaxTree) -> Result<(), Vec<SemanticError>> 
                     }
                 }
                 Statement::FunctionCall(function_call) => {
-                    match check_function_call(function_call, &function_scope) {
+                    match analyze_function_call(function_call, &function_scope) {
                         Ok(types) => {
                             // Ensure that function calls do not return a value, otherwise an assignment statement needs to be used
                             if types.len() > 0 {
@@ -106,7 +106,7 @@ pub(crate) fn check(ast: &AbstractSyntaxTree) -> Result<(), Vec<SemanticError>> 
                     let mut has_expression_error = false;
 
                     for expression in expressions {
-                        match check_expression(&expression, &function_scope) {
+                        match analyze_expression(&expression, &function_scope) {
                             Ok(mut types) => {
                                 return_types.append(&mut types);
                             }

@@ -23,7 +23,7 @@ pub(super) enum ExpressionError {
 ///
 /// Recursively validate that inner expressions have the correct number and types of values that the outer expression expects.
 /// Returns the expression's value types, or an error if an inner expression was not compatible with the outer expression.
-pub(super) fn check_expression(
+pub(super) fn analyze_expression(
     expression: &Expression,
     scope: &Scope,
 ) -> Result<Vec<Type>, ExpressionError> {
@@ -32,32 +32,32 @@ pub(super) fn check_expression(
     match expression {
         Expression::BooleanComparison(comparison_type, lhs, rhs) => {
             // TODO: Allow any comparable types, not just ints
-            let lhs_types = check_expression(lhs, scope)?;
+            let lhs_types = analyze_expression(lhs, scope)?;
             expect_single_type(&lhs_types, Type::Int)?;
 
-            let rhs_types = check_expression(rhs, scope)?;
+            let rhs_types = analyze_expression(rhs, scope)?;
             expect_single_type(&rhs_types, Type::Int)?;
 
             types.push(Type::Int);
         }
         Expression::BinaryMathOperation(_, lhs, rhs) => {
             // TODO: Handle floats later
-            let lhs_types = check_expression(lhs, scope)?;
+            let lhs_types = analyze_expression(lhs, scope)?;
             expect_single_type(&lhs_types, Type::Int)?;
 
-            let rhs_types = check_expression(rhs, scope)?;
+            let rhs_types = analyze_expression(rhs, scope)?;
             expect_single_type(&rhs_types, Type::Int)?;
 
             types.push(Type::Int);
         }
         Expression::UnaryMathOperation(_, expression) => {
-            let mut ty = check_expression(expression, scope)?;
+            let mut ty = analyze_expression(expression, scope)?;
             expect_single_type(&ty, Type::Int)?;
 
             types.append(&mut ty);
         }
         Expression::FunctionCall(function_call) => {
-            let mut tys = check_function_call(function_call, scope)?;
+            let mut tys = analyze_function_call(function_call, scope)?;
             types.append(&mut tys);
         }
         Expression::Variable(name) => match scope.get_var(name) {
@@ -70,7 +70,7 @@ pub(super) fn check_expression(
     Ok(types)
 }
 
-pub(super) fn check_function_call(
+pub(super) fn analyze_function_call(
     function_call: &FunctionCall,
     scope: &Scope,
 ) -> Result<Vec<Type>, ExpressionError> {

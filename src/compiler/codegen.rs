@@ -7,8 +7,8 @@ use crate::{
         types::{Expression, Function, ParseError, Statement},
     },
     semantic::{
-        error_checker::{check, SemanticError},
         scope::Scope,
+        semantic::{semantic_analysis, SemanticError},
     },
     semantic_assert,
 };
@@ -137,7 +137,7 @@ impl<M: CompilerModule> Compiler<M> {
         let ast = parser::code(source_code).map_err(|err| CompileError::ParseError(err.into()))?;
 
         // Check that the code is semantically correct before attempting to generate code
-        check(&ast).map_err(|errs| CompileError::SemanticErrors(errs))?;
+        semantic_analysis(&ast).map_err(|errs| CompileError::SemanticErrors(errs))?;
 
         // Insert each function into the global scope so that function calls can be made without requiring them to be defined in order
         let mut global_scope = Scope::new(None);
