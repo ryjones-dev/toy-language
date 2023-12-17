@@ -1,3 +1,3 @@
 mod ast_parser;
-mod compiler;
+mod codegen;
 mod semantic;

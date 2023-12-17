@@ -1,10 +1,10 @@
 use ast_parser::grammar::parser;
-use compiler::{codegen::CompileError, options::CompileOptions};
+use codegen::{codegen::CompileError, options::CompileOptions};
 
-use crate::compiler::codegen::Compiler;
+use crate::codegen::codegen::Compiler;
 
 mod ast_parser;
-mod compiler;
+mod codegen;
 mod error;
 mod semantic;
 
