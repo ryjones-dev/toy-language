@@ -8,19 +8,19 @@
 - [x]  Support parsing a function with no return values
 - [x]  Do not require an underscore assignment when calling a function with no return values
 - [x]  Develop a `semantic` module that is only concerned with error checking
-- [ ]  Check that assignment statements have the correct types of variables compared to the expression results
 - [x]  Check that a standalone function call statement does not return values
 - [x]  Check that a function's return statements are consistent
 - [x]  Declare function signature when calling functions to allow for arbitrary function order
 - [x]  Rename `expression_evaluator.rs` to be more in line with codegen
-- [ ]  Pull out the entry point to the compiler to its own module
 - [x]  Clean up semantic module code structure
-- [ ]  Make `FunctionSignature` generic with fixed sized arrays
 - [x]  Remove any current error checking that the `semantic` module already covers
-- [ ]  Check that all blocks in a function return the same number and type of values
 - [x]  Use a new `subject: body;` syntax to represent functions and statements that have scopes
-- [ ]  Pattern matching for ints
+- [ ]  Pull out the entry point to the compiler to its own module
+- [ ]  Validate number of parameters = number of arguments in function calls, ensure this is not reported as a compiler bug
 - [ ]  Add bool type
+- [ ]  Check that assignment statements have the correct types of variables compared to the expression results
+- [ ]  Pattern matching
+- [ ]  Check that all blocks in a function return the same number and type of values
 - [ ]  Add syntactic sugar for pattern matching on a bool with only a true arm, akin to an if statement
 - [ ]  Add range operator
 - [ ]  Support tuples
@@ -29,8 +29,8 @@
 - [ ]  Support optionally getting the index and/or value when iterating over a range
 - [ ]  Improve error messaging to include line numbers (codespan-reporting crate? save for semantic analysis layer?)
 - [ ]  Add unit tests for grammar parsing
-- [ ]  Ensure that function definition order does not matter (declare a function when calling)
-- [ ]  Validate number of parameters = number of arguments, ensure this is not reported as a compiler bug
+- [ ]  Add unit tests for semantic errors 
+- [ ]  Make `FunctionSignature` generic with fixed sized arrays
 - [ ]  Take a second pass over doc comments, and add more where necessary
 - [ ]  Support lambdas/nested functions (might need to add func keyword for this?)
 - [ ]  Add scenario tests for testing each feature of the language
