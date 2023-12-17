@@ -6,10 +6,7 @@ use crate::{
         grammar::parser,
         types::{Expression, Function, ParseError, Statement},
     },
-    semantic::{
-        scope::Scope,
-        semantic::{semantic_analysis, SemanticError},
-    },
+    semantic::{scope::Scope, semantic_analysis, SemanticError},
     semantic_assert,
 };
 
