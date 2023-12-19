@@ -378,3 +378,9 @@ impl std::ops::Deref for AbstractSyntaxTree {
         &self.0
     }
 }
+
+impl std::ops::DerefMut for AbstractSyntaxTree {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}

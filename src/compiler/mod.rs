@@ -25,10 +25,10 @@ pub enum CompileError {
 
 fn frontend(source_code: &str) -> Result<AbstractSyntaxTree, CompileError> {
     // Parse the source code into AST nodes
-    let ast = parser::parse(source_code).map_err(|err| CompileError::ParseError(err.into()))?;
+    let mut ast = parser::parse(source_code).map_err(|err| CompileError::ParseError(err.into()))?;
 
     // Check that the code is semantically correct before attempting to generate code
-    semantic_analysis(&ast).map_err(|errs| CompileError::SemanticErrors(errs))?;
+    semantic_analysis(&mut ast).map_err(|errs| CompileError::SemanticErrors(errs))?;
 
     Ok(ast)
 }

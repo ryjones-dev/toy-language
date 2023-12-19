@@ -21,7 +21,7 @@ pub enum SemanticError {
     ScopeError(#[from] ScopeError),
 }
 
-pub(crate) fn semantic_analysis(ast: &AbstractSyntaxTree) -> Result<(), Vec<SemanticError>> {
+pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Result<(), Vec<SemanticError>> {
     let mut errors = Vec::new();
 
     let mut global_scope = Scope::new(None);
@@ -44,7 +44,7 @@ pub(crate) fn semantic_analysis(ast: &AbstractSyntaxTree) -> Result<(), Vec<Sema
     }
 
     // Check for errors in each function
-    for function in ast.iter() {
+    for function in ast.iter_mut() {
         let mut function_scope = Scope::new(Some(&global_scope));
 
         // Insert parameters into function scope
@@ -54,7 +54,7 @@ pub(crate) fn semantic_analysis(ast: &AbstractSyntaxTree) -> Result<(), Vec<Sema
             }
         }
 
-        for statement in &function.body {
+        for statement in &mut function.body {
             if let Err(errs) =
                 analyze_statement(&function.signature, &mut function_scope, statement)
             {

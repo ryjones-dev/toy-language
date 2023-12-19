@@ -74,7 +74,7 @@ pub(super) fn analyze_expression(
             None => return Err(ExpressionError::UnknownVariableError(variable.name.clone())),
         },
         Expression::IntLiteral(_) => types.push(Type::Int),
-        Expression::BoolLiteral(_) => todo!(),
+        Expression::BoolLiteral(_) => types.push(Type::Bool),
     };
 
     Ok(types)

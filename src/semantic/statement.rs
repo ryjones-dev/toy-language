@@ -38,7 +38,7 @@ pub enum StatementError {
 pub(super) fn analyze_statement(
     func_sig: &FunctionSignature,
     scope: &mut Scope,
-    statement: &Statement,
+    statement: &mut Statement,
 ) -> Result<(), Vec<StatementError>> {
     let mut errors = Vec::new();
     match statement {
