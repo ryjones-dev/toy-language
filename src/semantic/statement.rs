@@ -50,15 +50,15 @@ pub(super) fn analyze_statement(
                             expected: types.len(),
                             actual: variables.len(),
                         });
-                    }
-
-                    for (i, variable) in variables.iter().enumerate() {
-                        if let Some(variable) = variable {
-                            if variable.ty != types[i] {
-                                errors.push(StatementError::MismatchedTypeAssignmentError {
-                                    expected: types[i],
-                                    actual: variable.ty,
-                                });
+                    } else {
+                        for (i, variable) in variables.iter().enumerate() {
+                            if let Some(variable) = variable {
+                                if variable.ty != types[i] {
+                                    errors.push(StatementError::MismatchedTypeAssignmentError {
+                                        expected: types[i],
+                                        actual: variable.ty,
+                                    });
+                                }
                             }
                         }
                     }
@@ -108,21 +108,21 @@ pub(super) fn analyze_statement(
             // Ignore these checks if there was a previous expression error as to not
             // add irrelevant errors to the error list.
             if !has_expression_error {
-                if func_sig.returns != return_types {
+                if func_sig.returns.len() != return_types.len() {
                     errors.push(StatementError::WrongNumberOfReturnValuesError {
                         function_name: func_sig.name.clone(),
                         expected: func_sig.returns.len(),
                         actual: return_types.len(),
                     })
-                }
-
-                for (i, return_type) in func_sig.returns.iter().enumerate() {
-                    if *return_type != return_types[i] {
-                        errors.push(StatementError::MismatchedReturnValueTypeError {
-                            function_name: func_sig.name.clone(),
-                            expected: *return_type,
-                            actual: return_types[i],
-                        })
+                } else {
+                    for (i, return_type) in func_sig.returns.iter().enumerate() {
+                        if *return_type != return_types[i] {
+                            errors.push(StatementError::MismatchedReturnValueTypeError {
+                                function_name: func_sig.name.clone(),
+                                expected: *return_type,
+                                actual: return_types[i],
+                            })
+                        }
                     }
                 }
             }

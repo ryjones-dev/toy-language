@@ -100,19 +100,20 @@ pub(super) fn analyze_function_call(
                     expected: func_sig.params.len(),
                     actual: argument_types.len(),
                 });
-            }
-
-            for (i, arg) in argument_types.iter().enumerate() {
-                if *arg != func_sig.params[i].ty {
-                    return Err(ExpressionError::MismatchedArgumentTypeError {
-                        function_name: func_sig.name.clone(),
-                        expected: func_sig.params[i].ty,
-                        actual: *arg,
-                    });
+            } else {
+                for (i, arg) in argument_types.iter().enumerate() {
+                    if *arg != func_sig.params[i].ty {
+                        return Err(ExpressionError::MismatchedArgumentTypeError {
+                            function_name: func_sig.name.clone(),
+                            expected: func_sig.params[i].ty,
+                            actual: *arg,
+                        });
+                    }
                 }
             }
 
-            Ok(argument_types)
+            // The function's return types are what should be propagated up to the call site
+            Ok(func_sig.returns.clone())
         }
         None => Err(ExpressionError::UnknownFunctionError(
             function_call.name.clone(),
