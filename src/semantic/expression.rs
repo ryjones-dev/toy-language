@@ -10,12 +10,6 @@ pub enum ExpressionError {
     UnknownVariableError(Identifier),
     #[error("unknown function \"{0}\" in this scope")]
     UnknownFunctionError(Identifier),
-    #[error("wrong number of variables in expression assignment. expected: {expected}, actual: {actual}")]
-    WrongNumberOfVariablesError { expected: usize, actual: usize },
-    #[error(
-        "mismatched variable type in expression assignment. expected: {expected}, actual: {actual}"
-    )]
-    MismatchedTypeAssignmentError { expected: Type, actual: Type },
     #[error("wrong number of arguments in call to function \"{function_name}\". expected: {expected}, actual: {actual}")]
     WrongNumberOfArgumentsError {
         function_name: Identifier,
@@ -24,18 +18,6 @@ pub enum ExpressionError {
     },
     #[error("mismatched argument type in call to function \"{function_name}\". expected: {expected}, actual: {actual}")]
     MismatchedArgumentTypeError {
-        function_name: Identifier,
-        expected: Type,
-        actual: Type,
-    },
-    #[error("wrong number of return values for function \"{function_name}\". expected: {expected}, actual: {actual}")]
-    WrongNumberOfReturnValuesError {
-        function_name: Identifier,
-        expected: usize,
-        actual: usize,
-    },
-    #[error("mismatched return value type for function \"{function_name}\". expected: {expected}, actual: {actual}")]
-    MismatchedReturnValueTypeError {
         function_name: Identifier,
         expected: Type,
         actual: Type,
