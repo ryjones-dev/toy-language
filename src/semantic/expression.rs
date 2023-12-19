@@ -10,26 +10,35 @@ pub enum ExpressionError {
     UnknownVariableError(Identifier),
     #[error("unknown function \"{0}\" in this scope")]
     UnknownFunctionError(Identifier),
+    #[error("wrong number of variables in expression assignment. expected: {expected}, actual: {actual}")]
+    WrongNumberOfVariablesError { expected: usize, actual: usize },
     #[error(
-        "mismatched variables in expression assignment. expected: {expected}, actual: {actual}"
+        "mismatched variable type in expression assignment. expected: {expected}, actual: {actual}"
     )]
-    MismatchedAssignmentError { expected: Types, actual: Types },
-    #[error(
-        "mismatched arguments for call to function \"{function_name}\". expected: {expected}, actual: {actual}"
-    )]
-    MismatchedArgumentsError {
+    MismatchedTypeAssignmentError { expected: Type, actual: Type },
+    #[error("wrong number of arguments in call to function \"{function_name}\". expected: {expected}, actual: {actual}")]
+    WrongNumberOfArgumentsError {
         function_name: Identifier,
-        expected: Types,
-        actual: Types,
+        expected: usize,
+        actual: usize,
     },
-    #[error(
-        "mismatched return types for function \"{}\". expected: {expected}, actual: {actual}",
-        .function_name
-    )]
-    MismatchedReturnError {
+    #[error("mismatched argument type in call to function \"{function_name}\". expected: {expected}, actual: {actual}")]
+    MismatchedArgumentTypeError {
         function_name: Identifier,
-        expected: Types,
-        actual: Types,
+        expected: Type,
+        actual: Type,
+    },
+    #[error("wrong number of return values for function \"{function_name}\". expected: {expected}, actual: {actual}")]
+    WrongNumberOfReturnValuesError {
+        function_name: Identifier,
+        expected: usize,
+        actual: usize,
+    },
+    #[error("mismatched return value type for function \"{function_name}\". expected: {expected}, actual: {actual}")]
+    MismatchedReturnValueTypeError {
+        function_name: Identifier,
+        expected: Type,
+        actual: Type,
     },
     #[error("expected single value for boolean comparison, but expression returns {0}")]
     SingleValueError(usize),
@@ -95,17 +104,33 @@ pub(super) fn analyze_function_call(
 ) -> Result<Types, ExpressionError> {
     match scope.get_func_sig(&function_call.name) {
         Some(func_sig) => {
-            // Check that the function parameters match the function call arguments
-            // TODO: validate types as well
-            if func_sig.params.len() != function_call.arguments.len() {
-                Err(ExpressionError::MismatchedArgumentsError {
-                    function_name: function_call.name.clone(),
-                    expected: func_sig.params.iter().map(|_| Type::Int).collect::<Types>(),
-                    actual: Types::from(vec![Type::Int; function_call.arguments.len()]),
-                })
-            } else {
-                Ok(func_sig.returns.clone())
+            // Analyze each argument expression to determine their types
+            let mut argument_types = Types::new();
+            for expression in &function_call.arguments {
+                let mut args = analyze_expression(expression, scope)?;
+                argument_types.append(&mut args);
             }
+
+            // Check that the function parameters match the function call arguments
+            if func_sig.params.len() != argument_types.len() {
+                return Err(ExpressionError::WrongNumberOfArgumentsError {
+                    function_name: func_sig.name.clone(),
+                    expected: func_sig.params.len(),
+                    actual: argument_types.len(),
+                });
+            }
+
+            for (i, arg) in argument_types.iter().enumerate() {
+                if *arg != func_sig.params[i].ty {
+                    return Err(ExpressionError::MismatchedArgumentTypeError {
+                        function_name: func_sig.name.clone(),
+                        expected: func_sig.params[i].ty,
+                        actual: *arg,
+                    });
+                }
+            }
+
+            Ok(argument_types)
         }
         None => Err(ExpressionError::UnknownFunctionError(
             function_call.name.clone(),

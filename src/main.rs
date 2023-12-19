@@ -57,7 +57,6 @@ macro_rules! execute_jit {
 fn main() -> Result<(), CompileError> {
     let source_code = include_str!("lang/test_new.txt");
 
-    // TODO: move this to the compiler
     match print_parsed_ast(source_code) {
         Ok(()) => {}
         Err(err) => {

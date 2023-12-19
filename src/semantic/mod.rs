@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::parser::types::{AbstractSyntaxTree, Identifier, Statement, Type, Types};
+use crate::parser::types::{AbstractSyntaxTree, Identifier, Statement, Types};
 
 use self::{
     expression::{analyze_expression, analyze_function_call, ExpressionError},
@@ -14,7 +14,7 @@ pub(super) mod scope;
 pub enum SemanticError {
     #[error("main function is not defined")]
     MissingMainError,
-    #[error("function \"{0}\" returns values that are not stored in a variable. If this is intentional, use the discard identifier (\"_\")")]
+    #[error("function \"{0}\" returns values that are not stored in a variable. if this is intentional, use the discard identifier (\"_\")")]
     NonZeroReturnError(Identifier),
     #[error("{0}")]
     ExpressionError(#[from] ExpressionError),
@@ -57,25 +57,37 @@ pub(crate) fn semantic_analysis(ast: &AbstractSyntaxTree) -> Result<(), Vec<Sema
 
         for statement in &function.body {
             match statement {
-                Statement::Assignment(variable_names, expression) => {
+                Statement::Assignment(variables, expression) => {
                     match analyze_expression(&expression, &function_scope) {
                         Ok(types) => {
-                            // TODO: check variable types against returned types instead of just the length
-                            if types.len() != variable_names.len() {
+                            if types.len() != variables.len() {
                                 errors.push(SemanticError::ExpressionError(
-                                    ExpressionError::MismatchedAssignmentError {
-                                        expected: types,
-                                        actual: variable_names.iter().map(|_| Type::Int).collect(), // TODO: THIS IS A HACK. Need to actually know the types of the variables here.
+                                    ExpressionError::WrongNumberOfVariablesError {
+                                        expected: types.len(),
+                                        actual: variables.len(),
                                     },
                                 ));
+                            }
+
+                            for (i, variable) in variables.iter().enumerate() {
+                                if let Some(variable) = variable {
+                                    if variable.ty != types[i] {
+                                        errors.push(SemanticError::ExpressionError(
+                                            ExpressionError::MismatchedTypeAssignmentError {
+                                                expected: types[i],
+                                                actual: variable.ty,
+                                            },
+                                        ));
+                                    }
+                                }
                             }
                         }
                         Err(err) => errors.push(SemanticError::ExpressionError(err)),
                     }
 
                     // Always add the variables to the scope so that additional errors are not unnecessarily added downstream
-                    for variable_name in variable_names {
-                        if let Some(variable_name) = variable_name {
+                    for variable in variables {
+                        if let Some(variable_name) = variable {
                             if let Err(err) = function_scope.insert_var(variable_name.clone()) {
                                 errors.push(SemanticError::ScopeError(err));
                             }
@@ -112,16 +124,30 @@ pub(crate) fn semantic_analysis(ast: &AbstractSyntaxTree) -> Result<(), Vec<Sema
                     }
 
                     // Ensure that the function returns the correct types.
-                    // Ignore this check if there was a previous expression error as to not
+                    // Ignore these checks if there was a previous expression error as to not
                     // add irrelevant errors to the error list.
-                    if !has_expression_error && function.signature.returns != return_types {
-                        errors.push(SemanticError::ExpressionError(
-                            ExpressionError::MismatchedReturnError {
-                                function_name: function.signature.name.clone(),
-                                expected: function.signature.returns.clone(),
-                                actual: return_types,
-                            },
-                        ))
+                    if !has_expression_error {
+                        if function.signature.returns != return_types {
+                            errors.push(SemanticError::ExpressionError(
+                                ExpressionError::WrongNumberOfReturnValuesError {
+                                    function_name: function.signature.name.clone(),
+                                    expected: function.signature.returns.len(),
+                                    actual: return_types.len(),
+                                },
+                            ))
+                        }
+
+                        for (i, return_type) in function.signature.returns.iter().enumerate() {
+                            if *return_type != return_types[i] {
+                                errors.push(SemanticError::ExpressionError(
+                                    ExpressionError::MismatchedReturnValueTypeError {
+                                        function_name: function.signature.name.clone(),
+                                        expected: *return_type,
+                                        actual: return_types[i],
+                                    },
+                                ))
+                            }
+                        }
                     }
                 }
             }

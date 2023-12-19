@@ -33,7 +33,7 @@ fn frontend(source_code: &str) -> Result<AbstractSyntaxTree, CompileError> {
     Ok(ast)
 }
 
-fn backend(
+fn jit_backend(
     ast: AbstractSyntaxTree,
     options: CodeGenOptions,
 ) -> Result<(*const u8, Option<String>, Option<String>), CompileError> {
@@ -75,5 +75,5 @@ pub fn compile_jit(
 
     unreachable!("frontend works");
 
-    backend(ast, options)
+    jit_backend(ast, options)
 }

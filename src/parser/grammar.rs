@@ -14,7 +14,6 @@ peg::parser!(pub grammar parser() for str {
 
     rule function() -> Function
         = _ i:identifier() _ "(" _ p:((_ i:identifier() _ {i}) ** ",") _ ")" r:(_ "->" r:((_ "int" _ {Type::Int}) ++ ",") {r})? _ s:scope() _ {
-            // TODO: support anonymous functions
             Function {
                 signature: FunctionSignature {
                     name: i,
