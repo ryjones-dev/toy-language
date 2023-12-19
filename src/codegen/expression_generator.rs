@@ -3,7 +3,7 @@ use cranelift::{
     frontend::FunctionBuilder,
 };
 
-use crate::ast_parser::types::{
+use crate::parser::types::{
     BinaryMathOperationType, BooleanComparisonType, Expression, FunctionCall, Identifier,
     UnaryMathOperationType,
 };
@@ -257,10 +257,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         )
     }
 
-    fn generate_int_literal(
-        &mut self,
-        value: crate::ast_parser::types::IntLiteral,
-    ) -> ExpressionValue {
+    fn generate_int_literal(&mut self, value: crate::parser::types::IntLiteral) -> ExpressionValue {
         // TODO: only support 64-bit integers for now
         let int_type = cranelift::codegen::ir::Type::int(64).unwrap();
         ExpressionValue(self.builder.ins().iconst(int_type, i64::from(value)))

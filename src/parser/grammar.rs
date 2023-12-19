@@ -1,4 +1,4 @@
-use crate::ast_parser::types::{
+use crate::parser::types::{
     AbstractSyntaxTree, BinaryMathOperationType, BoolLiteral, BooleanComparisonType, Expression,
     Function, FunctionCall, FunctionSignature, Identifier, IntLiteral, Statement, Type,
     UnaryMathOperationType, Variable,
@@ -7,9 +7,9 @@ use crate::ast_parser::types::{
 peg::parser!(pub grammar parser() for str {
     /// Parses the given input source code into the relevant syntax tree types.
     ///
-    /// The resulting types contain all of the information that the compiler needs
+    /// The resulting [`AbstractSyntaxTree`] contains all of the information that the compiler needs
     /// to perform semantic analysis and generate the IR code.
-    pub rule code() -> AbstractSyntaxTree
+    pub rule parse() -> AbstractSyntaxTree
         = f:function()* { AbstractSyntaxTree(f) }
 
     rule function() -> Function

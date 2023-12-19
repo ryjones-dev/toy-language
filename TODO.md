@@ -19,7 +19,7 @@
 - [x]  Validate number of parameters = number of arguments in function calls, ensure this is not reported as a compiler bug
 - [x]  Replace `MismatchedExpressionResultsError` with more specific error types
 - [x]  Add a new variable type that contains the variable name and type information
-- [ ]  Rename `ast_parser` to just `parser`
+- [x]  Rename `ast_parser` to just `parser`
 - [ ]  Add bool type to semantic analysis
 - [x]  Add a `BlockVariables` type in codegen that replaces `Scope` for variable indexing.
 - [ ]  Add bool type to code generation

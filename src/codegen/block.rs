@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::ast_parser::types::Identifier;
+use crate::parser::types::Identifier;
 
 pub(super) struct BlockVariables {
     variables: HashMap<Identifier, u32>,

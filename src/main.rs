@@ -1,18 +1,18 @@
-use ast_parser::{grammar::parser, types::ParseError};
 use codegen::options::CodeGenOptions;
 use compiler::CompileError;
+use parser::{grammar::parser as grammar_parser, types::ParseError};
 
 use crate::compiler::compile_jit;
 
 // TODO: remove these?
-mod ast_parser;
 mod codegen;
 mod compiler;
+mod parser;
 mod semantic;
 
 // For debugging syntax errors
 fn print_parsed_ast(source_code: &str) -> Result<(), ParseError> {
-    let code = parser::code(source_code)?;
+    let code = grammar_parser::parse(source_code)?;
     for c in code {
         println!("{:?}", c);
         println!();

@@ -1,7 +1,7 @@
 use cranelift::prelude::*;
 use thiserror::Error;
 
-use crate::ast_parser::types::{AbstractSyntaxTree, Expression, Function, Statement};
+use crate::parser::types::{AbstractSyntaxTree, Expression, Function, Statement};
 
 use super::{
     block::BlockVariables,

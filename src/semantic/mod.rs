@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::ast_parser::types::{AbstractSyntaxTree, Identifier, Statement, Type, Types};
+use crate::parser::types::{AbstractSyntaxTree, Identifier, Statement, Type, Types};
 
 use self::{
     expression::{analyze_expression, analyze_function_call, ExpressionError},

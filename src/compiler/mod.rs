@@ -1,13 +1,13 @@
 use thiserror::Error;
 
 use crate::{
-    ast_parser::{
-        grammar::parser,
-        types::{AbstractSyntaxTree, ParseError},
-    },
     codegen::{
         codegen::{CodeGenError, CodeGenerator},
         options::CodeGenOptions,
+    },
+    parser::{
+        grammar::parser,
+        types::{AbstractSyntaxTree, ParseError},
     },
     semantic::{semantic_analysis, SemanticError},
 };
@@ -25,7 +25,7 @@ pub enum CompileError {
 
 fn frontend(source_code: &str) -> Result<AbstractSyntaxTree, CompileError> {
     // Parse the source code into AST nodes
-    let ast = parser::code(source_code).map_err(|err| CompileError::ParseError(err.into()))?;
+    let ast = parser::parse(source_code).map_err(|err| CompileError::ParseError(err.into()))?;
 
     // Check that the code is semantically correct before attempting to generate code
     semantic_analysis(&ast).map_err(|errs| CompileError::SemanticErrors(errs))?;

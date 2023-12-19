@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::ast_parser::types::{Expression, FunctionCall, Identifier, Type, Types};
+use crate::parser::types::{Expression, FunctionCall, Identifier, Type, Types};
 
 use super::scope::Scope;
 
