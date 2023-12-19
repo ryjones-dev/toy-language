@@ -3,4 +3,5 @@ main(arg1, arg2) -> int:
     -> sum;
 
 add(left, right) -> int:
+    var = true
  -> left + right;

@@ -18,8 +18,12 @@
 - [x]  Pull out the entry point to the compiler to its own module
 - [x]  Validate number of parameters = number of arguments in function calls, ensure this is not reported as a compiler bug
 - [x]  Replace `MismatchedExpressionResultsError` with more specific error types
+- [x]  Add a new variable type that contains the variable name and type information
+- [ ]  Rename `ast_parser` to just `parser`
 - [ ]  Add bool type to semantic analysis
+- [x]  Add a `BlockVariables` type in codegen that replaces `Scope` for variable indexing.
 - [ ]  Add bool type to code generation
+- [ ]  Separate parsed types from semantic types (specifically `Variable`, need to solidify if this is worth doing)
 - [ ]  Handle boolean comparison for multiple types
 - [ ]  Check that assignment statements have the correct types of variables compared to the expression results
 - [ ]  Pattern matching

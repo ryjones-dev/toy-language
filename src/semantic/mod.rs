@@ -14,8 +14,6 @@ pub(super) mod scope;
 pub enum SemanticError {
     #[error("main function is not defined")]
     MissingMainError,
-    #[error("anonymous functions cannot be defined in the global scope")]
-    AnonymousFunctionInGlobalScopeError,
     #[error("function \"{0}\" returns values that are not stored in a variable. If this is intentional, use the discard identifier (\"_\")")]
     NonZeroReturnError(Identifier),
     #[error("{0}")]
@@ -33,18 +31,12 @@ pub(crate) fn semantic_analysis(ast: &AbstractSyntaxTree) -> Result<(), Vec<Sema
 
     // Insert each function signature in the global scope
     for function in ast.iter() {
-        // It's not possible for anonymous functions to be defined multiple times
-        if let Some(function_name) = &function.signature.name {
-            if let Err(err) = global_scope.insert_func_sig(&function.signature) {
-                errors.push(SemanticError::ScopeError(err));
-            } else {
-                if function_name.to_string() == "main" {
-                    has_main_function = true;
-                }
-            }
+        if let Err(err) = global_scope.insert_func_sig(function.signature.clone()) {
+            errors.push(SemanticError::ScopeError(err));
         } else {
-            // Anonymous functions can't be defined in the global scope
-            errors.push(SemanticError::AnonymousFunctionInGlobalScopeError);
+            if function.signature.name.to_string() == "main" {
+                has_main_function = true;
+            }
         }
     }
 
@@ -58,7 +50,9 @@ pub(crate) fn semantic_analysis(ast: &AbstractSyntaxTree) -> Result<(), Vec<Sema
 
         // Insert parameters into function scope
         for param in &function.signature.params {
-            function_scope.insert_var(param);
+            if let Err(err) = function_scope.insert_var(param.clone()) {
+                errors.push(SemanticError::ScopeError(err));
+            }
         }
 
         for statement in &function.body {
@@ -82,7 +76,9 @@ pub(crate) fn semantic_analysis(ast: &AbstractSyntaxTree) -> Result<(), Vec<Sema
                     // Always add the variables to the scope so that additional errors are not unnecessarily added downstream
                     for variable_name in variable_names {
                         if let Some(variable_name) = variable_name {
-                            function_scope.insert_var(variable_name);
+                            if let Err(err) = function_scope.insert_var(variable_name.clone()) {
+                                errors.push(SemanticError::ScopeError(err));
+                            }
                         }
                     }
                 }

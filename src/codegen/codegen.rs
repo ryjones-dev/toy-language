@@ -1,12 +1,10 @@
 use cranelift::prelude::*;
 use thiserror::Error;
 
-use crate::{
-    ast_parser::types::{AbstractSyntaxTree, Expression, Function, Statement},
-    semantic::scope::Scope,
-};
+use crate::ast_parser::types::{AbstractSyntaxTree, Expression, Function, Statement};
 
 use super::{
+    block::BlockVariables,
     context::CodeGenContext,
     expression_generator::ExpressionGenerator,
     options::{CodeGenOptions, OptimizationLevel},
@@ -109,7 +107,6 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
     /// in the second position of the tuple.
     pub(crate) fn generate(
         &mut self,
-        global_scope: Scope,
         ast: AbstractSyntaxTree,
     ) -> Result<(Option<String>, Option<String>), CodeGenError> {
         let mut ir = String::new();
@@ -119,7 +116,7 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
         let mut function_context = FunctionBuilderContext::new();
         for function in ast {
             let (function_ir, function_disasm) =
-                self.generate_function(&mut function_context, Some(&global_scope), function)?;
+                self.generate_function(&mut function_context, function)?;
 
             match function_ir {
                 Some(function_ir) => ir.push_str(format!("{}\n", function_ir).as_str()),
@@ -152,7 +149,6 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
     fn generate_function(
         &mut self,
         function_context: &mut FunctionBuilderContext,
-        outer_scope: Option<&Scope>,
         function: Function,
     ) -> Result<(Option<String>, Option<String>), CodeGenError> {
         // Pull out the wrapped context
@@ -161,33 +157,30 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
         // TODO: only support 64-bit integer types for now
         let int_type = codegen::ir::Type::int(64).unwrap();
 
+        let Function { signature, body } = function;
+
         // Add the function's parameters to the context
-        for _ in &function.signature.params {
+        for _ in &signature.params {
             context.func.signature.params.push(AbiParam::new(int_type));
         }
 
         // Add the function's return types to the context
-        for _ in &function.signature.returns {
+        for _ in &signature.returns {
             context.func.signature.returns.push(AbiParam::new(int_type));
         }
 
         // We can now declare the function to Cranelift from the context
-        let function_id = match &function.signature.name {
-            Some(function_name) => {
-                let function_name = String::from(function_name.clone());
-                self.module
-                    .declare_function(
-                        &function_name,
-                        cranelift_module::Linkage::Local,
-                        &context.func.signature,
-                    )
-                    .map_err(|err| {
-                        Self::check_codegen_error(&err);
-                        CodeGenError::FunctionDeclarationError(function_name, err.to_string())
-                    })?
-            }
-            None => todo!("Declare anonymous function"),
-        };
+        let function_id = self
+            .module
+            .declare_function(
+                &signature.name.to_string(),
+                cranelift_module::Linkage::Local,
+                &context.func.signature,
+            )
+            .map_err(|err| {
+                Self::check_codegen_error(&err);
+                CodeGenError::FunctionDeclarationError(signature.name.to_string(), err.to_string())
+            })?;
 
         // Instantiate the function builder and create the function entry block where IR code will be emitted.
         // Because this is the entry block of the function, we can seal it early as no other blocks can branch to it.
@@ -197,48 +190,29 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
         builder.switch_to_block(entry_block);
         builder.seal_block(entry_block);
 
-        // To start compiling the function body, we first need to create a new scope and
-        // add the parameter variables to the scope so that the function may access them.
-        let mut scope = Scope::new(outer_scope);
-        for (i, name) in function.signature.params.iter().enumerate() {
-            let variable = cranelift::frontend::Variable::from(*(scope.insert_var(name)));
-            builder.declare_var(variable, int_type);
-
-            // Because we know the values of the parameters from the arguments of the calling function,
-            // we can define those values right away.
-            let value = builder.block_params(entry_block)[i];
-            builder.def_var(variable, value)
+        // Prime the block variables with the function parameters
+        let mut block_vars = BlockVariables::new();
+        for (i, variable) in signature.params.iter().enumerate() {
+            let cranelift_variable =
+                cranelift::frontend::Variable::from_u32(block_vars.var(variable.name.clone()));
+            builder.declare_var(cranelift_variable, int_type);
+            builder.def_var(cranelift_variable, builder.block_params(entry_block)[i]);
         }
 
-        // Copy the function name as a string, since compiling the function body consumes the function
-        let function_name = function
-            .signature
-            .name
-            .clone()
-            .map(|name| String::from(name));
-
         // Now we can generate the function body
-        Self::generate_function_body(&mut self.module, builder, scope, function);
+        Self::generate_function_body(&mut self.module, builder, block_vars, body);
 
         // Mark the function as defined to kick off Cranelift IR compilation
         self.module
             .define_function(function_id, context)
             .map_err(|err| {
                 Self::check_codegen_error(&err);
-                CodeGenError::FunctionDefinitionError(
-                    match function_name.clone() {
-                        Some(function_name) => function_name,
-                        None => "".to_string(),
-                    },
-                    err.to_string(),
-                )
+                CodeGenError::FunctionDefinitionError(signature.name.to_string(), err.to_string())
             })?;
 
         // Take note if this is the main function
-        if let Some(function_name) = function_name {
-            if function_name == "main" {
-                self.main_function_id = Some(function_id);
-            }
+        if signature.name.to_string() == "main" {
+            self.main_function_id = Some(function_id);
         }
 
         let mut ir = None;
@@ -256,12 +230,12 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
     fn generate_function_body(
         module: &mut M,
         mut builder: FunctionBuilder,
-        mut scope: Scope,
-        function: Function,
+        mut block_vars: BlockVariables,
+        body: Vec<Statement>,
     ) {
         // Emit IR code for each statement in the function
-        for statement in function.body {
-            Self::generate_statement(module, &mut builder, &mut scope, statement);
+        for statement in body {
+            Self::generate_statement(module, &mut builder, &mut block_vars, statement);
         }
 
         builder.finalize();
@@ -270,7 +244,7 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
     fn generate_statement(
         module: &mut M,
         builder: &mut FunctionBuilder,
-        scope: &mut Scope,
+        block_vars: &mut BlockVariables,
         statement: Statement,
     ) {
         // TODO: only support 64-bit integer types for now
@@ -281,7 +255,8 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
                 // Generate IR for the expression on the right-hand side of the equals sign
                 let values;
                 {
-                    let mut expression_generator = ExpressionGenerator::new(module, builder, scope);
+                    let mut expression_generator =
+                        ExpressionGenerator::new(module, builder, block_vars);
                     values = expression_generator.generate(expression);
                 }
 
@@ -289,25 +264,19 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
                 for (i, variable_name) in variable_names.into_iter().enumerate() {
                     // Only declare and define variable identifiers if they are not the discard identifier.
                     if let Some(variable_name) = variable_name {
-                        let variable = *match scope.get_var(&variable_name) {
-                            Some(variable) => variable,
-                            None => {
-                                let variable = scope.insert_var(&variable_name);
+                        let cranelift_variable = cranelift::frontend::Variable::from_u32(
+                            block_vars.var(variable_name.name),
+                        );
 
-                                // Declare the variable in Cranelift if it was not in scope
-                                builder.declare_var(variable.clone().into(), int_type);
-
-                                variable
-                            }
-                        };
-
-                        // Define the variable's value to the corresponding return value of the expression
-                        builder.def_var(variable.into(), values[i].into());
+                        // Intentionally ignore the error, since we don't care if the variable has already been declared.
+                        builder.try_declare_var(cranelift_variable, int_type);
+                        builder.def_var(cranelift_variable, values[i].into());
                     }
                 }
             }
             Statement::FunctionCall(function_call) => {
-                let mut expression_generator = ExpressionGenerator::new(module, builder, scope);
+                let mut expression_generator =
+                    ExpressionGenerator::new(module, builder, block_vars);
 
                 expression_generator.generate(Expression::FunctionCall(function_call));
             }
@@ -319,7 +288,7 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
                     let mut values;
                     {
                         let mut expression_generator =
-                            ExpressionGenerator::new(module, builder, scope);
+                            ExpressionGenerator::new(module, builder, block_vars);
                         values = expression_generator.generate(expression);
                     }
 

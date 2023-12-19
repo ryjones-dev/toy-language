@@ -9,8 +9,7 @@ use crate::{
         codegen::{CodeGenError, CodeGenerator},
         options::CodeGenOptions,
     },
-    semantic::{scope::Scope, semantic_analysis, SemanticError},
-    semantic_assert,
+    semantic::{semantic_analysis, SemanticError},
 };
 
 /// An error that captures all errors that can be thrown during compilation.
@@ -24,25 +23,33 @@ pub enum CompileError {
     CodeGenError(#[from] CodeGenError),
 }
 
-fn frontend(source_code: &str) -> Result<(AbstractSyntaxTree, Scope), CompileError> {
+fn frontend(source_code: &str) -> Result<AbstractSyntaxTree, CompileError> {
     // Parse the source code into AST nodes
     let ast = parser::code(source_code).map_err(|err| CompileError::ParseError(err.into()))?;
 
     // Check that the code is semantically correct before attempting to generate code
     semantic_analysis(&ast).map_err(|errs| CompileError::SemanticErrors(errs))?;
 
-    // Insert each function into the global scope so that function calls can be made without requiring them to be defined in order
-    let mut global_scope = Scope::new(None);
-    for function in ast.iter() {
-        global_scope
-            .insert_func_sig(&function.signature)
-            .map_err(|err| {
-                semantic_assert!(false, format!("{}", err));
-                CompileError::SemanticErrors(vec![SemanticError::ScopeError(err)])
-            })?;
-    }
+    Ok(ast)
+}
 
-    Ok((ast, global_scope))
+fn backend(
+    ast: AbstractSyntaxTree,
+    options: CodeGenOptions,
+) -> Result<(*const u8, Option<String>, Option<String>), CompileError> {
+    let mut code_generator = CodeGenerator::<cranelift_jit::JITModule>::new(options)?;
+
+    let (ir, disassembly) = code_generator
+        .generate(ast)
+        .map_err(|err| CompileError::CodeGenError(err))?;
+
+    let code = code_generator
+        .get_main_function()
+        .ok_or(CompileError::SemanticErrors(vec![
+            SemanticError::MissingMainError,
+        ]))?;
+
+    Ok((code, ir, disassembly))
 }
 
 /// The primary function responsible for compiling TODO_LANG_NAME source code to machine code ahead of time (AOT).
@@ -64,19 +71,9 @@ pub fn compile_jit(
     source_code: &str,
     options: CodeGenOptions,
 ) -> Result<(*const u8, Option<String>, Option<String>), CompileError> {
-    let (ast, global_scope) = frontend(source_code)?;
+    let (ast) = frontend(source_code)?;
 
-    let mut code_generator = CodeGenerator::<cranelift_jit::JITModule>::new(options)?;
+    unreachable!("frontend works");
 
-    let (ir, disassembly) = code_generator
-        .generate(global_scope, ast)
-        .map_err(|err| CompileError::CodeGenError(err))?;
-
-    let code = code_generator
-        .get_main_function()
-        .ok_or(CompileError::SemanticErrors(vec![
-            SemanticError::MissingMainError,
-        ]))?;
-
-    Ok((code, ir, disassembly))
+    backend(ast, options)
 }

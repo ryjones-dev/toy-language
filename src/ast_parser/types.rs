@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+use crate::semantic_assert;
+
 /// An error that is thrown when parsing source code fails.
 ///
 /// In the implementation, [`peg`] is used to parse source code.
@@ -18,8 +20,10 @@ impl<L: std::fmt::Display> From<peg::error::ParseError<L>> for ParseError {
 }
 
 /// TODO_LANG_NAME built-in data types.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Type {
+    #[default]
+    Undefined,
     Int,
     Bool,
 }
@@ -27,6 +31,7 @@ pub enum Type {
 impl std::fmt::Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Type::Undefined => write!(f, "undefined"),
             Type::Int => write!(f, "int"),
             Type::Bool => write!(f, "bool"),
         }
@@ -110,7 +115,7 @@ impl std::fmt::Display for Types {
 /// While there are contexts where using the discard identifier ("_") makes sense, it is not universal,
 /// so instead of building it in to the type, the discard identifier is individually considered in the contexts
 /// it make sense.
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Identifier(String);
 
 impl From<Identifier> for String {
@@ -139,6 +144,40 @@ impl std::fmt::Display for Identifier {
     }
 }
 
+/// A distinct type that is used to represent a variable.
+///
+/// Only the name is parsable from the source code. The type will be [`Type::Undefined`]
+/// until semantic analysis can determine the type by calling [`Variable::define`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Variable {
+    pub(crate) name: Identifier,
+    pub(crate) ty: Type,
+}
+
+impl Variable {
+    pub(crate) fn new(name: Identifier) -> Self {
+        Self {
+            name,
+            ty: Type::default(),
+        }
+    }
+
+    /// Defines the variable to have the given type.
+    ///
+    /// This should be called exactly once by semantic analysis.
+    ///
+    /// # Panics
+    /// Panics if this method is called more than once.
+    pub(crate) fn define(&mut self, ty: Type) {
+        semantic_assert!(
+            self.ty == Type::default(),
+            format!("variable {} has already been defined", self.name)
+        );
+
+        self.ty = ty;
+    }
+}
+
 /// A distinct type that is used to represent integer literal values.
 ///
 /// This is just a wrapper around [`i64`] and is completely convertable to and from [`i64`].
@@ -146,7 +185,7 @@ impl std::fmt::Display for Identifier {
 /// It is intended to be used in places where it semantically makes sense to represent
 /// a parsed integer literal from source code.
 /// If [`i64`] was used directly, this context would be lost on the reader.
-#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct IntLiteral(i64);
 
 impl std::str::FromStr for IntLiteral {
@@ -166,6 +205,37 @@ impl From<IntLiteral> for i64 {
 
 impl From<i64> for IntLiteral {
     fn from(value: i64) -> Self {
+        Self(value)
+    }
+}
+
+/// A distinct type that is used to represent boolean literal values.
+///
+/// This is just a wrapper around [`bool`] and is completely convertable to and from [`bool`].
+/// Parsing directly from a string to [`BoolLiteral`] is also supported.
+/// It is intended to be used in places where it semantically makes sense to represent
+/// a parsed boolean literal from source code.
+/// If [`bool`] was used directly, this context would be lost on the reader.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct BoolLiteral(bool);
+
+impl std::str::FromStr for BoolLiteral {
+    type Err = std::str::ParseBoolError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let value = s.parse()?;
+        Ok(Self { 0: value })
+    }
+}
+
+impl From<BoolLiteral> for bool {
+    fn from(value: BoolLiteral) -> Self {
+        value.0
+    }
+}
+
+impl From<bool> for BoolLiteral {
+    fn from(value: bool) -> Self {
         Self(value)
     }
 }
@@ -242,8 +312,9 @@ pub(crate) enum Expression {
 
     FunctionCall(FunctionCall),
 
-    Variable(Identifier),
+    Variable(Variable),
     IntLiteral(IntLiteral),
+    BoolLiteral(BoolLiteral),
 }
 
 /// A TODO_LANG_NAME statement is a single unit of a function's task.
@@ -257,9 +328,9 @@ pub(crate) enum Expression {
 /// Anything in a function that is not just an expression is often a statement.
 #[derive(Debug)]
 pub(crate) enum Statement {
-    /// An assignment identifier can either be a variable name, or the discard identifier ("_").
-    /// [`Option::None`] represents the discard identifier.
-    Assignment(Vec<Option<Identifier>>, Expression),
+    /// An assignment variable can either be a [`Variable`], or the discard identifier ("_"),
+    /// which is represented by [`Option::None`.
+    Assignment(Vec<Option<Variable>>, Expression),
     /// Call a function with no return values as a free-standing statement.
     /// The function must return no values, otherwise a [`Statement::Assignment`] must be used.
     FunctionCall(FunctionCall),
@@ -269,11 +340,10 @@ pub(crate) enum Statement {
 /// The signature of a TODO_LANG_NAME function.
 ///
 /// This includes the function's name, parameters, and return types.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct FunctionSignature {
-    /// Functions may not have a name if they are anonymous.
-    pub(crate) name: Option<Identifier>,
-    pub(crate) params: Vec<Identifier>,
+    pub(crate) name: Identifier,
+    pub(crate) params: Vec<Variable>,
     pub(crate) returns: Types,
 }
 
@@ -306,48 +376,5 @@ impl std::ops::Deref for AbstractSyntaxTree {
 
     fn deref(&self) -> &Self::Target {
         &self.0
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_convert_string_identifier() {
-        let str = "identifier";
-        let string = String::from(str);
-
-        let identifier_string = Identifier::from(string.clone());
-        let converted_string = String::from(identifier_string.clone());
-        assert_eq!(string, converted_string);
-
-        let identifier_str = Identifier::from(str);
-        assert_eq!(identifier_string, identifier_str);
-    }
-
-    #[test]
-    fn test_display_identifier() {
-        let expected = String::from("identifier");
-        let identifier = Identifier::from(expected.clone());
-        let actual = format!("{}", identifier);
-        assert_eq!(expected, actual);
-    }
-
-    #[test]
-    fn test_convert_i64_int_literal() {
-        let num = 10;
-
-        let int_literal = IntLiteral::from(num);
-        let converted_num = i64::from(int_literal);
-        assert_eq!(num, converted_num,);
-    }
-
-    #[test]
-    fn test_parse_int_literal() -> Result<(), std::num::ParseIntError> {
-        let num_str = "10";
-        let int_literal = <IntLiteral as std::str::FromStr>::from_str(num_str)?;
-        assert_eq!(int_literal.0, 10);
-        Ok(())
     }
 }

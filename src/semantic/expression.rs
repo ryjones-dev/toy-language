@@ -23,11 +23,11 @@ pub enum ExpressionError {
         actual: Types,
     },
     #[error(
-        "mismatched return types for function{}. expected: {expected}, actual: {actual}",
-        if .function_name.is_some() { format!(" \"{}\"", .function_name.clone().unwrap()) } else { String::new() }
+        "mismatched return types for function \"{}\". expected: {expected}, actual: {actual}",
+        .function_name
     )]
     MismatchedReturnError {
-        function_name: Option<Identifier>,
+        function_name: Identifier,
         expected: Types,
         actual: Types,
     },
@@ -58,7 +58,7 @@ pub(super) fn analyze_expression(
 
             types.push(Type::Int);
         }
-        Expression::BinaryMathOperation(_, lhs, rhs) => {
+        Expression::BinaryMathOperation(operation_type, lhs, rhs) => {
             // TODO: Handle floats later
             let lhs_types = analyze_expression(lhs, scope)?;
             expect_single_type(&lhs_types, Type::Int)?;
@@ -68,7 +68,7 @@ pub(super) fn analyze_expression(
 
             types.push(Type::Int);
         }
-        Expression::UnaryMathOperation(_, expression) => {
+        Expression::UnaryMathOperation(operation_type, expression) => {
             let mut ty = analyze_expression(expression, scope)?;
             expect_single_type(&ty, Type::Int)?;
 
@@ -78,11 +78,12 @@ pub(super) fn analyze_expression(
             let mut tys = analyze_function_call(function_call, scope)?;
             types.append(&mut tys);
         }
-        Expression::Variable(name) => match scope.get_var(name) {
+        Expression::Variable(variable) => match scope.get_var(&variable.name) {
             Some(variable) => types.push(variable.ty),
-            None => return Err(ExpressionError::UnknownVariableError(name.clone())),
+            None => return Err(ExpressionError::UnknownVariableError(variable.name.clone())),
         },
         Expression::IntLiteral(_) => types.push(Type::Int),
+        Expression::BoolLiteral(_) => todo!(),
     };
 
     Ok(types)

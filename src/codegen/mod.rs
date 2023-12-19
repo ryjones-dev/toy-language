@@ -1,3 +1,4 @@
+mod block;
 pub(super) mod codegen;
 mod context;
 mod expression_generator;

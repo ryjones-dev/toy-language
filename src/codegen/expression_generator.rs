@@ -1,13 +1,16 @@
-use crate::{
-    ast_parser::types::{
-        BinaryMathOperationType, BooleanComparisonType, Expression, FunctionCall, Identifier,
-        UnaryMathOperationType,
-    },
-    semantic::scope::Scope,
+use cranelift::{
+    codegen::ir::{condcodes::IntCC, AbiParam, InstBuilder, Value},
+    frontend::FunctionBuilder,
 };
-use cranelift::prelude::*;
+
+use crate::ast_parser::types::{
+    BinaryMathOperationType, BooleanComparisonType, Expression, FunctionCall, Identifier,
+    UnaryMathOperationType,
+};
 
 use crate::semantic_assert;
+
+use super::block::BlockVariables;
 
 /// A distinct type that is used to represent name the value of an evaluated [`Expression`].
 ///
@@ -36,26 +39,26 @@ pub(super) struct ExpressionGenerator<
     'module,
     'ctx: 'builder,
     'builder,
-    'scope,
+    'block,
     M: cranelift_module::Module + 'module,
 > {
     builder: &'builder mut FunctionBuilder<'ctx>,
     module: &'module mut M,
-    scope: &'scope Scope<'scope>,
+    block_vars: &'block mut BlockVariables,
 }
 
-impl<'module, 'ctx: 'builder, 'builder, 'scope, M: cranelift_module::Module>
-    ExpressionGenerator<'module, 'ctx, 'builder, 'scope, M>
+impl<'module, 'ctx: 'builder, 'builder, 'block, M: cranelift_module::Module>
+    ExpressionGenerator<'module, 'ctx, 'builder, 'block, M>
 {
     pub(super) fn new(
         module: &'module mut M,
         builder: &'builder mut FunctionBuilder<'ctx>,
-        scope: &'scope Scope<'scope>,
+        block_vars: &'block mut BlockVariables,
     ) -> Self {
         Self {
             builder,
             module,
-            scope,
+            block_vars,
         }
     }
 }
@@ -80,8 +83,9 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                 vec![self.generate_unary_operation(operation_type, *expression)]
             }
             Expression::FunctionCall(function_call) => self.generate_function_call(function_call),
-            Expression::Variable(name) => vec![self.generate_variable(name)],
+            Expression::Variable(variable) => vec![self.generate_variable(variable.name)],
             Expression::IntLiteral(value) => vec![self.generate_int_literal(value)],
+            Expression::BoolLiteral(value) => todo!(),
         }
     }
 
@@ -201,25 +205,15 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         FunctionCall { name, arguments }: FunctionCall,
     ) -> Vec<ExpressionValue> {
         // TODO: only support 64-bit integer types for now
-        let int_type = codegen::ir::Type::int(64).unwrap();
+        let int_type = cranelift::codegen::ir::Type::int(64).unwrap();
 
-        // Because we've already done semantic analysis, we know that the function being called is defined.
-        // Therefore, we can directly declare the function in Cranelift while calling it, to allow for
-        // any arbitrary function definition order.
-        let func_sig = self.scope.get_func_sig(&name);
-        semantic_assert!(
-            func_sig.is_some(),
-            format!("function \"{}\" not in scope", name)
-        );
-        let func_sig = func_sig.unwrap();
-
+        // Because we've already done semantic analysis, we know that the function being called is defined,
+        // and this call to that function is correct.
+        // Therefore, we can build the function signature from the function call information.
+        // This allows for any arbitrary function definition order.
         let mut sig = self.module.make_signature();
-        for _ in &func_sig.params {
+        for _ in &arguments {
             sig.params.push(AbiParam::new(int_type))
-        }
-
-        for _ in &func_sig.returns {
-            sig.returns.push(AbiParam::new(int_type))
         }
 
         let func_id_to_call = self
@@ -255,16 +249,11 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
     }
 
     fn generate_variable(&mut self, name: Identifier) -> ExpressionValue {
-        let variable = self.scope.get_var(&name);
-        semantic_assert!(
-            variable.is_some(),
-            format!("variable \"{}\" not found in scope", name)
-        );
-
-        let variable = variable.unwrap();
         ExpressionValue::from(
             self.builder
-                .use_var(cranelift::frontend::Variable::from(*variable)),
+                .use_var(cranelift::frontend::Variable::from_u32(
+                    self.block_vars.var(name),
+                )),
         )
     }
 
@@ -273,7 +262,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         value: crate::ast_parser::types::IntLiteral,
     ) -> ExpressionValue {
         // TODO: only support 64-bit integers for now
-        let int_type = codegen::ir::Type::int(64).unwrap();
+        let int_type = cranelift::codegen::ir::Type::int(64).unwrap();
         ExpressionValue(self.builder.ins().iconst(int_type, i64::from(value)))
     }
 }
