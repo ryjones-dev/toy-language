@@ -51,8 +51,14 @@ pub(super) fn analyze_statement(
                             actual: variables.len(),
                         });
                     } else {
-                        for (i, variable) in variables.iter().enumerate() {
+                        for (i, variable) in variables.iter_mut().enumerate() {
                             if let Some(variable) = variable {
+                                // If the variable type is undefined, this is a new variable definition.
+                                // Set the variable type to the corresponding expression result type.
+                                if variable.ty == Type::Undefined {
+                                    variable.ty = types[i];
+                                }
+
                                 if variable.ty != types[i] {
                                     errors.push(StatementError::MismatchedTypeAssignmentError {
                                         expected: types[i],

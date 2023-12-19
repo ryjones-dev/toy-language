@@ -147,7 +147,7 @@ impl std::fmt::Display for Identifier {
 /// A distinct type that is used to represent a variable.
 ///
 /// Only the name is parsable from the source code. The type will be [`Type::Undefined`]
-/// until semantic analysis can determine the type by calling [`Variable::define`].
+/// until semantic analysis can determine the type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Variable {
     pub(crate) name: Identifier,
@@ -160,21 +160,6 @@ impl Variable {
             name,
             ty: Type::default(),
         }
-    }
-
-    /// Defines the variable to have the given type.
-    ///
-    /// This should be called exactly once by semantic analysis.
-    ///
-    /// # Panics
-    /// Panics if this method is called more than once.
-    pub(crate) fn define(&mut self, ty: Type) {
-        semantic_assert!(
-            self.ty == Type::default(),
-            format!("variable {} has already been defined", self.name)
-        );
-
-        self.ty = ty;
     }
 }
 
