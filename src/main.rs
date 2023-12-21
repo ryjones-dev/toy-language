@@ -43,7 +43,7 @@ macro_rules! execute_jit {
 // }
 
 fn main() -> Result<(), CompileError> {
-    let source_code = include_str!("lang/test_new.txt");
+    let source_code = include_str!("lang/test.txt");
 
     let codegen_options = CodeGenOptions::new().with_ir(true).with_disassembly(false);
     let compile_options = CompileOptions::new()

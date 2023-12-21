@@ -1,1 +1,0 @@
-add(left,right):->left+right noop():->_main(arg1,arg2):noop() sum=add(arg1,arg2)->sum

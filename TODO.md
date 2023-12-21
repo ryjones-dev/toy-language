@@ -33,8 +33,9 @@
 - [ ]  Range loop (for loop)
 - [ ]  Support optionally getting the index and/or value when iterating over a range
 - [ ]  Improve error messaging to include line numbers (codespan-reporting crate?)
+- [ ]  Fix codegen error for empty function (should codegen ignore it, or semantic analysis catch it?)
 - [ ]  Add unit tests for grammar parsing
-- [ ]  Add unit tests for semantic errors 
+- [ ]  Add unit tests for semantic errors
 - [ ]  Handle comparison for more types (casting? comparison interface?)
 - [ ]  Decide how mutability should be handled (allow reassigning to the same variable?)
 - [ ]  Make `FunctionSignature` generic with fixed sized arrays

@@ -1,9 +1,9 @@
-add(arg1, arg2):
+add(arg1 int, arg2 int):
     -> arg1 + arg2;
 
 print(output):;
 
-main(early_out, calc_small_sum):
+main(early_out bool, calc_small_sum bool):
     # Boolean pattern matching has special syntactic sugar:
     early_out?:
         -> 0;
