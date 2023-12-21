@@ -24,6 +24,9 @@
 - [x]  Add a `BlockVariables` type in codegen that replaces `Scope` for variable indexing.
 - [x]  Add bool type to code generation
 - [x]  Handle boolean comparison for multiple types
+- [ ]  Add source locations to each AST type
+- [ ]  Add [codespan-reporting](https://github.com/brendanzab/codespan) and set up one basic error message using source location
+- [ ]  Update all error types to use codespan-reporting
 - [ ]  Pattern matching
 - [ ]  Check that all blocks in a function return the same number and type of values
 - [ ]  Add syntactic sugar for pattern matching on a bool with only a true arm, akin to an if statement
@@ -32,7 +35,6 @@
 - [ ]  Bool condition loop (while loop)
 - [ ]  Range loop (for loop)
 - [ ]  Support optionally getting the index and/or value when iterating over a range
-- [ ]  Improve error messaging to include line numbers (codespan-reporting crate?)
 - [ ]  Fix codegen error for empty function (should codegen ignore it, or semantic analysis catch it?)
 - [ ]  Add unit tests for grammar parsing
 - [ ]  Add unit tests for semantic errors
