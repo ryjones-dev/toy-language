@@ -4,7 +4,7 @@ use crate::parser::types::{
     UnaryMathOperationType, Variable,
 };
 
-peg::parser!(pub grammar parser() for str {
+peg::parser!(pub(crate) grammar parser() for str {
     /// Parses the given input source code into the relevant syntax tree types.
     ///
     /// The resulting [`AbstractSyntaxTree`] contains all of the information that the compiler needs
@@ -70,7 +70,7 @@ peg::parser!(pub grammar parser() for str {
     }
 
     rule call_function() -> FunctionCall
-        = i:identifier() _ "(" _ args:((_ e:expression() _ {e}) ** ",") _ ")" { FunctionCall {name: i, arguments: args } }
+        = i:identifier() _ "(" _ args:((_ e:expression() _ {e}) ** ",") _ ")" { FunctionCall {name: i, arguments: args, return_types: None } }
 
     rule type_name() -> &'input str
         = t:$("int" / "bool") { t }

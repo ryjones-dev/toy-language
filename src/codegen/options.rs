@@ -12,9 +12,9 @@ pub enum OptimizationLevel {
 /// Code generation options to be passed to [`compile`] or [`compile_jit`].
 #[derive(Default)]
 pub struct CodeGenOptions {
-    pub optimization_level: OptimizationLevel,
-    pub request_ir: bool,
-    pub request_disassembly: bool,
+    pub(super) optimization_level: OptimizationLevel,
+    pub(super) request_ir: bool,
+    pub(super) request_disassembly: bool,
 }
 
 impl CodeGenOptions {

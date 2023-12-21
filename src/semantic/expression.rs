@@ -33,7 +33,7 @@ pub enum ExpressionError {
 /// Recursively validate that inner expressions have the correct number and types of values that the outer expression expects.
 /// Returns the expression's value types, or an error if an inner expression was not compatible with the outer expression.
 pub(super) fn analyze_expression(
-    expression: &Expression,
+    expression: &mut Expression,
     scope: &Scope,
 ) -> Result<Types, ExpressionError> {
     let mut types = Types::new();
@@ -81,14 +81,14 @@ pub(super) fn analyze_expression(
 }
 
 pub(super) fn analyze_function_call(
-    function_call: &FunctionCall,
+    function_call: &mut FunctionCall,
     scope: &Scope,
 ) -> Result<Types, ExpressionError> {
     match scope.get_func_sig(&function_call.name) {
         Some(func_sig) => {
             // Analyze each argument expression to determine their types
             let mut argument_types = Types::new();
-            for expression in &function_call.arguments {
+            for expression in &mut function_call.arguments {
                 let mut args = analyze_expression(expression, scope)?;
                 argument_types.append(&mut args);
             }
@@ -111,6 +111,9 @@ pub(super) fn analyze_function_call(
                     }
                 }
             }
+
+            // Clone the function's return types to the function call so codegen has easy access to them
+            function_call.return_types = Some(func_sig.returns.clone());
 
             // The function's return types are what should be propagated up to the call site
             Ok(func_sig.returns.clone())

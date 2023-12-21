@@ -284,10 +284,14 @@ pub(crate) enum UnaryMathOperationType {
 ///
 /// Because a function call can either be an expression or statement depending on the context,
 /// it is helpful to have an underlying type that captures the info needed to make the function call.
+///
+/// The return types can't be parsed from the function call expression itself, but can be deduced during semantic analysis.
+/// Until then, the return types will have a value of [`Option::None`].
 #[derive(Debug)]
 pub(crate) struct FunctionCall {
     pub(crate) name: Identifier,
     pub(crate) arguments: Vec<Expression>,
+    pub(crate) return_types: Option<Types>,
 }
 
 /// A TODO_LANG_NAME expression that, when evaluated, can return zero or more values.
@@ -388,5 +392,16 @@ impl std::ops::Deref for AbstractSyntaxTree {
 impl std::ops::DerefMut for AbstractSyntaxTree {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
+    }
+}
+
+impl std::fmt::Display for AbstractSyntaxTree {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for function in self.iter() {
+            writeln!(f, "Function: {}", function.signature.name)?;
+            writeln!(f, "{:?}", function)?;
+        }
+
+        Ok(())
     }
 }

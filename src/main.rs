@@ -1,25 +1,13 @@
 use codegen::options::CodeGenOptions;
 use compiler::CompileError;
-use parser::{grammar::parser as grammar_parser, types::ParseError};
 
-use crate::compiler::compile_jit;
+use crate::compiler::{compile_jit, CompileOptions};
 
 // TODO: remove these?
 mod codegen;
 mod compiler;
 mod parser;
 mod semantic;
-
-// For debugging syntax errors
-fn print_parsed_ast(source_code: &str) -> Result<(), ParseError> {
-    let code = grammar_parser::parse(source_code)?;
-    for c in code {
-        println!("{:?}", c);
-        println!();
-    }
-
-    Ok(())
-}
 
 // This macro is unsafe because it relies on the caller to provide the correct input and output types.
 // Using incorrect types at this point may corrupt the program's state.
@@ -57,31 +45,33 @@ macro_rules! execute_jit {
 fn main() -> Result<(), CompileError> {
     let source_code = include_str!("lang/test_new.txt");
 
-    match print_parsed_ast(source_code) {
-        Ok(()) => {}
-        Err(err) => {
-            println!("{}", err);
-            return Err(CompileError::ParseError(err));
-        }
-    }
-
     let codegen_options = CodeGenOptions::new().with_ir(true).with_disassembly(false);
+    let compile_options = CompileOptions::new()
+        .with_ast(true)
+        .with_codegen_options(codegen_options);
 
-    let (code, ir, disassembly) = match compile_jit(source_code, codegen_options) {
-        Ok((code, ir, disassembly)) => (code, ir, disassembly),
-        Err(err) => {
+    let (code, ast, ir, disassembly) = match compile_jit(source_code, compile_options) {
+        Ok((code, ast, ir, disassembly)) => (code, ast, ir, disassembly),
+        Err((err, ast_string)) => {
+            if let Some(ast) = ast_string {
+                println!("{}", ast);
+            }
+
             println!("{}", err);
             return Err(err);
         }
     };
 
-    match ir {
-        Some(ir) => println!("{}", ir),
-        None => {}
+    if let Some(ast) = ast {
+        println!("{}", ast);
     }
-    match disassembly {
-        Some(disassembly) => println!("{}", disassembly),
-        None => {}
+
+    if let Some(ir) = ir {
+        println!("{}", ir);
+    }
+
+    if let Some(disassembly) = disassembly {
+        println!("{}", disassembly);
     }
 
     let arg1: i64 = 1;

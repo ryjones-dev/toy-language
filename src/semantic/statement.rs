@@ -43,7 +43,7 @@ pub(super) fn analyze_statement(
     let mut errors = Vec::new();
     match statement {
         Statement::Assignment(variables, expression) => {
-            match analyze_expression(&expression, &scope) {
+            match analyze_expression(expression, &scope) {
                 Ok(types) => {
                     if types.len() != variables.len() {
                         errors.push(StatementError::WrongNumberOfVariablesError {
@@ -99,7 +99,7 @@ pub(super) fn analyze_statement(
             let mut has_expression_error = false;
 
             for expression in expressions {
-                match analyze_expression(&expression, &scope) {
+                match analyze_expression(expression, &scope) {
                     Ok(mut types) => {
                         return_types.append(&mut types);
                     }

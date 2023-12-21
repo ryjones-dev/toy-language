@@ -202,7 +202,11 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
 
     fn generate_function_call(
         &mut self,
-        FunctionCall { name, arguments }: FunctionCall,
+        FunctionCall {
+            name,
+            arguments,
+            return_types,
+        }: FunctionCall,
     ) -> Vec<ExpressionValue> {
         // TODO: only support 64-bit integer types for now
         let int_type = cranelift::codegen::ir::Type::int(64).unwrap();
@@ -214,6 +218,12 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         let mut sig = self.module.make_signature();
         for _ in &arguments {
             sig.params.push(AbiParam::new(int_type))
+        }
+
+        if let Some(return_types) = return_types {
+            for _ in &return_types {
+                sig.returns.push(AbiParam::new(int_type));
+            }
         }
 
         let func_id_to_call = self

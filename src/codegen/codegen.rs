@@ -269,7 +269,7 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
                         );
 
                         // Intentionally ignore the error, since we don't care if the variable has already been declared.
-                        builder.try_declare_var(cranelift_variable, int_type);
+                        let _ = builder.try_declare_var(cranelift_variable, int_type);
                         builder.def_var(cranelift_variable, values[i].into());
                     }
                 }
