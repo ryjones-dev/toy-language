@@ -1,12 +1,20 @@
-test_bool(arg bool) -> bool:
-    -> true;
+is_equal(left int, right int) -> bool:
+    -> left == right;
+
+is_less(left int, right int) -> bool:
+    -> left < right;
+
+is_greater(left int, right int) -> bool:
+    -> left > right;
 
 main(arg1 int, arg2 int) -> int:
     sum = add(arg1, arg2)
     -> sum;
 
 add(left int, right int) -> int:
-    var = test_bool(false)
+    equal = is_equal(left, right)
+    less = is_less(left, right)
+    greater = is_greater(left, right)
     -> left + right;
 
 # TODO: Support empty function body

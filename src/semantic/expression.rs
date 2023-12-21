@@ -1,6 +1,8 @@
 use thiserror::Error;
 
-use crate::parser::types::{Expression, FunctionCall, Identifier, Type, Types};
+use crate::parser::types::{
+    BooleanComparisonType, Expression, FunctionCall, Identifier, Type, Types,
+};
 
 use super::{scope::Scope, EXPECT_VAR_TYPE};
 
@@ -41,19 +43,24 @@ pub(super) fn analyze_expression(
     match expression {
         Expression::BooleanComparison(comparison_type, lhs, rhs) => {
             let lhs_types = analyze_expression(lhs, scope)?;
-            expect_single_type(&lhs_types, Type::Int)?;
-
             let rhs_types = analyze_expression(rhs, scope)?;
-            expect_single_type(&rhs_types, Type::Int)?;
 
-            if lhs_types[0] != rhs_types[0] {
-                return Err(ExpressionError::WrongTypeError {
-                    expected: lhs_types[0],
-                    actual: rhs_types[0],
-                });
-            }
+            match comparison_type {
+                BooleanComparisonType::Equal | BooleanComparisonType::NotEqual => {
+                    expect_any_single_type(&lhs_types)?;
+                    expect_single_type(&rhs_types, lhs_types[0])?;
+                }
+                // TODO: Handle floats later
+                BooleanComparisonType::LessThan
+                | BooleanComparisonType::LessThanEqual
+                | BooleanComparisonType::GreaterThan
+                | BooleanComparisonType::GreaterThanEqual => {
+                    expect_single_type(&lhs_types, Type::Int)?;
+                    expect_single_type(&rhs_types, Type::Int)?;
+                }
+            };
 
-            types.push(Type::Int);
+            types.push(Type::Bool);
         }
         Expression::BinaryMathOperation(operation_type, lhs, rhs) => {
             // TODO: Handle floats later
@@ -66,10 +73,10 @@ pub(super) fn analyze_expression(
             types.push(Type::Int);
         }
         Expression::UnaryMathOperation(operation_type, expression) => {
-            let mut ty = analyze_expression(expression, scope)?;
+            let ty = analyze_expression(expression, scope)?;
             expect_single_type(&ty, Type::Int)?;
 
-            types.append(&mut ty);
+            types.push(Type::Int)
         }
         Expression::FunctionCall(function_call) => {
             let mut tys = analyze_function_call(function_call, scope)?;
@@ -139,10 +146,16 @@ pub(super) fn analyze_function_call(
     }
 }
 
-fn expect_single_type(types: &Types, expected_type: Type) -> Result<(), ExpressionError> {
+fn expect_any_single_type(types: &Types) -> Result<(), ExpressionError> {
     if types.len() != 1 {
         return Err(ExpressionError::SingleValueError(types.len()));
     }
+
+    Ok(())
+}
+
+fn expect_single_type(types: &Types, expected_type: Type) -> Result<(), ExpressionError> {
+    expect_any_single_type(types)?;
 
     if types[0] != expected_type {
         return Err(ExpressionError::WrongTypeError {
