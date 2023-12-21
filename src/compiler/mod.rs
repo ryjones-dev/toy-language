@@ -72,8 +72,5 @@ pub fn compile_jit(
     options: CodeGenOptions,
 ) -> Result<(*const u8, Option<String>, Option<String>), CompileError> {
     let (ast) = frontend(source_code)?;
-
-    unreachable!("frontend works");
-
     jit_backend(ast, options)
 }

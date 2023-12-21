@@ -22,9 +22,9 @@ pub enum ExpressionError {
         expected: Type,
         actual: Type,
     },
-    #[error("expected single value for boolean comparison, but expression returns {0}")]
+    #[error("expected single value, but expression returns {0}")]
     SingleValueError(usize),
-    #[error("expected {expected} type for boolean comparison, but got {actual}")]
+    #[error("expected type {expected}, but got {actual}")]
     WrongTypeError { expected: Type, actual: Type },
 }
 

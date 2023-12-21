@@ -1,7 +1,5 @@
 use thiserror::Error;
 
-use crate::semantic_assert;
-
 /// An error that is thrown when parsing source code fails.
 ///
 /// In the implementation, [`peg`] is used to parse source code.
@@ -9,7 +7,7 @@ use crate::semantic_assert;
 /// to use in this API. Therefore, [`ParseError`] here is a target type that the underlying
 /// [`peg::error::ParseError`] can be mapped to for easier error handling.
 /// [`ParseError`] is transparent and just outputs whatever error message [`peg::error::ParseError`] would have.
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 #[error("{0}")]
 pub struct ParseError(String);
 
@@ -19,6 +17,10 @@ impl<L: std::fmt::Display> From<peg::error::ParseError<L>> for ParseError {
     }
 }
 
+#[derive(Debug, Error)]
+#[error("\"{0}\" is not a valid type")]
+pub struct ParseTypeError(String);
+
 /// TODO_LANG_NAME built-in data types.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Type {
@@ -26,6 +28,18 @@ pub enum Type {
     Undefined,
     Int,
     Bool,
+}
+
+impl std::str::FromStr for Type {
+    type Err = ParseTypeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "int" => Ok(Type::Int),
+            "bool" => Ok(Type::Bool),
+            _ => Err(ParseTypeError(s.to_string())),
+        }
+    }
 }
 
 impl std::fmt::Display for Type {
@@ -159,6 +173,13 @@ impl Variable {
         Self {
             name,
             ty: Type::default(),
+        }
+    }
+
+    pub(super) fn with_type(self, ty: Type) -> Self {
+        Self {
+            name: self.name,
+            ty,
         }
     }
 }

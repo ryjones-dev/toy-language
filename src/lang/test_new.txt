@@ -1,7 +1,7 @@
-main(arg1, arg2) -> int:
+main(arg1 int, arg2 int) -> int:
     sum = add(arg1, arg2)
     -> sum;
 
-add(left, right) -> int:
+add(left int, right int) -> int:
     var = true
     -> left + right;

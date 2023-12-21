@@ -1,6 +1,6 @@
 use crate::parser::types::{
     AbstractSyntaxTree, BinaryMathOperationType, BoolLiteral, BooleanComparisonType, Expression,
-    Function, FunctionCall, FunctionSignature, Identifier, IntLiteral, Statement, Type,
+    Function, FunctionCall, FunctionSignature, Identifier, IntLiteral, Statement,
     UnaryMathOperationType, Variable,
 };
 
@@ -13,11 +13,14 @@ peg::parser!(pub grammar parser() for str {
         = f:function()* { AbstractSyntaxTree(f) }
 
     rule function() -> Function
-        = _ i:identifier() _ "(" _ p:((_ i:identifier() _ {i}) ** ",") _ ")" r:(_ "->" r:((_ "int" _ {Type::Int}) ++ ",") {r})? _ s:scope() _ {
+        = _ i:identifier() _ "(" _
+        p:((_ i:identifier() _ t:type_name() _ { (i, t.parse().expect("unknown type")) }) ** ",") _ ")"
+        r:(_ "->" r:((_ t:type_name() _ { t.parse().expect("unknown type") }) ++ ",") {r})?
+        _ s:scope() _ {
             Function {
                 signature: FunctionSignature {
                     name: i,
-                    params: p.into_iter().map(|ident| Variable::new(ident)).collect(),
+                    params: p.into_iter().map(|(param_name, param_type)| Variable::new(param_name).with_type(param_type)).collect(),
                     returns: r.unwrap_or(Vec::default()).into()
                 },
                 body: s
@@ -69,16 +72,19 @@ peg::parser!(pub grammar parser() for str {
     rule call_function() -> FunctionCall
         = i:identifier() _ "(" _ args:((_ e:expression() _ {e}) ** ",") _ ")" { FunctionCall {name: i, arguments: args } }
 
+    rule type_name() -> &'input str
+        = t:$("int" / "bool") { t }
+
     rule identifier() -> Identifier
             = quiet!{ n:$(['a'..='z' | 'A'..='Z']['a'..='z' | 'A'..='Z' | '0'..='9' | '_']*) { Identifier::from(n.to_string()) } }
             / expected!("identifier")
 
     rule int_literal() -> IntLiteral
-        = quiet!{ n:$(['0'..='9']+) { <IntLiteral as std::str::FromStr>::from_str(n).unwrap() } }
+        = quiet!{ n:$(['0'..='9']+) { n.parse().expect("unknown int literal") }}
         / expected!("integer")
 
     rule bool_literal() -> BoolLiteral
-        = b:$("true" / "false") { <BoolLiteral as std::str::FromStr>::from_str(b).unwrap() }
+        = b:$("true" / "false") { b.parse().expect("unknown bool literal") }
 
     rule comment() = "#" (!"\n" [_])* ("\n" / ![_])
 
