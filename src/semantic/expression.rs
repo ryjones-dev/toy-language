@@ -2,7 +2,7 @@ use thiserror::Error;
 
 use crate::parser::types::{Expression, FunctionCall, Identifier, Type, Types};
 
-use super::scope::Scope;
+use super::{scope::Scope, EXPECT_VAR_TYPE};
 
 #[derive(Debug, Error)]
 pub enum ExpressionError {
@@ -81,7 +81,7 @@ pub(super) fn analyze_expression(
                 // the Variable won't have its type set. Since the variable has already been added to the scope,
                 // we can update the variable's type here so as to not leave any undefined types in the AST.
                 variable.ty = scope_var.ty;
-                types.push(variable.ty)
+                types.push(variable.ty.expect(EXPECT_VAR_TYPE))
             }
             None => return Err(ExpressionError::UnknownVariableError(variable.name.clone())),
         },
@@ -114,10 +114,12 @@ pub(super) fn analyze_function_call(
                 });
             } else {
                 for (i, arg) in argument_types.iter().enumerate() {
-                    if *arg != func_sig.params[i].ty {
+                    // Type check arguments
+                    let param_type = func_sig.params[i].ty.expect(EXPECT_VAR_TYPE);
+                    if *arg != param_type {
                         return Err(ExpressionError::MismatchedArgumentTypeError {
                             function_name: func_sig.name.clone(),
-                            expected: func_sig.params[i].ty,
+                            expected: param_type,
                             actual: *arg,
                         });
                     }

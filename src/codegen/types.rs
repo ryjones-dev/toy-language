@@ -5,7 +5,6 @@ use crate::parser::types::Type;
 impl From<Type> for cranelift::codegen::ir::Type {
     fn from(value: Type) -> Self {
         match value {
-            Type::Undefined => unreachable!(),
             Type::Int => cranelift::codegen::ir::Type::int(64).unwrap(),
             Type::Bool => cranelift::codegen::ir::Type::int(8).unwrap(),
         }

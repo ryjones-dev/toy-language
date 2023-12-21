@@ -1,7 +1,10 @@
 use cranelift::prelude::*;
 use thiserror::Error;
 
-use crate::parser::types::{AbstractSyntaxTree, Expression, Function, Statement};
+use crate::{
+    parser::types::{AbstractSyntaxTree, Expression, Function, Statement},
+    semantic::EXPECT_VAR_TYPE,
+};
 
 use super::{
     block::BlockVariables,
@@ -162,7 +165,7 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
                 .func
                 .signature
                 .params
-                .push(AbiParam::new(param.ty.into()));
+                .push(AbiParam::new(param.ty.expect(EXPECT_VAR_TYPE).into()));
         }
 
         // Add the function's return types to the context
@@ -200,7 +203,10 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
         for (i, variable) in signature.params.iter().enumerate() {
             let cranelift_variable =
                 cranelift::frontend::Variable::from_u32(block_vars.var(variable.name.clone()));
-            builder.declare_var(cranelift_variable, variable.ty.into());
+            builder.declare_var(
+                cranelift_variable,
+                variable.ty.expect(EXPECT_VAR_TYPE).into(),
+            );
             builder.def_var(cranelift_variable, builder.block_params(entry_block)[i]);
         }
 
@@ -270,7 +276,10 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
                             cranelift::frontend::Variable::from_u32(block_vars.var(variable.name));
 
                         // Intentionally ignore the error, since we don't care if the variable has already been declared.
-                        let _ = builder.try_declare_var(cranelift_variable, variable.ty.into());
+                        let _ = builder.try_declare_var(
+                            cranelift_variable,
+                            variable.ty.expect(EXPECT_VAR_TYPE).into(),
+                        );
                         builder.def_var(cranelift_variable, values[i].into());
                     }
                 }

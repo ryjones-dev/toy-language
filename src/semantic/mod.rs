@@ -11,6 +11,8 @@ mod expression;
 pub(super) mod scope;
 mod statement;
 
+pub(crate) const EXPECT_VAR_TYPE: &str = "variable should have a type by this point";
+
 #[derive(Debug, Error)]
 pub enum SemanticError {
     #[error("main function is not defined")]

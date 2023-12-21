@@ -5,6 +5,7 @@ use crate::parser::types::{FunctionSignature, Identifier, Statement, Type, Types
 use super::{
     expression::{analyze_expression, analyze_function_call, ExpressionError},
     scope::{Scope, ScopeError},
+    EXPECT_VAR_TYPE,
 };
 
 #[derive(Debug, Error)]
@@ -53,16 +54,17 @@ pub(super) fn analyze_statement(
                     } else {
                         for (i, variable) in variables.iter_mut().enumerate() {
                             if let Some(variable) = variable {
-                                // If the variable type is undefined, this is a new variable definition.
+                                // If the variable type is None, this is a new variable definition.
                                 // Set the variable type to the corresponding expression result type.
-                                if variable.ty == Type::Undefined {
-                                    variable.ty = types[i];
+                                if variable.ty == None {
+                                    variable.ty = Some(types[i]);
                                 }
 
-                                if variable.ty != types[i] {
+                                let var_type = variable.ty.expect(EXPECT_VAR_TYPE);
+                                if var_type != types[i] {
                                     errors.push(StatementError::MismatchedTypeAssignmentError {
                                         expected: types[i],
-                                        actual: variable.ty,
+                                        actual: var_type,
                                     });
                                 }
                             }

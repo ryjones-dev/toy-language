@@ -22,10 +22,8 @@ impl<L: std::fmt::Display> From<peg::error::ParseError<L>> for ParseError {
 pub struct ParseTypeError(String);
 
 /// TODO_LANG_NAME built-in data types.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Type {
-    #[default]
-    Undefined,
     Int,
     Bool,
 }
@@ -45,7 +43,6 @@ impl std::str::FromStr for Type {
 impl std::fmt::Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Type::Undefined => write!(f, "undefined"),
             Type::Int => write!(f, "int"),
             Type::Bool => write!(f, "bool"),
         }
@@ -160,26 +157,23 @@ impl std::fmt::Display for Identifier {
 
 /// A distinct type that is used to represent a variable.
 ///
-/// Only the name is parsable from the source code. The type will be [`Type::Undefined`]
+/// Only the name is parsable from the source code. The type will be [`Option::None`]
 /// until semantic analysis can determine the type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Variable {
     pub(crate) name: Identifier,
-    pub(crate) ty: Type,
+    pub(crate) ty: Option<Type>,
 }
 
 impl Variable {
     pub(crate) fn new(name: Identifier) -> Self {
-        Self {
-            name,
-            ty: Type::default(),
-        }
+        Self { name, ty: None }
     }
 
     pub(super) fn with_type(self, ty: Type) -> Self {
         Self {
             name: self.name,
-            ty,
+            ty: Some(ty),
         }
     }
 }
