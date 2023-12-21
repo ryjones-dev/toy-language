@@ -54,6 +54,15 @@ pub(crate) struct CodeGenerator<M: CodeGeneratorModule> {
     context: CodeGenContext,
     options: CodeGenOptions,
     main_function_id: Option<cranelift_module::FuncId>,
+
+    ir: Option<String>,
+    disassembly: Option<String>,
+}
+
+pub(crate) struct JitCodeGenResults {
+    pub(crate) code: *const u8,
+    pub(crate) ir: Option<String>,
+    pub(crate) disassembly: Option<String>,
 }
 
 impl CodeGenerator<cranelift_jit::JITModule> {
@@ -83,7 +92,19 @@ impl CodeGenerator<cranelift_jit::JITModule> {
             context,
             options,
             main_function_id: None,
+            ir: None,
+            disassembly: None,
         })
+    }
+
+    pub(crate) fn results(self) -> JitCodeGenResults {
+        JitCodeGenResults {
+            code: self
+                .module
+                .get_finalized_function(self.main_function_id.expect("missing main function")),
+            ir: self.ir,
+            disassembly: self.disassembly,
+        }
     }
 
     /// Returns a pointer to the main function after the machine code is generated,
@@ -103,17 +124,12 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
     /// For instance, a JIT module would give access to the main function in memory, while an object module
     /// would provide the machine code in object files so that they can be linked by a linker.
     ///
-    /// This function can return many different types of errors at different stages of compilation,
-    /// and all of those error types are represented by a [`CodeGenError`].
+    /// Because semantic analysis has already validated the source code, this function only returns a [`CodeGenError`]
+    /// when something is fundamentally wrong. This could be due to lack of resources, or a bug in the compiler.
     ///
-    /// If the intermediate IR is requested, this function will return that IR as a [`String`]
-    /// in the first position of the tuple.
-    /// If a disassembly is requested, this function will return that disassembly as a [`String`]
-    /// in the second position of the tuple.
-    pub(crate) fn generate(
-        &mut self,
-        ast: AbstractSyntaxTree,
-    ) -> Result<(Option<String>, Option<String>), CodeGenError> {
+    /// If the intermediate IR is requested, it can be retrieved with the [`ir()`] function.
+    /// If a disassembly is requested, it can be retrieved with the [`disassembly()`] function.
+    pub(crate) fn generate(&mut self, ast: AbstractSyntaxTree) -> Result<(), CodeGenError> {
         let mut ir = String::new();
         let mut disassembly = String::new();
 
@@ -139,16 +155,15 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
         // Finalize the compilation in a module-independent way
         self.module.finalize()?;
 
-        Ok((
-            match ir.as_str() {
-                "" => None,
-                _ => Some(ir),
-            },
-            match disassembly.as_str() {
-                "" => None,
-                _ => Some(disassembly),
-            },
-        ))
+        if !ir.is_empty() {
+            self.ir = Some(ir)
+        }
+
+        if !disassembly.is_empty() {
+            self.disassembly = Some(disassembly)
+        }
+
+        Ok(())
     }
 
     fn generate_function(

@@ -1,94 +1,51 @@
+use codespan_reporting::{
+    diagnostic::Diagnostic,
+    files::SimpleFile,
+    term::termcolor::{ColorChoice, StandardStream},
+};
 use thiserror::Error;
 
-use crate::{
-    codegen::{
-        codegen::{CodeGenError, CodeGenerator},
-        options::CodeGenOptions,
-    },
-    parser::{ast::AbstractSyntaxTree, parser, ParseError},
-    semantic::{semantic_analysis, SemanticError},
+use self::{
+    backend::jit_backend,
+    frontend::{frontend, FrontendResults},
+    options::CompileOptions,
 };
 
-pub struct CompileOptions {
-    request_ast: bool,
-    codegen_options: CodeGenOptions,
-}
+mod backend;
+mod frontend;
+pub mod options;
 
-impl CompileOptions {
-    pub fn new() -> Self {
-        Self {
-            request_ast: false,
-            codegen_options: CodeGenOptions::new(),
-        }
-    }
-
-    pub fn with_ast(mut self, request_ast: bool) -> Self {
-        self.request_ast = request_ast;
-        self
-    }
-
-    pub fn with_codegen_options(mut self, codegen_options: CodeGenOptions) -> Self {
-        self.codegen_options = codegen_options;
-        self
-    }
-}
-
-/// An error that captures all errors that can be thrown during compilation.
+/// An error that is returned when the compiler is unable to render error messages to stderr.
 #[derive(Debug, Error)]
-pub enum CompileError {
-    #[error("parse error: {0}")]
-    ParseError(ParseError),
-    #[error("semantic error: {}", .0.iter().fold(String::new(), |acc, err| format!("{acc}\n{}", err)))]
-    SemanticErrors(Vec<SemanticError>),
-    #[error("codegen error: {0}")]
-    CodeGenError(#[from] CodeGenError),
-}
+#[error("failed to render error message: {0}")]
+pub struct RenderErrorFailure(codespan_reporting::files::Error);
 
-fn frontend(
-    source_code: &str,
-    options: &CompileOptions,
-) -> Result<(AbstractSyntaxTree, Option<String>), CompileError> {
-    // Parse the source code into AST nodes
-    let mut ast = parser::parse(source_code).map_err(|err| CompileError::ParseError(err.into()))?;
-
-    // Check that the code is semantically correct before attempting to generate code
-    semantic_analysis(&mut ast).map_err(|errs| CompileError::SemanticErrors(errs))?;
-
-    if options.request_ast {
-        let ast_string = format!("{}", ast);
-        Ok((ast, Some(ast_string)))
-    } else {
-        Ok((ast, None))
-    }
-}
-
-fn jit_backend(
-    ast: AbstractSyntaxTree,
-    options: CodeGenOptions,
-) -> Result<(*const u8, Option<String>, Option<String>), CompileError> {
-    let mut code_generator = CodeGenerator::<cranelift_jit::JITModule>::new(options)?;
-
-    let (ir, disassembly) = code_generator
-        .generate(ast)
-        .map_err(|err| CompileError::CodeGenError(err))?;
-
-    let code = code_generator
-        .get_main_function()
-        .ok_or(CompileError::SemanticErrors(vec![
-            SemanticError::MissingMainError,
-        ]))?;
-
-    Ok((code, ir, disassembly))
+pub enum JitCompileResults {
+    Success {
+        code: *const u8,
+        ast: Option<String>,
+        ir: Option<String>,
+        disassembly: Option<String>,
+    },
+    ParseError,
+    SemanticError {
+        ast: Option<String>,
+    },
+    BackendError {
+        ast: Option<String>,
+    },
 }
 
 /// The primary function responsible for compiling TODO_LANG_NAME source code to machine code ahead of time (AOT).
 ///
 /// This is the entry point of the API. After creating a [`CompileOptions`] with [`CompileOptions::new()`],
 /// calling this function does all of the compilation.
-pub fn compile(
-    source_code: &str,
-    options: CompileOptions,
-) -> Result<(Option<String>, Option<String>), CompileError> {
+///
+/// All of the compiler's output can be found under [`TODO`]. Its contents will vary depending on the [`CompileOptions`].
+///
+/// The compiler will emit any error messages to stderr automatically. If an error message cannot be rendered,
+/// [`RenderErrorFailure`] is returned.
+pub fn compile(source_code: &str, options: CompileOptions) -> Result<(), RenderErrorFailure> {
     todo!("support AOT object compilation")
 }
 
@@ -96,19 +53,63 @@ pub fn compile(
 ///
 /// This is the entry point of the API. After creating a [`CompileOptions`] with [`CompileOptions::new()`],
 /// calling this function does all of the compilation.
+///
+/// All of the compiler's output can be found under [`JitCompileResults`]. Its contents will vary depending on the [`CompileOptions`].
+///
+/// The compiler will emit any error messages to stderr automatically. If an error message cannot be rendered,
+/// [`RenderErrorFailure`] is returned.
+///
+/// If compilation fails with [`SemanticError`]s, or a [`BackendError`],
+/// [`JitCompileResults`] will still contain the AST string, if requested.
 pub fn compile_jit(
     source_code: &str,
     options: CompileOptions,
-) -> Result<
-    (*const u8, Option<String>, Option<String>, Option<String>),
-    (CompileError, Option<String>),
-> {
-    let (ast, ast_string) = frontend(source_code, &options).map_err(|err| (err, None))?;
+) -> Result<JitCompileResults, RenderErrorFailure> {
+    // Setup for error message rendering
+    let file = SimpleFile::new("code", source_code);
+    let writer = StandardStream::stderr(ColorChoice::Always);
+    let config = codespan_reporting::term::Config::default();
 
-    let (code, ir, disassembly) = match jit_backend(ast, options.codegen_options) {
-        Ok((code, ir, disassembly)) => (code, ir, disassembly),
-        Err(err) => return Err((err, ast_string)),
-    };
+    match frontend(source_code, &options) {
+        FrontendResults::Success { ast, ast_string } => {
+            match jit_backend(ast, options.codegen_options) {
+                Ok(results) => Ok(JitCompileResults::Success {
+                    code: results.code,
+                    ast: ast_string,
+                    ir: results.ir,
+                    disassembly: results.disassembly,
+                }),
+                Err(err) => {
+                    report_error(&writer, &config, &file, err)?;
+                    Ok(JitCompileResults::BackendError { ast: ast_string })
+                }
+            }
+        }
+        FrontendResults::ParseError(err) => {
+            report_error(&writer, &config, &file, err)?;
+            Ok(JitCompileResults::ParseError)
+        }
+        FrontendResults::SemanticErrors { errs, ast_string } => {
+            for err in errs {
+                report_error(&writer, &config, &file, err)?;
+            }
 
-    Ok((code, ast_string, ir, disassembly))
+            Ok(JitCompileResults::SemanticError { ast: ast_string })
+        }
+    }
+}
+
+fn report_error<E: std::fmt::Display>(
+    writer: &StandardStream,
+    config: &codespan_reporting::term::Config,
+    file: &SimpleFile<&str, &str>,
+    error: E,
+) -> Result<(), RenderErrorFailure> {
+    let diagnostic = Diagnostic::error().with_message(error.to_string());
+    if let Err(err) = codespan_reporting::term::emit(&mut writer.lock(), config, file, &diagnostic)
+    {
+        return Err(RenderErrorFailure(err));
+    }
+
+    Ok(())
 }

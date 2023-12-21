@@ -14,6 +14,7 @@ name = "lib"
 path = "src/lib.rs"
 
 [dependencies]
+codespan-reporting = "0.11"
 cranelift = "0.101"
 cranelift-jit = "0.101"
 cranelift-module = "0.101"

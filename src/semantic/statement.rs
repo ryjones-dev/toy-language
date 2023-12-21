@@ -35,9 +35,9 @@ pub enum StatementError {
         expected: Type,
         actual: Type,
     },
-    #[error("{0}")]
+    #[error(transparent)]
     ExpressionError(#[from] ExpressionError),
-    #[error("{0}")]
+    #[error(transparent)]
     ScopeError(#[from] ScopeError),
 }
 

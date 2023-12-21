@@ -1,7 +1,7 @@
 use codegen::options::CodeGenOptions;
-use compiler::CompileError;
+use compiler::RenderErrorFailure;
 
-use crate::compiler::{compile_jit, CompileOptions};
+use crate::compiler::{compile_jit, options::CompileOptions, JitCompileResults};
 
 // TODO: remove these?
 mod codegen;
@@ -42,41 +42,53 @@ macro_rules! execute_jit {
 //     return (lineno, remaining + 1);
 // }
 
-fn main() -> Result<(), CompileError> {
+fn main() -> Result<(), RenderErrorFailure> {
     let source_code = include_str!("lang/test.txt");
 
-    let codegen_options = CodeGenOptions::new().with_ir(true).with_disassembly(false);
+    let codegen_options = CodeGenOptions::new().with_ir(false).with_disassembly(false);
     let compile_options = CompileOptions::new()
-        .with_ast(true)
+        .with_ast(false)
         .with_codegen_options(codegen_options);
 
-    let (code, ast, ir, disassembly) = match compile_jit(source_code, compile_options) {
-        Ok((code, ast, ir, disassembly)) => (code, ast, ir, disassembly),
-        Err((err, ast_string)) => {
-            if let Some(ast) = ast_string {
+    match compile_jit(source_code, compile_options)? {
+        JitCompileResults::Success {
+            code,
+            ast,
+            ir,
+            disassembly,
+        } => {
+            if let Some(ast) = ast {
                 println!("{}", ast);
             }
 
-            println!("{}", err);
-            return Err(err);
+            if let Some(ir) = ir {
+                println!("{}", ir);
+            }
+
+            if let Some(disassembly) = disassembly {
+                println!("{}", disassembly);
+            }
+
+            let arg1: i64 = 1;
+            let arg2: i64 = 2;
+            execute_jit!(code, i64, (arg1, i64), (arg2, i64));
+
+            Ok(())
         }
-    };
+        JitCompileResults::ParseError => Ok(()),
+        JitCompileResults::SemanticError { ast } => {
+            if let Some(ast) = ast {
+                println!("{}", ast);
+            }
 
-    if let Some(ast) = ast {
-        println!("{}", ast);
+            Ok(())
+        }
+        JitCompileResults::BackendError { ast } => {
+            if let Some(ast) = ast {
+                println!("{}", ast);
+            }
+
+            Ok(())
+        }
     }
-
-    if let Some(ir) = ir {
-        println!("{}", ir);
-    }
-
-    if let Some(disassembly) = disassembly {
-        println!("{}", disassembly);
-    }
-
-    let arg1: i64 = 1;
-    let arg2: i64 = 2;
-    execute_jit!(code, i64, (arg1, i64), (arg2, i64));
-
-    Ok(())
 }

@@ -17,9 +17,9 @@ pub(crate) const EXPECT_VAR_TYPE: &str = "variable should have a type by this po
 pub enum SemanticError {
     #[error("main function is not defined")]
     MissingMainError,
-    #[error("{0}")]
+    #[error(transparent)]
     StatementError(#[from] StatementError),
-    #[error("{0}")]
+    #[error(transparent)]
     ScopeError(#[from] ScopeError),
 }
 
