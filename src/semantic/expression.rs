@@ -1,7 +1,10 @@
 use thiserror::Error;
 
-use crate::parser::types::{
-    BooleanComparisonType, Expression, FunctionCall, Identifier, Type, Types,
+use crate::parser::{
+    expression::{BooleanComparisonType, Expression},
+    function::FunctionCall,
+    identifier::Identifier,
+    types::{Type, Types},
 };
 
 use super::{scope::Scope, EXPECT_VAR_TYPE};

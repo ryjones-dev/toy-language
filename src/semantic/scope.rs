@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use crate::parser::types::{FunctionSignature, Identifier, Variable};
+use crate::parser::{function::FunctionSignature, identifier::Identifier, variable::Variable};
 
 #[derive(Debug, Error)]
 pub enum ScopeError {

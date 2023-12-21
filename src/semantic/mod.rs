@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::parser::types::AbstractSyntaxTree;
+use crate::parser::ast::AbstractSyntaxTree;
 
 use self::{
     scope::{Scope, ScopeError},

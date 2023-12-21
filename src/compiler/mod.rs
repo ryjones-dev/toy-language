@@ -5,10 +5,7 @@ use crate::{
         codegen::{CodeGenError, CodeGenerator},
         options::CodeGenOptions,
     },
-    parser::{
-        grammar::parser,
-        types::{AbstractSyntaxTree, ParseError},
-    },
+    parser::{ast::AbstractSyntaxTree, parser, ParseError},
     semantic::{semantic_analysis, SemanticError},
 };
 

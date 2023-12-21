@@ -1,6 +1,11 @@
 use thiserror::Error;
 
-use crate::parser::types::{FunctionSignature, Identifier, Statement, Type, Types};
+use crate::parser::{
+    function::FunctionSignature,
+    identifier::Identifier,
+    statement::Statement,
+    types::{Type, Types},
+};
 
 use super::{
     expression::{analyze_expression, analyze_function_call, ExpressionError},

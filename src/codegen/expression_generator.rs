@@ -3,12 +3,18 @@ use cranelift::{
     frontend::FunctionBuilder,
 };
 
-use crate::parser::types::{
-    BinaryMathOperationType, BooleanComparisonType, Expression, FunctionCall, Identifier, Type,
-    UnaryMathOperationType,
+use crate::{
+    parser::{
+        expression::{
+            BinaryMathOperationType, BooleanComparisonType, Expression, UnaryMathOperationType,
+        },
+        function::FunctionCall,
+        identifier::Identifier,
+        literals::{BoolLiteral, IntLiteral},
+        types::Type,
+    },
+    semantic_assert,
 };
-
-use crate::semantic_assert;
 
 use super::block::BlockVariables;
 
@@ -268,7 +274,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         )
     }
 
-    fn generate_int_literal(&mut self, value: crate::parser::types::IntLiteral) -> ExpressionValue {
+    fn generate_int_literal(&mut self, value: IntLiteral) -> ExpressionValue {
         ExpressionValue(
             self.builder
                 .ins()
@@ -276,10 +282,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         )
     }
 
-    fn generate_bool_literal(
-        &mut self,
-        value: crate::parser::types::BoolLiteral,
-    ) -> ExpressionValue {
+    fn generate_bool_literal(&mut self, value: BoolLiteral) -> ExpressionValue {
         ExpressionValue(
             self.builder
                 .ins()

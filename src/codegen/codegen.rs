@@ -2,7 +2,9 @@ use cranelift::prelude::*;
 use thiserror::Error;
 
 use crate::{
-    parser::types::{AbstractSyntaxTree, Expression, Function, Statement},
+    parser::{
+        ast::AbstractSyntaxTree, expression::Expression, function::Function, statement::Statement,
+    },
     semantic::EXPECT_VAR_TYPE,
 };
 
