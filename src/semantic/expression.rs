@@ -33,30 +33,38 @@ pub enum ExpressionError {
 /// Check if the given expression is semantically correct.
 ///
 /// Recursively validate that inner expressions have the correct number and types of values that the outer expression expects.
-/// Returns the expression's value types, or an error if an inner expression was not compatible with the outer expression.
+/// Returns the expression's value types, and a list of errors if any inner expression was not compatible with its outer expression.
+/// It's important that the types are always returned whenever possible so that variables are given the correct types in the calling code,
+/// even if the expression is not valid.
 pub(super) fn analyze_expression(
     expression: &mut Expression,
     scope: &Scope,
-) -> Result<Types, ExpressionError> {
+) -> (Types, Vec<ExpressionError>) {
     let mut types = Types::new();
+    let mut errors = Vec::new();
 
     match expression {
         Expression::BooleanComparison(comparison_type, lhs, rhs) => {
-            let lhs_types = analyze_expression(lhs, scope)?;
-            let rhs_types = analyze_expression(rhs, scope)?;
+            let (lhs_types, mut errs) = analyze_expression(lhs, scope);
+            errors.append(&mut errs);
+
+            let (rhs_types, mut errs) = analyze_expression(rhs, scope);
+            errors.append(&mut errs);
 
             match comparison_type {
                 BooleanComparisonType::Equal | BooleanComparisonType::NotEqual => {
-                    expect_any_single_type(&lhs_types)?;
-                    expect_single_type(&rhs_types, lhs_types[0])?;
+                    if expect_any_single_type(&lhs_types, &mut errors) {
+                        expect_single_type(&rhs_types, lhs_types[0], &mut errors);
+                    }
                 }
                 // TODO: Handle floats later
                 BooleanComparisonType::LessThan
                 | BooleanComparisonType::LessThanEqual
                 | BooleanComparisonType::GreaterThan
                 | BooleanComparisonType::GreaterThanEqual => {
-                    expect_single_type(&lhs_types, Type::Int)?;
-                    expect_single_type(&rhs_types, Type::Int)?;
+                    if expect_single_type(&lhs_types, Type::Int, &mut errors) {
+                        expect_single_type(&rhs_types, Type::Int, &mut errors);
+                    }
                 }
             };
 
@@ -64,23 +72,27 @@ pub(super) fn analyze_expression(
         }
         Expression::BinaryMathOperation(operation_type, lhs, rhs) => {
             // TODO: Handle floats later
-            let lhs_types = analyze_expression(lhs, scope)?;
-            expect_single_type(&lhs_types, Type::Int)?;
+            let (lhs_types, mut errs) = analyze_expression(lhs, scope);
+            errors.append(&mut errs);
+            expect_single_type(&lhs_types, Type::Int, &mut errors);
 
-            let rhs_types = analyze_expression(rhs, scope)?;
-            expect_single_type(&rhs_types, Type::Int)?;
+            let (rhs_types, mut errs) = analyze_expression(rhs, scope);
+            errors.append(&mut errs);
+            expect_single_type(&rhs_types, Type::Int, &mut errors);
 
             types.push(Type::Int);
         }
         Expression::UnaryMathOperation(operation_type, expression) => {
-            let ty = analyze_expression(expression, scope)?;
-            expect_single_type(&ty, Type::Int)?;
+            let (ty, mut errs) = analyze_expression(expression, scope);
+            errors.append(&mut errs);
+            expect_single_type(&ty, Type::Int, &mut errors);
 
             types.push(Type::Int)
         }
         Expression::FunctionCall(function_call) => {
-            let mut tys = analyze_function_call(function_call, scope)?;
+            let (mut tys, mut errs) = analyze_function_call(function_call, scope);
             types.append(&mut tys);
+            errors.append(&mut errs);
         }
         Expression::Variable(variable) => match scope.get_var(&variable.name) {
             Some(scope_var) => {
@@ -90,31 +102,34 @@ pub(super) fn analyze_expression(
                 variable.ty = scope_var.ty;
                 types.push(variable.ty.expect(EXPECT_VAR_TYPE))
             }
-            None => return Err(ExpressionError::UnknownVariableError(variable.name.clone())),
+            None => errors.push(ExpressionError::UnknownVariableError(variable.name.clone())),
         },
         Expression::IntLiteral(_) => types.push(Type::Int),
         Expression::BoolLiteral(_) => types.push(Type::Bool),
     };
 
-    Ok(types)
+    (types, errors)
 }
 
 pub(super) fn analyze_function_call(
     function_call: &mut FunctionCall,
     scope: &Scope,
-) -> Result<Types, ExpressionError> {
+) -> (Types, Vec<ExpressionError>) {
+    let mut errors = Vec::new();
+
     match scope.get_func_sig(&function_call.name) {
         Some(func_sig) => {
             // Analyze each argument expression to determine their types
             let mut argument_types = Types::new();
             for expression in &mut function_call.arguments {
-                let mut args = analyze_expression(expression, scope)?;
+                let (mut args, mut errs) = analyze_expression(expression, scope);
                 argument_types.append(&mut args);
+                errors.append(&mut errs);
             }
 
             // Check that the function parameters match the function call arguments
             if func_sig.params.len() != argument_types.len() {
-                return Err(ExpressionError::WrongNumberOfArgumentsError {
+                errors.push(ExpressionError::WrongNumberOfArgumentsError {
                     function_name: func_sig.name.clone(),
                     expected: func_sig.params.len(),
                     actual: argument_types.len(),
@@ -124,7 +139,7 @@ pub(super) fn analyze_function_call(
                     // Type check arguments
                     let param_type = func_sig.params[i].ty.expect(EXPECT_VAR_TYPE);
                     if *arg != param_type {
-                        return Err(ExpressionError::MismatchedArgumentTypeError {
+                        errors.push(ExpressionError::MismatchedArgumentTypeError {
                             function_name: func_sig.name.clone(),
                             expected: param_type,
                             actual: *arg,
@@ -134,35 +149,52 @@ pub(super) fn analyze_function_call(
             }
 
             // Store the function's argument types and return types so codegen has access to them
-            function_call.argument_types = Some(argument_types);
+            function_call.argument_types = Some(
+                func_sig
+                    .params
+                    .iter()
+                    .map(|param| param.ty.expect(EXPECT_VAR_TYPE))
+                    .collect(),
+            );
             function_call.return_types = Some(func_sig.returns.clone());
 
             // The function's return types are what should be propagated up to the call site
-            Ok(func_sig.returns.clone())
+            (func_sig.returns.clone(), errors)
         }
-        None => Err(ExpressionError::UnknownFunctionError(
-            function_call.name.clone(),
-        )),
+        None => {
+            errors.push(ExpressionError::UnknownFunctionError(
+                function_call.name.clone(),
+            ));
+            (Types::new(), errors)
+        }
     }
 }
 
-fn expect_any_single_type(types: &Types) -> Result<(), ExpressionError> {
+fn expect_any_single_type(types: &Types, errors: &mut Vec<ExpressionError>) -> bool {
     if types.len() != 1 {
-        return Err(ExpressionError::SingleValueError(types.len()));
+        errors.push(ExpressionError::SingleValueError(types.len()));
+        return false;
     }
 
-    Ok(())
+    true
 }
 
-fn expect_single_type(types: &Types, expected_type: Type) -> Result<(), ExpressionError> {
-    expect_any_single_type(types)?;
+fn expect_single_type(
+    types: &Types,
+    expected_type: Type,
+    errors: &mut Vec<ExpressionError>,
+) -> bool {
+    if !expect_any_single_type(types, errors) {
+        return false;
+    }
 
     if types[0] != expected_type {
-        return Err(ExpressionError::WrongTypeError {
+        errors.push(ExpressionError::WrongTypeError {
             expected: expected_type,
             actual: types[0],
         });
+        return false;
     }
 
-    Ok(())
+    true
 }

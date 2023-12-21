@@ -44,34 +44,37 @@ pub(super) fn analyze_statement(
     let mut errors = Vec::new();
     match statement {
         Statement::Assignment(variables, expression) => {
-            match analyze_expression(expression, &scope) {
-                Ok(types) => {
-                    if types.len() != variables.len() {
-                        errors.push(StatementError::WrongNumberOfVariablesError {
-                            expected: types.len(),
-                            actual: variables.len(),
-                        });
-                    } else {
-                        for (i, variable) in variables.iter_mut().enumerate() {
-                            if let Some(variable) = variable {
-                                // If the variable type is None, this is a new variable definition.
-                                // Set the variable type to the corresponding expression result type.
-                                if variable.ty == None {
-                                    variable.ty = Some(types[i]);
-                                }
+            let (types, errs) = analyze_expression(expression, &scope);
+            errors.append(
+                &mut errs
+                    .into_iter()
+                    .map(|err| StatementError::ExpressionError(err))
+                    .collect(),
+            );
 
-                                let var_type = variable.ty.expect(EXPECT_VAR_TYPE);
-                                if var_type != types[i] {
-                                    errors.push(StatementError::MismatchedTypeAssignmentError {
-                                        expected: types[i],
-                                        actual: var_type,
-                                    });
-                                }
-                            }
+            if types.len() != variables.len() {
+                errors.push(StatementError::WrongNumberOfVariablesError {
+                    expected: types.len(),
+                    actual: variables.len(),
+                });
+            } else {
+                for (i, variable) in variables.iter_mut().enumerate() {
+                    if let Some(variable) = variable {
+                        // If the variable type is None, this is a new variable definition.
+                        // Set the variable type to the corresponding expression result type.
+                        if variable.ty == None {
+                            variable.ty = Some(types[i]);
+                        }
+
+                        let var_type = variable.ty.expect(EXPECT_VAR_TYPE);
+                        if var_type != types[i] {
+                            errors.push(StatementError::MismatchedTypeAssignmentError {
+                                expected: types[i],
+                                actual: var_type,
+                            });
                         }
                     }
                 }
-                Err(err) => errors.push(StatementError::ExpressionError(err)),
             }
 
             // Always add the variables to the scope so that additional errors are not unnecessarily added downstream
@@ -84,53 +87,51 @@ pub(super) fn analyze_statement(
             }
         }
         Statement::FunctionCall(function_call) => {
-            match analyze_function_call(function_call, &scope) {
-                Ok(types) => {
-                    // Ensure that function calls do not return a value, otherwise an assignment statement needs to be used
-                    if types.len() > 0 {
-                        errors.push(StatementError::NonZeroReturnError(
-                            function_call.name.clone(),
-                        ))
-                    }
-                }
-                Err(err) => errors.push(StatementError::ExpressionError(err)),
+            let (types, errs) = analyze_function_call(function_call, &scope);
+            errors.append(
+                &mut errs
+                    .into_iter()
+                    .map(|err| StatementError::ExpressionError(err))
+                    .collect(),
+            );
+
+            // Ensure that function calls do not return a value, otherwise an assignment statement needs to be used
+            if types.len() > 0 {
+                errors.push(StatementError::NonZeroReturnError(
+                    function_call.name.clone(),
+                ))
             }
         }
         Statement::Return(expressions) => {
             let mut return_types = Types::new();
-            let mut has_expression_error = false;
 
             for expression in expressions {
-                match analyze_expression(expression, &scope) {
-                    Ok(mut types) => {
-                        return_types.append(&mut types);
-                    }
-                    Err(err) => {
-                        errors.push(StatementError::ExpressionError(err));
-                        has_expression_error = true;
-                    }
-                }
+                let (mut types, errs) = analyze_expression(expression, &scope);
+                errors.append(
+                    &mut errs
+                        .into_iter()
+                        .map(|err| StatementError::ExpressionError(err))
+                        .collect(),
+                );
+
+                return_types.append(&mut types);
             }
 
-            // Ensure that the function returns the correct types.
-            // Ignore these checks if there was a previous expression error as to not
-            // add irrelevant errors to the error list.
-            if !has_expression_error {
-                if func_sig.returns.len() != return_types.len() {
-                    errors.push(StatementError::WrongNumberOfReturnValuesError {
-                        function_name: func_sig.name.clone(),
-                        expected: func_sig.returns.len(),
-                        actual: return_types.len(),
-                    })
-                } else {
-                    for (i, return_type) in func_sig.returns.iter().enumerate() {
-                        if *return_type != return_types[i] {
-                            errors.push(StatementError::MismatchedReturnValueTypeError {
-                                function_name: func_sig.name.clone(),
-                                expected: *return_type,
-                                actual: return_types[i],
-                            })
-                        }
+            // Ensure that the function returns the correct types
+            if func_sig.returns.len() != return_types.len() {
+                errors.push(StatementError::WrongNumberOfReturnValuesError {
+                    function_name: func_sig.name.clone(),
+                    expected: func_sig.returns.len(),
+                    actual: return_types.len(),
+                })
+            } else {
+                for (i, return_type) in func_sig.returns.iter().enumerate() {
+                    if *return_type != return_types[i] {
+                        errors.push(StatementError::MismatchedReturnValueTypeError {
+                            function_name: func_sig.name.clone(),
+                            expected: *return_type,
+                            actual: return_types[i],
+                        })
                     }
                 }
             }
