@@ -70,7 +70,7 @@ peg::parser!(pub(crate) grammar parser() for str {
     }
 
     rule call_function() -> FunctionCall
-        = i:identifier() _ "(" _ args:((_ e:expression() _ {e}) ** ",") _ ")" { FunctionCall {name: i, arguments: args, return_types: None } }
+        = i:identifier() _ "(" _ args:((_ e:expression() _ {e}) ** ",") _ ")" { FunctionCall {name: i, arguments: args, argument_types: None, return_types: None } }
 
     rule type_name() -> &'input str
         = t:$("int" / "bool") { t }

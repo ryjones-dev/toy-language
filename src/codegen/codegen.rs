@@ -154,19 +154,24 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
         // Pull out the wrapped context
         let context = self.context.get_inner_context_mut();
 
-        // TODO: only support 64-bit integer types for now
-        let int_type = codegen::ir::Type::int(64).unwrap();
-
         let Function { signature, body } = function;
 
         // Add the function's parameters to the context
-        for _ in &signature.params {
-            context.func.signature.params.push(AbiParam::new(int_type));
+        for param in &signature.params {
+            context
+                .func
+                .signature
+                .params
+                .push(AbiParam::new(param.ty.into()));
         }
 
         // Add the function's return types to the context
-        for _ in &signature.returns {
-            context.func.signature.returns.push(AbiParam::new(int_type));
+        for return_type in &signature.returns {
+            context
+                .func
+                .signature
+                .returns
+                .push(AbiParam::new((*return_type).into()));
         }
 
         // We can now declare the function to Cranelift from the context
@@ -195,7 +200,7 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
         for (i, variable) in signature.params.iter().enumerate() {
             let cranelift_variable =
                 cranelift::frontend::Variable::from_u32(block_vars.var(variable.name.clone()));
-            builder.declare_var(cranelift_variable, int_type);
+            builder.declare_var(cranelift_variable, variable.ty.into());
             builder.def_var(cranelift_variable, builder.block_params(entry_block)[i]);
         }
 
@@ -247,11 +252,8 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
         block_vars: &mut BlockVariables,
         statement: Statement,
     ) {
-        // TODO: only support 64-bit integer types for now
-        let int_type = codegen::ir::Type::int(64).unwrap();
-
         match statement {
-            Statement::Assignment(variable_names, expression) => {
+            Statement::Assignment(variables, expression) => {
                 // Generate IR for the expression on the right-hand side of the equals sign
                 let values;
                 {
@@ -261,15 +263,14 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
                 }
 
                 // Declare and define the variables
-                for (i, variable_name) in variable_names.into_iter().enumerate() {
+                for (i, variable) in variables.into_iter().enumerate() {
                     // Only declare and define variable identifiers if they are not the discard identifier.
-                    if let Some(variable_name) = variable_name {
-                        let cranelift_variable = cranelift::frontend::Variable::from_u32(
-                            block_vars.var(variable_name.name),
-                        );
+                    if let Some(variable) = variable {
+                        let cranelift_variable =
+                            cranelift::frontend::Variable::from_u32(block_vars.var(variable.name));
 
                         // Intentionally ignore the error, since we don't care if the variable has already been declared.
-                        let _ = builder.try_declare_var(cranelift_variable, int_type);
+                        let _ = builder.try_declare_var(cranelift_variable, variable.ty.into());
                         builder.def_var(cranelift_variable, values[i].into());
                     }
                 }

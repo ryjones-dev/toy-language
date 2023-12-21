@@ -22,10 +22,8 @@
 - [x]  Rename `ast_parser` to just `parser`
 - [x]  Add bool type to semantic analysis
 - [x]  Add a `BlockVariables` type in codegen that replaces `Scope` for variable indexing.
-- [ ]  Add bool type to code generation
-- [ ]  Separate parsed types from semantic types (specifically `Variable`, need to solidify if this is worth doing)
-- [ ]  Handle boolean comparison for multiple types
-- [ ]  Check that assignment statements have the correct types of variables compared to the expression results
+- [x]  Add bool type to code generation
+- [x]  Handle boolean comparison for multiple types
 - [ ]  Pattern matching
 - [ ]  Check that all blocks in a function return the same number and type of values
 - [ ]  Add syntactic sugar for pattern matching on a bool with only a true arm, akin to an if statement
@@ -37,6 +35,8 @@
 - [ ]  Improve error messaging to include line numbers (codespan-reporting crate?)
 - [ ]  Add unit tests for grammar parsing
 - [ ]  Add unit tests for semantic errors 
+- [ ]  Handle comparison for more types (casting? comparison interface?)
+- [ ]  Decide how mutability should be handled (allow reassigning to the same variable?)
 - [ ]  Make `FunctionSignature` generic with fixed sized arrays
 - [ ]  Take a second pass over doc comments, and add more where necessary
 - [ ]  Support lambdas/nested functions (might need to add func keyword for this?)

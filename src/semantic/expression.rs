@@ -40,12 +40,18 @@ pub(super) fn analyze_expression(
 
     match expression {
         Expression::BooleanComparison(comparison_type, lhs, rhs) => {
-            // TODO: Allow any comparable types, not just ints
             let lhs_types = analyze_expression(lhs, scope)?;
             expect_single_type(&lhs_types, Type::Int)?;
 
             let rhs_types = analyze_expression(rhs, scope)?;
             expect_single_type(&rhs_types, Type::Int)?;
+
+            if lhs_types[0] != rhs_types[0] {
+                return Err(ExpressionError::WrongTypeError {
+                    expected: lhs_types[0],
+                    actual: rhs_types[0],
+                });
+            }
 
             types.push(Type::Int);
         }
@@ -70,7 +76,13 @@ pub(super) fn analyze_expression(
             types.append(&mut tys);
         }
         Expression::Variable(variable) => match scope.get_var(&variable.name) {
-            Some(variable) => types.push(variable.ty),
+            Some(scope_var) => {
+                // Because parsing a variable expression doesn't say anything about the variable's type,
+                // the Variable won't have its type set. Since the variable has already been added to the scope,
+                // we can update the variable's type here so as to not leave any undefined types in the AST.
+                variable.ty = scope_var.ty;
+                types.push(variable.ty)
+            }
             None => return Err(ExpressionError::UnknownVariableError(variable.name.clone())),
         },
         Expression::IntLiteral(_) => types.push(Type::Int),
@@ -112,7 +124,8 @@ pub(super) fn analyze_function_call(
                 }
             }
 
-            // Clone the function's return types to the function call so codegen has easy access to them
+            // Store the function's argument types and return types so codegen has access to them
+            function_call.argument_types = Some(argument_types);
             function_call.return_types = Some(func_sig.returns.clone());
 
             // The function's return types are what should be propagated up to the call site

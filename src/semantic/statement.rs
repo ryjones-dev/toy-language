@@ -74,8 +74,8 @@ pub(super) fn analyze_statement(
 
             // Always add the variables to the scope so that additional errors are not unnecessarily added downstream
             for variable in variables {
-                if let Some(variable_name) = variable {
-                    if let Err(err) = scope.insert_var(variable_name.clone()) {
+                if let Some(variable) = variable {
+                    if let Err(err) = scope.insert_var(variable.clone()) {
                         errors.push(StatementError::ScopeError(err));
                     }
                 }

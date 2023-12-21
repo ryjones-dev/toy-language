@@ -1,7 +1,10 @@
+test_bool(arg bool) -> bool:
+    -> true;
+
 main(arg1 int, arg2 int) -> int:
     sum = add(arg1, arg2)
     -> sum;
 
 add(left int, right int) -> int:
-    var = true
+    var = test_bool(false)
     -> left + right;

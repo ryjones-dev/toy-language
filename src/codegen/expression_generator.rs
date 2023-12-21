@@ -4,7 +4,7 @@ use cranelift::{
 };
 
 use crate::parser::types::{
-    BinaryMathOperationType, BooleanComparisonType, Expression, FunctionCall, Identifier,
+    BinaryMathOperationType, BooleanComparisonType, Expression, FunctionCall, Identifier, Type,
     UnaryMathOperationType,
 };
 
@@ -85,7 +85,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
             Expression::FunctionCall(function_call) => self.generate_function_call(function_call),
             Expression::Variable(variable) => vec![self.generate_variable(variable.name)],
             Expression::IntLiteral(value) => vec![self.generate_int_literal(value)],
-            Expression::BoolLiteral(value) => todo!(),
+            Expression::BoolLiteral(value) => vec![self.generate_bool_literal(value)],
         }
     }
 
@@ -205,24 +205,25 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         FunctionCall {
             name,
             arguments,
+            argument_types,
             return_types,
         }: FunctionCall,
     ) -> Vec<ExpressionValue> {
-        // TODO: only support 64-bit integer types for now
-        let int_type = cranelift::codegen::ir::Type::int(64).unwrap();
-
         // Because we've already done semantic analysis, we know that the function being called is defined,
         // and this call to that function is correct.
         // Therefore, we can build the function signature from the function call information.
         // This allows for any arbitrary function definition order.
         let mut sig = self.module.make_signature();
-        for _ in &arguments {
-            sig.params.push(AbiParam::new(int_type))
+
+        if let Some(argument_types) = argument_types {
+            for ty in &argument_types {
+                sig.params.push(AbiParam::new((*ty).into()))
+            }
         }
 
         if let Some(return_types) = return_types {
-            for _ in &return_types {
-                sig.returns.push(AbiParam::new(int_type));
+            for ty in &return_types {
+                sig.returns.push(AbiParam::new((*ty).into()));
             }
         }
 
@@ -268,8 +269,21 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
     }
 
     fn generate_int_literal(&mut self, value: crate::parser::types::IntLiteral) -> ExpressionValue {
-        // TODO: only support 64-bit integers for now
-        let int_type = cranelift::codegen::ir::Type::int(64).unwrap();
-        ExpressionValue(self.builder.ins().iconst(int_type, i64::from(value)))
+        ExpressionValue(
+            self.builder
+                .ins()
+                .iconst::<i64>(Type::Int.into(), value.into()),
+        )
+    }
+
+    fn generate_bool_literal(
+        &mut self,
+        value: crate::parser::types::BoolLiteral,
+    ) -> ExpressionValue {
+        ExpressionValue(
+            self.builder
+                .ins()
+                .iconst(Type::Bool.into(), if value.into() { 1 } else { 0 }),
+        )
     }
 }
