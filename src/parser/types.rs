@@ -21,6 +21,35 @@ impl<L: std::fmt::Display> From<peg::error::ParseError<L>> for ParseError {
 #[error("\"{0}\" is not a valid type")]
 pub struct ParseTypeError(String);
 
+/// A helper type that keeps track of a region of source code.
+///
+/// Other AST types will contain one of these so that they can keep track
+/// of which part of the source code they represent.
+/// This is needed for emiting helpful error messages.
+///
+/// [`SourceRange`] is convertible to and from [`std::ops::RangeInclusive<usize>`].
+/// To construct a [`SourceRange`], convert from a [`std::ops::RangeInclusive<usize>`] (`(1..=3).into()`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct SourceRange {
+    start: usize,
+    end: usize,
+}
+
+impl From<SourceRange> for std::ops::RangeInclusive<usize> {
+    fn from(value: SourceRange) -> Self {
+        value.start..=value.end
+    }
+}
+
+impl From<std::ops::RangeInclusive<usize>> for SourceRange {
+    fn from(value: std::ops::RangeInclusive<usize>) -> Self {
+        Self {
+            start: *value.start(),
+            end: *value.end(),
+        }
+    }
+}
+
 /// TODO_LANG_NAME built-in data types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Type {
@@ -118,40 +147,46 @@ impl std::fmt::Display for Types {
 
 /// A distinct type that is used to represent names of functions and variables.
 ///
-/// This is just a wrapper around [`String`] and is completely convertable to and from [`String`].
-/// It is intended to be used in places where it semantically makes sense to represent
-/// a parsed identifier from source code.
-/// If [`String`] was used directly, this context would be lost on the reader.
+/// It contains extra information about where in the source code it is located,
+/// which is needed for helpful error messages.
 ///
-/// While there are contexts where using the discard identifier ("_") makes sense, it is not universal,
+/// While there are contexts where using the discard identifier (`"_"`) makes sense, it is not universal,
 /// so instead of building it in to the type, the discard identifier is individually considered in the contexts
 /// it make sense.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Identifier(String);
+#[derive(Debug, Clone, Eq)]
+pub struct Identifier {
+    val: String,
+    source: SourceRange,
+}
+
+impl Identifier {
+    pub(super) fn new(val: String, source: SourceRange) -> Self {
+        Self { val, source }
+    }
+}
+
+// The source range should not affect equivalence or hashing
+impl PartialEq for Identifier {
+    fn eq(&self, other: &Self) -> bool {
+        self.val == other.val
+    }
+}
+
+impl std::hash::Hash for Identifier {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.val.hash(state);
+    }
+}
 
 impl From<Identifier> for String {
     fn from(value: Identifier) -> Self {
-        value.0
-    }
-}
-
-impl From<String> for Identifier {
-    fn from(value: String) -> Self {
-        Self { 0: value }
-    }
-}
-
-impl From<&str> for Identifier {
-    fn from(value: &str) -> Self {
-        Self {
-            0: value.to_owned(),
-        }
+        value.val
     }
 }
 
 impl std::fmt::Display for Identifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", self.val)
     }
 }
 
@@ -159,7 +194,7 @@ impl std::fmt::Display for Identifier {
 ///
 /// Only the name is parsable from the source code. The type will be [`Option::None`]
 /// until semantic analysis can determine the type.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub(crate) struct Variable {
     pub(crate) name: Identifier,
     pub(crate) ty: Option<Type>,
@@ -180,63 +215,45 @@ impl Variable {
 
 /// A distinct type that is used to represent integer literal values.
 ///
-/// This is just a wrapper around [`i64`] and is completely convertable to and from [`i64`].
-/// Parsing directly from a string to [`IntLiteral`] is also supported.
-/// It is intended to be used in places where it semantically makes sense to represent
-/// a parsed integer literal from source code.
-/// If [`i64`] was used directly, this context would be lost on the reader.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct IntLiteral(i64);
+/// It contains extra information about where in the source code it is located,
+/// which is needed for helpful error messages.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct IntLiteral {
+    val: i64,
+    source: SourceRange,
+}
 
-impl std::str::FromStr for IntLiteral {
-    type Err = std::num::ParseIntError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let value = s.parse()?;
-        Ok(Self { 0: value })
+impl IntLiteral {
+    pub(super) fn new(val: i64, source: SourceRange) -> Self {
+        Self { val, source }
     }
 }
 
 impl From<IntLiteral> for i64 {
     fn from(value: IntLiteral) -> Self {
-        value.0
-    }
-}
-
-impl From<i64> for IntLiteral {
-    fn from(value: i64) -> Self {
-        Self(value)
+        value.val
     }
 }
 
 /// A distinct type that is used to represent boolean literal values.
 ///
-/// This is just a wrapper around [`bool`] and is completely convertable to and from [`bool`].
-/// Parsing directly from a string to [`BoolLiteral`] is also supported.
-/// It is intended to be used in places where it semantically makes sense to represent
-/// a parsed boolean literal from source code.
-/// If [`bool`] was used directly, this context would be lost on the reader.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct BoolLiteral(bool);
+/// It contains extra information about where in the source code it is located,
+/// which is needed for helpful error messages.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct BoolLiteral {
+    val: bool,
+    source: SourceRange,
+}
 
-impl std::str::FromStr for BoolLiteral {
-    type Err = std::str::ParseBoolError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let value = s.parse()?;
-        Ok(Self { 0: value })
+impl BoolLiteral {
+    pub(super) fn new(val: bool, source: SourceRange) -> Self {
+        Self { val, source }
     }
 }
 
 impl From<BoolLiteral> for bool {
     fn from(value: BoolLiteral) -> Self {
-        value.0
-    }
-}
-
-impl From<bool> for BoolLiteral {
-    fn from(value: bool) -> Self {
-        Self(value)
+        value.val
     }
 }
 
@@ -347,7 +364,7 @@ pub(crate) enum Statement {
 /// The signature of a TODO_LANG_NAME function.
 ///
 /// This includes the function's name, parameters, and return types.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub(crate) struct FunctionSignature {
     pub(crate) name: Identifier,
     pub(crate) params: Vec<Variable>,

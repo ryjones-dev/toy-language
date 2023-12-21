@@ -76,15 +76,17 @@ peg::parser!(pub(crate) grammar parser() for str {
         = t:$("int" / "bool") { t }
 
     rule identifier() -> Identifier
-            = quiet!{ n:$(['a'..='z' | 'A'..='Z']['a'..='z' | 'A'..='Z' | '0'..='9' | '_']*) { Identifier::from(n.to_string()) } }
+            = quiet!{ s:position!() n:$(['a'..='z' | 'A'..='Z']['a'..='z' | 'A'..='Z' | '0'..='9' | '_']*) e:position!() {
+                Identifier::new(n.to_string(), (s..=e).into())
+            }}
             / expected!("identifier")
 
     rule int_literal() -> IntLiteral
-        = quiet!{ n:$(['0'..='9']+) { n.parse().expect("unknown int literal") }}
+        = quiet!{ s:position!() n:$(['0'..='9']+) e:position!() { IntLiteral::new(n.parse().expect("unknown int literal"), (s..=e).into()) }}
         / expected!("integer")
 
     rule bool_literal() -> BoolLiteral
-        = b:$("true" / "false") { b.parse().expect("unknown bool literal") }
+        = s:position!() b:$( "true" / "false" ) e:position!() { BoolLiteral::new(b.parse().expect("unknown bool literal"), (s..=e).into()) }
 
     rule comment() = "#" (!"\n" [_])* ("\n" / ![_])
 
