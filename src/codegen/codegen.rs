@@ -182,7 +182,7 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
                 .func
                 .signature
                 .params
-                .push(AbiParam::new(param.ty.expect(EXPECT_VAR_TYPE).into()));
+                .push(AbiParam::new(param.ty.ty.into()));
         }
 
         // Add the function's return types to the context
@@ -191,7 +191,7 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
                 .func
                 .signature
                 .returns
-                .push(AbiParam::new((*return_type).into()));
+                .push(AbiParam::new(return_type.ty.into()));
         }
 
         // We can now declare the function to Cranelift from the context
@@ -217,13 +217,11 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
 
         // Prime the block variables with the function parameters
         let mut block_vars = BlockVariables::new();
-        for (i, variable) in signature.params.iter().enumerate() {
-            let cranelift_variable =
-                cranelift::frontend::Variable::from_u32(block_vars.var(variable.name.clone()));
-            builder.declare_var(
-                cranelift_variable,
-                variable.ty.expect(EXPECT_VAR_TYPE).into(),
+        for (i, function_param) in signature.params.iter().enumerate() {
+            let cranelift_variable = cranelift::frontend::Variable::from_u32(
+                block_vars.var(function_param.name.clone()),
             );
+            builder.declare_var(cranelift_variable, function_param.ty.ty.into());
             builder.def_var(cranelift_variable, builder.block_params(entry_block)[i]);
         }
 

@@ -11,7 +11,7 @@ use super::source_range::SourceRange;
 #[derive(Debug, Clone, Eq)]
 pub struct Identifier {
     val: String,
-    source: SourceRange,
+    pub(crate) source: SourceRange,
 }
 
 impl Identifier {

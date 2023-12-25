@@ -51,7 +51,7 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Result<(), Vec<
 
         // Insert parameters into function scope
         for param in &function.signature.params {
-            if let Err(err) = function_scope.insert_var(param.clone()) {
+            if let Err(err) = function_scope.insert_var(param.clone().into()) {
                 errors.push(SemanticError::ScopeError(err));
             }
         }

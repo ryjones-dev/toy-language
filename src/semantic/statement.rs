@@ -5,6 +5,7 @@ use crate::parser::{
     identifier::Identifier,
     statement::Statement,
     types::{Type, Types},
+    variable::Variable,
 };
 
 use super::{
@@ -18,9 +19,10 @@ pub enum StatementError {
     #[error("wrong number of variables in expression assignment. expected: {expected}, actual: {actual}")]
     WrongNumberOfVariablesError { expected: usize, actual: usize },
     #[error(
-        "mismatched variable type in expression assignment. expected: {expected}, actual: {actual}"
+        "mismatched variable type in expression assignment for \"{actual}\". expected: {expected}, actual: {}",
+        if .actual.ty.is_some() { .actual.ty.unwrap().to_string() } else { "unknown".to_string() }
     )]
-    MismatchedTypeAssignmentError { expected: Type, actual: Type },
+    MismatchedTypeAssignmentError { expected: Type, actual: Variable },
     #[error("function \"{0}\" returns values that are not stored in a variable. if this is intentional, use the discard identifier (\"_\")")]
     NonZeroReturnError(Identifier),
     #[error("wrong number of return values for function \"{function_name}\". expected: {expected}, actual: {actual}")]
@@ -68,14 +70,14 @@ pub(super) fn analyze_statement(
                         // If the variable type is None, this is a new variable definition.
                         // Set the variable type to the corresponding expression result type.
                         if variable.ty == None {
-                            variable.ty = Some(types[i]);
+                            variable.ty = Some(types[i].ty);
                         }
 
                         let var_type = variable.ty.expect(EXPECT_VAR_TYPE);
-                        if var_type != types[i] {
+                        if var_type != types[i].ty {
                             errors.push(StatementError::MismatchedTypeAssignmentError {
                                 expected: types[i],
-                                actual: var_type,
+                                actual: variable.clone(),
                             });
                         }
                     }

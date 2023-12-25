@@ -5,10 +5,11 @@ use self::{
     expression::{
         BinaryMathOperationType, BooleanComparisonType, Expression, UnaryMathOperationType,
     },
-    function::{Function, FunctionCall, FunctionSignature},
+    function::{Function, FunctionCall, FunctionParameter, FunctionSignature},
     identifier::Identifier,
     literals::{BoolLiteral, IntLiteral},
     statement::Statement,
+    types::Type,
     variable::Variable,
 };
 
@@ -17,7 +18,7 @@ pub(super) mod expression;
 pub(super) mod function;
 pub(super) mod identifier;
 pub(super) mod literals;
-mod source_range;
+pub(super) mod source_range;
 pub(super) mod statement;
 pub(super) mod types;
 pub(super) mod variable;
@@ -49,13 +50,13 @@ peg::parser!(pub(crate) grammar parser() for str {
 
     rule function() -> Function
         = _ i:identifier() _ "(" _
-        p:((_ i:identifier() _ t:type_name() _ { (i, t.parse().expect("unknown type")) }) ** ",") _ ")"
-        r:(_ "->" r:((_ t:type_name() _ { t.parse().expect("unknown type") }) ++ ",") {r})?
+        p:((_ i:identifier() _ t:data_type() _ { (i, t) }) ** ",") _ ")"
+        r:(_ "->" r:((_ t:data_type() _ { t }) ++ ",") {r})?
         _ s:scope() _ {
             Function {
                 signature: FunctionSignature {
                     name: i,
-                    params: p.into_iter().map(|(param_name, param_type)| Variable::new(param_name).with_type(param_type)).collect(),
+                    params: p.into_iter().map(|(param_name, param_type)| FunctionParameter::new(param_name, param_type)).collect(),
                     returns: r.unwrap_or(Vec::default()).into()
                 },
                 body: s
@@ -107,8 +108,8 @@ peg::parser!(pub(crate) grammar parser() for str {
     rule call_function() -> FunctionCall
         = i:identifier() _ "(" _ args:((_ e:expression() _ {e}) ** ",") _ ")" { FunctionCall {name: i, arguments: args, argument_types: None, return_types: None } }
 
-    rule type_name() -> &'input str
-        = t:$("int" / "bool") { t }
+    rule data_type() -> Type
+        = s:position!() t:$("int" / "bool") e:position!()  { Type::new(t.parse().expect("unknown type"), (s..=e).into()) }
 
     rule identifier() -> Identifier
             = quiet!{ s:position!() n:$(['a'..='z' | 'A'..='Z']['a'..='z' | 'A'..='Z' | '0'..='9' | '_']*) e:position!() {

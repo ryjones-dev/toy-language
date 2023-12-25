@@ -4,7 +4,7 @@ use crate::parser::{
     expression::{BooleanComparisonType, Expression},
     function::FunctionCall,
     identifier::Identifier,
-    types::{Type, Types},
+    types::{DataType, Type, Types},
 };
 
 use super::{scope::Scope, EXPECT_VAR_TYPE};
@@ -30,7 +30,7 @@ pub enum ExpressionError {
     #[error("expected single value, but expression returns {0}")]
     SingleValueError(usize),
     #[error("expected type {expected}, but got {actual}")]
-    WrongTypeError { expected: Type, actual: Type },
+    WrongTypeError { expected: DataType, actual: Type },
 }
 
 /// Check if the given expression is semantically correct.
@@ -57,7 +57,7 @@ pub(super) fn analyze_expression(
             match comparison_type {
                 BooleanComparisonType::Equal | BooleanComparisonType::NotEqual => {
                     if expect_any_single_type(&lhs_types, &mut errors) {
-                        expect_single_type(&rhs_types, lhs_types[0], &mut errors);
+                        expect_single_type(&rhs_types, lhs_types[0].ty, &mut errors);
                     }
                 }
                 // TODO: Handle floats later
@@ -65,32 +65,38 @@ pub(super) fn analyze_expression(
                 | BooleanComparisonType::LessThanEqual
                 | BooleanComparisonType::GreaterThan
                 | BooleanComparisonType::GreaterThanEqual => {
-                    if expect_single_type(&lhs_types, Type::Int, &mut errors) {
-                        expect_single_type(&rhs_types, Type::Int, &mut errors);
+                    if expect_single_type(&lhs_types, DataType::Int, &mut errors) {
+                        expect_single_type(&rhs_types, DataType::Int, &mut errors);
                     }
                 }
             };
 
-            types.push(Type::Bool);
+            types.push(Type::new(
+                DataType::Bool,
+                lhs_types[0].source.combine(rhs_types[0].source),
+            ));
         }
         Expression::BinaryMathOperation(operation_type, lhs, rhs) => {
             // TODO: Handle floats later
             let (lhs_types, mut errs) = analyze_expression(lhs, scope);
             errors.append(&mut errs);
-            expect_single_type(&lhs_types, Type::Int, &mut errors);
+            expect_single_type(&lhs_types, DataType::Int, &mut errors);
 
             let (rhs_types, mut errs) = analyze_expression(rhs, scope);
             errors.append(&mut errs);
-            expect_single_type(&rhs_types, Type::Int, &mut errors);
+            expect_single_type(&rhs_types, DataType::Int, &mut errors);
 
-            types.push(Type::Int);
+            types.push(Type::new(
+                DataType::Int,
+                lhs_types[0].source.combine(rhs_types[0].source),
+            ));
         }
         Expression::UnaryMathOperation(operation_type, expression) => {
             let (ty, mut errs) = analyze_expression(expression, scope);
             errors.append(&mut errs);
-            expect_single_type(&ty, Type::Int, &mut errors);
+            expect_single_type(&ty, DataType::Int, &mut errors);
 
-            types.push(Type::Int)
+            types.push(Type::new(DataType::Int, ty[0].source))
         }
         Expression::FunctionCall(function_call) => {
             let (mut tys, mut errs) = analyze_function_call(function_call, scope);
@@ -103,12 +109,15 @@ pub(super) fn analyze_expression(
                 // the Variable won't have its type set. Since the variable has already been added to the scope,
                 // we can update the variable's type here so as to not leave any undefined types in the AST.
                 variable.ty = scope_var.ty;
-                types.push(variable.ty.expect(EXPECT_VAR_TYPE))
+                types.push(Type::new(
+                    variable.ty.expect(EXPECT_VAR_TYPE),
+                    variable.name.source,
+                ))
             }
             None => errors.push(ExpressionError::UnknownVariableError(variable.name.clone())),
         },
-        Expression::IntLiteral(_) => types.push(Type::Int),
-        Expression::BoolLiteral(_) => types.push(Type::Bool),
+        Expression::IntLiteral(literal) => types.push(Type::new(DataType::Int, literal.source)),
+        Expression::BoolLiteral(literal) => types.push(Type::new(DataType::Bool, literal.source)),
     };
 
     (types, errors)
@@ -140,7 +149,7 @@ pub(super) fn analyze_function_call(
             } else {
                 for (i, arg) in argument_types.iter().enumerate() {
                     // Type check arguments
-                    let param_type = func_sig.params[i].ty.expect(EXPECT_VAR_TYPE);
+                    let param_type = func_sig.params[i].ty;
                     if *arg != param_type {
                         errors.push(ExpressionError::MismatchedArgumentTypeError {
                             function_name: func_sig.name.clone(),
@@ -152,13 +161,8 @@ pub(super) fn analyze_function_call(
             }
 
             // Store the function's argument types and return types so codegen has access to them
-            function_call.argument_types = Some(
-                func_sig
-                    .params
-                    .iter()
-                    .map(|param| param.ty.expect(EXPECT_VAR_TYPE))
-                    .collect(),
-            );
+            function_call.argument_types =
+                Some(func_sig.params.iter().map(|param| param.ty).collect());
             function_call.return_types = Some(func_sig.returns.clone());
 
             // The function's return types are what should be propagated up to the call site
@@ -184,14 +188,14 @@ fn expect_any_single_type(types: &Types, errors: &mut Vec<ExpressionError>) -> b
 
 fn expect_single_type(
     types: &Types,
-    expected_type: Type,
+    expected_type: DataType,
     errors: &mut Vec<ExpressionError>,
 ) -> bool {
     if !expect_any_single_type(types, errors) {
         return false;
     }
 
-    if types[0] != expected_type {
+    if types[0].ty != expected_type {
         errors.push(ExpressionError::WrongTypeError {
             expected: expected_type,
             actual: types[0],

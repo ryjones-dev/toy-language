@@ -11,7 +11,7 @@ use crate::{
         function::FunctionCall,
         identifier::Identifier,
         literals::{BoolLiteral, IntLiteral},
-        types::Type,
+        types::DataType,
     },
     semantic_assert,
 };
@@ -223,13 +223,13 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
 
         if let Some(argument_types) = argument_types {
             for ty in &argument_types {
-                sig.params.push(AbiParam::new((*ty).into()))
+                sig.params.push(AbiParam::new(ty.ty.into()))
             }
         }
 
         if let Some(return_types) = return_types {
             for ty in &return_types {
-                sig.returns.push(AbiParam::new((*ty).into()));
+                sig.returns.push(AbiParam::new(ty.ty.into()));
             }
         }
 
@@ -278,7 +278,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         ExpressionValue(
             self.builder
                 .ins()
-                .iconst::<i64>(Type::Int.into(), value.into()),
+                .iconst::<i64>(DataType::Int.into(), value.into()),
         )
     }
 
@@ -286,7 +286,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         ExpressionValue(
             self.builder
                 .ins()
-                .iconst(Type::Bool.into(), if value.into() { 1 } else { 0 }),
+                .iconst(DataType::Bool.into(), if value.into() { 1 } else { 0 }),
         )
     }
 }

@@ -1,7 +1,21 @@
 use super::{
-    expression::Expression, identifier::Identifier, statement::Statement, types::Types,
-    variable::Variable,
+    expression::Expression,
+    identifier::Identifier,
+    statement::Statement,
+    types::{Type, Types},
 };
+
+#[derive(Debug, Clone)]
+pub(crate) struct FunctionParameter {
+    pub(crate) name: Identifier,
+    pub(crate) ty: Type,
+}
+
+impl FunctionParameter {
+    pub(super) fn new(name: Identifier, ty: Type) -> Self {
+        Self { name, ty }
+    }
+}
 
 /// The signature of a TODO_LANG_NAME function.
 ///
@@ -9,7 +23,7 @@ use super::{
 #[derive(Debug, Clone)]
 pub(crate) struct FunctionSignature {
     pub(crate) name: Identifier,
-    pub(crate) params: Vec<Variable>,
+    pub(crate) params: Vec<FunctionParameter>,
     pub(crate) returns: Types,
 }
 

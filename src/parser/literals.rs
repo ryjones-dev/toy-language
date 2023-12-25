@@ -7,7 +7,7 @@ use super::source_range::SourceRange;
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct IntLiteral {
     val: i64,
-    source: SourceRange,
+    pub(crate) source: SourceRange,
 }
 
 impl IntLiteral {
@@ -29,7 +29,7 @@ impl From<IntLiteral> for i64 {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct BoolLiteral {
     val: bool,
-    source: SourceRange,
+    pub(crate) source: SourceRange,
 }
 
 impl BoolLiteral {
