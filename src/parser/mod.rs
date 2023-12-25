@@ -50,8 +50,8 @@ peg::parser!(pub(crate) grammar parser() for str {
 
     rule function() -> Function
         = _ i:identifier() _ "(" _
-        p:((_ i:identifier() _ t:data_type() _ { (i, t) }) ** ",") _ ")"
-        r:(_ "->" r:((_ t:data_type() _ { t }) ++ ",") {r})?
+        p:((_ i:identifier() _ t:_type() _ { (i, t) }) ** ",") _ ")"
+        r:(_ "->" r:((_ t:_type() _ { t }) ++ ",") {r})?
         _ s:scope() _ {
             Function {
                 signature: FunctionSignature {
@@ -108,7 +108,7 @@ peg::parser!(pub(crate) grammar parser() for str {
     rule call_function() -> FunctionCall
         = i:identifier() _ "(" _ args:((_ e:expression() _ {e}) ** ",") _ ")" { FunctionCall {name: i, arguments: args, argument_types: None, return_types: None } }
 
-    rule data_type() -> Type
+    rule _type() -> Type
         = s:position!() t:$("int" / "bool") e:position!()  { Type::new(t.parse().expect("unknown type"), (s..=e).into()) }
 
     rule identifier() -> Identifier
