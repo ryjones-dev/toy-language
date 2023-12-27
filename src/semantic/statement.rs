@@ -1,11 +1,14 @@
 use thiserror::Error;
 
-use crate::parser::{
-    function::FunctionSignature,
-    identifier::Identifier,
-    statement::Statement,
-    types::{Type, Types},
-    variable::Variable,
+use crate::{
+    diagnostic::{Diagnostic, DiagnosticContext, DiagnosticLevel, DiagnosticMessage},
+    parser::{
+        function::FunctionSignature,
+        identifier::Identifier,
+        statement::Statement,
+        types::{Type, Types},
+        variable::Variable,
+    },
 };
 
 use super::{
@@ -16,8 +19,11 @@ use super::{
 
 #[derive(Debug, Error)]
 pub enum StatementError {
-    #[error("wrong number of variables in expression assignment. expected: {expected}, actual: {actual}")]
-    WrongNumberOfVariablesError { expected: usize, actual: usize },
+    #[error("wrong number of variables in expression assignment")]
+    WrongNumberOfVariablesError {
+        expected: Types,
+        actual: Vec<Option<Variable>>,
+    },
     #[error(
         "mismatched variable type in expression assignment for \"{actual}\". expected: {expected}, actual: {}",
         if .actual.ty.is_some() { .actual.ty.unwrap().to_string() } else { "unknown".to_string() }
@@ -25,13 +31,12 @@ pub enum StatementError {
     MismatchedTypeAssignmentError { expected: Type, actual: Variable },
     #[error("function \"{0}\" returns values that are not stored in a variable. if this is intentional, use the discard identifier (\"_\")")]
     NonZeroReturnError(Identifier),
-    #[error("wrong number of return values for function \"{function_name}\". expected: {expected}, actual: {actual}")]
+    #[error("wrong number of return values")]
     WrongNumberOfReturnValuesError {
-        function_name: Identifier,
-        expected: usize,
-        actual: usize,
+        func_sig: FunctionSignature,
+        return_types: Types,
     },
-    #[error("mismatched return value type for function \"{function_name}\". expected: {expected}, actual: {actual}")]
+    #[error("mismatched return value type")]
     MismatchedReturnValueTypeError {
         function_name: Identifier,
         expected: Type,
@@ -41,6 +46,71 @@ pub enum StatementError {
     ExpressionError(#[from] ExpressionError),
     #[error(transparent)]
     ScopeError(#[from] ScopeError),
+}
+
+impl From<StatementError> for Diagnostic {
+    fn from(err: StatementError) -> Self {
+        match err {
+            StatementError::WrongNumberOfVariablesError { expected, actual } => todo!(),
+            StatementError::MismatchedTypeAssignmentError { expected, actual } => todo!(),
+            StatementError::NonZeroReturnError(_) => todo!(),
+            StatementError::WrongNumberOfReturnValuesError {
+                ref func_sig,
+                ref return_types,
+            } => {
+                let mut labels = vec![DiagnosticMessage::new(
+                    format!("for function `{}`", func_sig.name),
+                    func_sig.name.source,
+                )];
+
+                if func_sig.returns.len() > 0 {
+                    labels.push(DiagnosticMessage::new(
+                        format!("return types defined here"),
+                        func_sig.returns.source().unwrap(),
+                    ));
+                }
+
+                Self::new(err.to_string(), DiagnosticLevel::Error).with_context(
+                    if return_types.len() > 0 {
+                        DiagnosticContext::new(DiagnosticMessage::new(
+                            format!("expected `{}`, found `{}`", func_sig.returns, return_types),
+                            return_types.source().unwrap(),
+                        ))
+                    } else {
+                        DiagnosticContext::new(DiagnosticMessage::new(
+                            format!(
+                                "expected `{}`, found `{}`",
+                                func_sig.returns.len(),
+                                return_types.len()
+                            ),
+                            // Function signature return types cannot be 0 in this branch
+                            func_sig.returns.source().unwrap(),
+                        ))
+                    }
+                    .with_labels(labels),
+                )
+            }
+            StatementError::MismatchedReturnValueTypeError {
+                ref function_name,
+                expected,
+                actual,
+            } => Self::new(err.to_string(), DiagnosticLevel::Error).with_context(
+                DiagnosticContext::new(DiagnosticMessage::new(
+                    format!("expected `{expected}`, found `{actual}`"),
+                    actual.source,
+                ))
+                .with_labels(vec![
+                    DiagnosticMessage::new(
+                        format!("for function `{function_name}`"),
+                        function_name.source,
+                    ),
+                    DiagnosticMessage::new(format!("return types defined here"), expected.source),
+                ]),
+            ),
+            StatementError::ExpressionError(_) => todo!(),
+            StatementError::ScopeError(_) => todo!(),
+        }
+    }
 }
 
 pub(super) fn analyze_statement(
@@ -61,8 +131,8 @@ pub(super) fn analyze_statement(
 
             if types.len() != variables.len() {
                 errors.push(StatementError::WrongNumberOfVariablesError {
-                    expected: types.len(),
-                    actual: variables.len(),
+                    expected: types,
+                    actual: variables.clone(),
                 });
             } else {
                 for (i, variable) in variables.iter_mut().enumerate() {
@@ -127,9 +197,8 @@ pub(super) fn analyze_statement(
             // Ensure that the function returns the correct types
             if func_sig.returns.len() != return_types.len() {
                 errors.push(StatementError::WrongNumberOfReturnValuesError {
-                    function_name: func_sig.name.clone(),
-                    expected: func_sig.returns.len(),
-                    actual: return_types.len(),
+                    func_sig: func_sig.clone(),
+                    return_types: return_types,
                 })
             } else {
                 for (i, return_type) in func_sig.returns.iter().enumerate() {

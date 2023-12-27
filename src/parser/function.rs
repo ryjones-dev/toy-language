@@ -44,7 +44,7 @@ pub(crate) struct Function {
 ///
 /// The argument types and return types can't be parsed from the function call expression itself,
 /// but can be deduced during semantic analysis.
-/// Until then, the argument types and return types will have a value of [`Option::None`].
+/// Until then, the argument types and return types will have a value of [`None`].
 #[derive(Debug)]
 pub(crate) struct FunctionCall {
     pub(crate) name: Identifier,

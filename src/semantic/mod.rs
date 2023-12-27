@@ -1,6 +1,9 @@
 use thiserror::Error;
 
-use crate::parser::ast::AbstractSyntaxTree;
+use crate::{
+    diagnostic::{Diagnostic, DiagnosticLevel},
+    parser::ast::AbstractSyntaxTree,
+};
 
 use self::{
     scope::{Scope, ScopeError},
@@ -21,6 +24,16 @@ pub enum SemanticError {
     StatementError(#[from] StatementError),
     #[error(transparent)]
     ScopeError(#[from] ScopeError),
+}
+
+impl From<SemanticError> for Diagnostic {
+    fn from(err: SemanticError) -> Self {
+        match err {
+            SemanticError::MissingMainError => Self::new(err.to_string(), DiagnosticLevel::Error),
+            SemanticError::StatementError(err) => err.into(),
+            SemanticError::ScopeError(err) => err.into(),
+        }
+    }
 }
 
 pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Result<(), Vec<SemanticError>> {

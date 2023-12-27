@@ -5,6 +5,7 @@ use crate::{
         codegen::{CodeGenError, CodeGenerator, JitCodeGenResults},
         options::CodeGenOptions,
     },
+    diagnostic::Diagnostic,
     parser::ast::AbstractSyntaxTree,
 };
 
@@ -12,6 +13,14 @@ use crate::{
 pub(super) enum BackendError {
     #[error(transparent)]
     CodeGenError(#[from] CodeGenError),
+}
+
+impl From<BackendError> for Diagnostic {
+    fn from(err: BackendError) -> Self {
+        match err {
+            BackendError::CodeGenError(err) => todo!(),
+        }
+    }
 }
 
 pub(super) struct JitBackendResults {

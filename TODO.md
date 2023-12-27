@@ -24,9 +24,11 @@
 - [x]  Add a `BlockVariables` type in codegen that replaces `Scope` for variable indexing.
 - [x]  Add bool type to code generation
 - [x]  Handle boolean comparison for multiple types
-- [ ]  Add source locations to each AST type
-- [ ]  Add [codespan-reporting](https://github.com/brendanzab/codespan) and set up one basic error message using source location
+- [x]  Add source locations to each AST type
+- [x]  Add [codespan-reporting](https://github.com/brendanzab/codespan) and set up one basic error message using source location
+- [ ]  Make a macro to automate implementing a `Diagnostic` trait for easier error messaging
 - [ ]  Update all error types to use codespan-reporting
+- [ ]  Variables in `Statement::Assignment` should not be optional so that their `SourceRange` can still be utilized for `WrongNumberOfVariablesError`
 - [ ]  Pattern matching
 - [ ]  Check that all blocks in a function return the same number and type of values
 - [ ]  Add syntactic sugar for pattern matching on a bool with only a true arm, akin to an if statement

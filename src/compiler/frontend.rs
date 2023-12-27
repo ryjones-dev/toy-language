@@ -7,14 +7,6 @@ use crate::{
 
 use super::options::CompileOptions;
 
-#[derive(Debug, Error)]
-pub(super) enum FrontendError {
-    #[error("parse error: {0}")]
-    ParseError(#[from] ParseError),
-    #[error("semantic error: {0}")]
-    SemanticError(#[from] SemanticError),
-}
-
 pub(super) enum FrontendResults {
     Success {
         ast: AbstractSyntaxTree,
@@ -35,7 +27,7 @@ pub(super) fn frontend(source_code: &str, options: &CompileOptions) -> FrontendR
 
     let mut ast_string = None;
     if options.request_ast {
-        ast_string = Some(format!("{}", ast));
+        ast_string = Some(ast.to_string());
     }
 
     if let Err(errs) = semantic_analysis(&mut ast) {

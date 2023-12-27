@@ -76,6 +76,21 @@ impl Types {
     pub(crate) fn new() -> Self {
         Self(Vec::new())
     }
+
+    /// Returns a [`SourceRange`] from the beginning of the type list to the end.
+    /// Returns [`None`] if the type list is empty.
+    pub(crate) fn source(&self) -> Option<SourceRange> {
+        if self.len() > 0 {
+            Some(
+                self.first()
+                    .unwrap()
+                    .source
+                    .combine(self.last().unwrap().source),
+            )
+        } else {
+            None
+        }
+    }
 }
 
 impl From<Vec<Type>> for Types {
@@ -119,7 +134,6 @@ impl std::fmt::Display for Types {
             return write!(f, "{}", self.0[0]);
         }
 
-        write!(f, "(")?;
         for (i, ty) in self.0.iter().enumerate() {
             write!(f, "{}", ty)?;
 
@@ -127,7 +141,6 @@ impl std::fmt::Display for Types {
                 write!(f, ", ")?;
             }
         }
-        write!(f, ")")?;
 
         Ok(())
     }

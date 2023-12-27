@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+use crate::diagnostic::Diagnostic;
+
 use self::{
     ast::AbstractSyntaxTree,
     expression::{
@@ -37,6 +39,12 @@ pub struct ParseError(String);
 impl<L: std::fmt::Display> From<peg::error::ParseError<L>> for ParseError {
     fn from(value: peg::error::ParseError<L>) -> Self {
         ParseError(value.to_string())
+    }
+}
+
+impl From<ParseError> for Diagnostic {
+    fn from(err: ParseError) -> Self {
+        todo!()
     }
 }
 

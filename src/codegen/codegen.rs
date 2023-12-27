@@ -108,7 +108,7 @@ impl CodeGenerator<cranelift_jit::JITModule> {
     }
 
     /// Returns a pointer to the main function after the machine code is generated,
-    /// or [`Option::None`] if the machine code has not been successfully generated yet.
+    /// or [`None`] if the machine code has not been successfully generated yet.
     pub(crate) fn get_main_function(&self) -> Option<*const u8> {
         match self.main_function_id {
             Some(main_function_id) => Some(self.module.get_finalized_function(main_function_id)),
@@ -245,7 +245,7 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
         let disassembly = context.compiled_code().unwrap().vcode.clone();
 
         if self.options.request_ir {
-            ir = Some(format!("{}", context.func));
+            ir = Some(context.func.to_string());
         }
 
         self.context.clear(&self.module);

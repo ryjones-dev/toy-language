@@ -12,7 +12,7 @@ use super::{expression::Expression, function::FunctionCall, variable::Variable};
 #[derive(Debug)]
 pub(crate) enum Statement {
     /// An assignment variable can either be a [`Variable`], or the discard identifier ("_"),
-    /// which is represented by [`Option::None`.
+    /// which is represented by [`None`].
     Assignment(Vec<Option<Variable>>, Expression),
     /// Call a function with no return values as a free-standing statement.
     /// The function must return no values, otherwise a [`Statement::Assignment`] must be used.

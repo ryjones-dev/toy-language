@@ -1,9 +1,10 @@
 use codespan_reporting::{
-    diagnostic::Diagnostic,
-    files::SimpleFile,
+    files::SimpleFiles,
     term::termcolor::{ColorChoice, StandardStream},
 };
 use thiserror::Error;
+
+use crate::diagnostic::Diagnostic;
 
 use self::{
     backend::jit_backend,
@@ -66,7 +67,8 @@ pub fn compile_jit(
     options: CompileOptions,
 ) -> Result<JitCompileResults, RenderErrorFailure> {
     // Setup for error message rendering
-    let file = SimpleFile::new("code", source_code);
+    let mut files = SimpleFiles::new();
+    let file_id = files.add("code", source_code);
     let writer = StandardStream::stderr(ColorChoice::Always);
     let config = codespan_reporting::term::Config::default();
 
@@ -80,18 +82,18 @@ pub fn compile_jit(
                     disassembly: results.disassembly,
                 }),
                 Err(err) => {
-                    report_error(&writer, &config, &file, err)?;
+                    report_diagnostic(&writer, &config, &files, file_id, err.into())?;
                     Ok(JitCompileResults::BackendError { ast: ast_string })
                 }
             }
         }
         FrontendResults::ParseError(err) => {
-            report_error(&writer, &config, &file, err)?;
+            report_diagnostic(&writer, &config, &files, file_id, err.into())?;
             Ok(JitCompileResults::ParseError)
         }
         FrontendResults::SemanticErrors { errs, ast_string } => {
             for err in errs {
-                report_error(&writer, &config, &file, err)?;
+                report_diagnostic(&writer, &config, &files, file_id, err.into())?;
             }
 
             Ok(JitCompileResults::SemanticError { ast: ast_string })
@@ -99,15 +101,19 @@ pub fn compile_jit(
     }
 }
 
-fn report_error<E: std::fmt::Display>(
+fn report_diagnostic(
     writer: &StandardStream,
     config: &codespan_reporting::term::Config,
-    file: &SimpleFile<&str, &str>,
-    error: E,
+    files: &SimpleFiles<&str, &str>,
+    file_id: usize,
+    message: Diagnostic,
 ) -> Result<(), RenderErrorFailure> {
-    let diagnostic = Diagnostic::error().with_message(error.to_string());
-    if let Err(err) = codespan_reporting::term::emit(&mut writer.lock(), config, file, &diagnostic)
-    {
+    if let Err(err) = codespan_reporting::term::emit(
+        &mut writer.lock(),
+        config,
+        files,
+        &message.to_diagnostic(file_id),
+    ) {
         return Err(RenderErrorFailure(err));
     }
 

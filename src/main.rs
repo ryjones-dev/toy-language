@@ -6,6 +6,7 @@ use crate::compiler::{compile_jit, options::CompileOptions, JitCompileResults};
 // TODO: remove these?
 mod codegen;
 mod compiler;
+mod diagnostic;
 mod parser;
 mod semantic;
 

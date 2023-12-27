@@ -2,7 +2,10 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use crate::parser::{function::FunctionSignature, identifier::Identifier, variable::Variable};
+use crate::{
+    diagnostic::Diagnostic,
+    parser::{function::FunctionSignature, identifier::Identifier, variable::Variable},
+};
 
 #[derive(Debug, Error)]
 pub enum ScopeError {
@@ -10,6 +13,15 @@ pub enum ScopeError {
     VariableAlreadyDefinedError(Identifier),
     #[error("function \"{0}\" is already defined in this scope")]
     FunctionAlreadyDefinedError(Identifier),
+}
+
+impl From<ScopeError> for Diagnostic {
+    fn from(err: ScopeError) -> Self {
+        match err {
+            ScopeError::VariableAlreadyDefinedError(err) => todo!(),
+            ScopeError::FunctionAlreadyDefinedError(err) => todo!(),
+        }
+    }
 }
 
 /// A [`Scope`] captures the variables and function signatures that the code within the scope has access to.

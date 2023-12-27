@@ -2,7 +2,7 @@ use super::{function::FunctionParameter, identifier::Identifier, types::DataType
 
 /// A distinct type that is used to represent a variable.
 ///
-/// Only the name is parsable from the source code. The type will be [`Option::None`]
+/// Only the name is parsable from the source code. The type will be [`None`]
 /// until semantic analysis can determine the type.
 #[derive(Debug, Clone)]
 pub(crate) struct Variable {
