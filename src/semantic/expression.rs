@@ -1,10 +1,13 @@
 use thiserror::Error;
 
-use crate::parser::{
-    expression::{BooleanComparisonType, Expression},
-    function::FunctionCall,
-    identifier::Identifier,
-    types::{DataType, Type, Types},
+use crate::{
+    diagnostic::Diagnostic,
+    parser::{
+        expression::{BooleanComparisonType, Expression},
+        function::FunctionCall,
+        identifier::Identifier,
+        types::{DataType, Type, Types},
+    },
 };
 
 use super::{scope::Scope, EXPECT_VAR_TYPE};
@@ -33,6 +36,27 @@ pub enum ExpressionError {
     WrongTypeError { expected: DataType, actual: Type },
 }
 
+impl From<ExpressionError> for Diagnostic {
+    fn from(err: ExpressionError) -> Self {
+        match err {
+            ExpressionError::UnknownVariableError(_) => todo!(),
+            ExpressionError::UnknownFunctionError(_) => todo!(),
+            ExpressionError::WrongNumberOfArgumentsError {
+                function_name,
+                expected,
+                actual,
+            } => todo!(),
+            ExpressionError::MismatchedArgumentTypeError {
+                function_name,
+                expected,
+                actual,
+            } => todo!(),
+            ExpressionError::SingleValueError(_) => todo!(),
+            ExpressionError::WrongTypeError { expected, actual } => todo!(),
+        }
+    }
+}
+
 /// Check if the given expression is semantically correct.
 ///
 /// Recursively validate that inner expressions have the correct number and types of values that the outer expression expects.
@@ -50,14 +74,18 @@ pub(super) fn analyze_expression(
         Expression::BooleanComparison(comparison_type, lhs, rhs) => {
             let (lhs_types, mut errs) = analyze_expression(lhs, scope);
             errors.append(&mut errs);
-
             let (rhs_types, mut errs) = analyze_expression(rhs, scope);
             errors.append(&mut errs);
 
             match comparison_type {
                 BooleanComparisonType::Equal | BooleanComparisonType::NotEqual => {
                     if expect_any_single_type(&lhs_types, &mut errors) {
-                        expect_single_type(&rhs_types, lhs_types[0].ty, &mut errors);
+                        if expect_single_type(&rhs_types, lhs_types[0].ty, &mut errors) {
+                            types.push(Type::new(
+                                DataType::Bool,
+                                lhs_types[0].source.combine(rhs_types[0].source),
+                            ));
+                        }
                     }
                 }
                 // TODO: Handle floats later
@@ -66,37 +94,39 @@ pub(super) fn analyze_expression(
                 | BooleanComparisonType::GreaterThan
                 | BooleanComparisonType::GreaterThanEqual => {
                     if expect_single_type(&lhs_types, DataType::Int, &mut errors) {
-                        expect_single_type(&rhs_types, DataType::Int, &mut errors);
+                        if expect_single_type(&rhs_types, DataType::Int, &mut errors) {
+                            types.push(Type::new(
+                                DataType::Bool,
+                                lhs_types[0].source.combine(rhs_types[0].source),
+                            ));
+                        }
                     }
                 }
             };
-
-            types.push(Type::new(
-                DataType::Bool,
-                lhs_types[0].source.combine(rhs_types[0].source),
-            ));
         }
         Expression::BinaryMathOperation(operation_type, lhs, rhs) => {
             // TODO: Handle floats later
             let (lhs_types, mut errs) = analyze_expression(lhs, scope);
             errors.append(&mut errs);
-            expect_single_type(&lhs_types, DataType::Int, &mut errors);
-
             let (rhs_types, mut errs) = analyze_expression(rhs, scope);
             errors.append(&mut errs);
-            expect_single_type(&rhs_types, DataType::Int, &mut errors);
 
-            types.push(Type::new(
-                DataType::Int,
-                lhs_types[0].source.combine(rhs_types[0].source),
-            ));
+            if expect_single_type(&lhs_types, DataType::Int, &mut errors) {
+                if expect_single_type(&rhs_types, DataType::Int, &mut errors) {
+                    types.push(Type::new(
+                        DataType::Int,
+                        lhs_types[0].source.combine(rhs_types[0].source),
+                    ));
+                }
+            }
         }
         Expression::UnaryMathOperation(operation_type, expression) => {
             let (ty, mut errs) = analyze_expression(expression, scope);
             errors.append(&mut errs);
-            expect_single_type(&ty, DataType::Int, &mut errors);
 
-            types.push(Type::new(DataType::Int, ty[0].source))
+            if expect_single_type(&ty, DataType::Int, &mut errors) {
+                types.push(Type::new(DataType::Int, ty[0].source))
+            }
         }
         Expression::FunctionCall(function_call) => {
             let (mut tys, mut errs) = analyze_function_call(function_call, scope);

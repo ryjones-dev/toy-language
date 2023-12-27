@@ -10,6 +10,7 @@ use self::{
     statement::{analyze_statement, StatementError},
 };
 
+mod diagnostic;
 mod expression;
 pub(super) mod scope;
 mod statement;

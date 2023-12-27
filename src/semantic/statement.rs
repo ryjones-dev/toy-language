@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use crate::{
-    diagnostic::{Diagnostic, DiagnosticContext, DiagnosticLevel, DiagnosticMessage},
+    diagnostic::{Diagnostic, DiagnosticContext, DiagnosticLevel},
     parser::{
         function::FunctionSignature,
         identifier::Identifier,
@@ -12,6 +12,7 @@ use crate::{
 };
 
 use super::{
+    diagnostic::{diag_expected_actual, diag_func_sig_label, diag_func_sig_return_label},
     expression::{analyze_expression, analyze_function_call, ExpressionError},
     scope::{Scope, ScopeError},
     EXPECT_VAR_TYPE,
@@ -38,9 +39,9 @@ pub enum StatementError {
     },
     #[error("mismatched return value type")]
     MismatchedReturnValueTypeError {
-        function_name: Identifier,
-        expected: Type,
-        actual: Type,
+        func_sig: FunctionSignature,
+        return_types: Types,
+        index: usize,
     },
     #[error(transparent)]
     ExpressionError(#[from] ExpressionError),
@@ -58,57 +59,44 @@ impl From<StatementError> for Diagnostic {
                 ref func_sig,
                 ref return_types,
             } => {
-                let mut labels = vec![DiagnosticMessage::new(
-                    format!("for function `{}`", func_sig.name),
-                    func_sig.name.source,
-                )];
-
-                if func_sig.returns.len() > 0 {
-                    labels.push(DiagnosticMessage::new(
-                        format!("return types defined here"),
-                        func_sig.returns.source().unwrap(),
-                    ));
-                }
-
                 Self::new(err.to_string(), DiagnosticLevel::Error).with_context(
-                    if return_types.len() > 0 {
-                        DiagnosticContext::new(DiagnosticMessage::new(
-                            format!("expected `{}`, found `{}`", func_sig.returns, return_types),
-                            return_types.source().unwrap(),
-                        ))
-                    } else {
-                        DiagnosticContext::new(DiagnosticMessage::new(
-                            format!(
-                                "expected `{}`, found `{}`",
-                                func_sig.returns.len(),
-                                return_types.len()
-                            ),
-                            // Function signature return types cannot be 0 in this branch
-                            func_sig.returns.source().unwrap(),
-                        ))
-                    }
-                    .with_labels(labels),
+                    DiagnosticContext::new(diag_expected_actual(
+                        &func_sig.returns,
+                        return_types,
+                        if return_types.len() > 0 {
+                            return_types.source().unwrap()
+                        } else {
+                            // Function signature return types cannot be 0 in this branch,
+                            // otherwise they would be equal and there wouldn't be an error
+                            func_sig.returns.source().unwrap()
+                        },
+                    ))
+                    .with_labels({
+                        let mut labels = vec![diag_func_sig_label(func_sig)];
+                        if func_sig.returns.len() > 0 {
+                            labels.push(diag_func_sig_return_label(func_sig));
+                        }
+                        labels
+                    }),
                 )
             }
             StatementError::MismatchedReturnValueTypeError {
-                ref function_name,
-                expected,
-                actual,
+                ref func_sig,
+                ref return_types,
+                index,
             } => Self::new(err.to_string(), DiagnosticLevel::Error).with_context(
-                DiagnosticContext::new(DiagnosticMessage::new(
-                    format!("expected `{expected}`, found `{actual}`"),
-                    actual.source,
+                DiagnosticContext::new(diag_expected_actual(
+                    &func_sig.returns[index],
+                    &return_types[index],
+                    return_types.source().unwrap(), // Can't have 0 return types for this error
                 ))
                 .with_labels(vec![
-                    DiagnosticMessage::new(
-                        format!("for function `{function_name}`"),
-                        function_name.source,
-                    ),
-                    DiagnosticMessage::new(format!("return types defined here"), expected.source),
+                    diag_func_sig_label(func_sig),
+                    diag_func_sig_return_label(func_sig),
                 ]),
             ),
-            StatementError::ExpressionError(_) => todo!(),
-            StatementError::ScopeError(_) => todo!(),
+            StatementError::ExpressionError(err) => err.into(),
+            StatementError::ScopeError(err) => err.into(),
         }
     }
 }
@@ -198,15 +186,15 @@ pub(super) fn analyze_statement(
             if func_sig.returns.len() != return_types.len() {
                 errors.push(StatementError::WrongNumberOfReturnValuesError {
                     func_sig: func_sig.clone(),
-                    return_types: return_types,
+                    return_types,
                 })
             } else {
                 for (i, return_type) in func_sig.returns.iter().enumerate() {
                     if *return_type != return_types[i] {
                         errors.push(StatementError::MismatchedReturnValueTypeError {
-                            function_name: func_sig.name.clone(),
-                            expected: *return_type,
-                            actual: return_types[i],
+                            func_sig: func_sig.clone(),
+                            return_types: return_types.clone(),
+                            index: i,
                         })
                     }
                 }

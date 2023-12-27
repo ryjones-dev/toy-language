@@ -10,8 +10,11 @@ pub(crate) struct DiagnosticMessage {
 }
 
 impl DiagnosticMessage {
-    pub(crate) fn new(message: String, source: SourceRange) -> Self {
-        Self { message, source }
+    pub(crate) fn new(message: impl Into<String>, source: SourceRange) -> Self {
+        Self {
+            message: message.into(),
+            source,
+        }
     }
 
     fn to_primary<F>(self, file_id: F) -> codespan_reporting::diagnostic::Label<F> {
