@@ -2,7 +2,7 @@ use thiserror::Error;
 
 use crate::{
     diagnostic::{Diagnostic, DiagnosticLevel},
-    parser::ast::AbstractSyntaxTree,
+    parser::{ast::AbstractSyntaxTree, statement::Statement, types::Types},
 };
 
 use self::{
@@ -69,6 +69,8 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Result<(), Vec<
             }
         }
 
+        let mut has_return_statement = false;
+
         for statement in &mut function.body {
             if let Err(errs) =
                 analyze_statement(&function.signature, &mut function_scope, statement)
@@ -80,6 +82,21 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Result<(), Vec<
                         .collect(),
                 )
             }
+
+            match statement {
+                Statement::Return(_) => has_return_statement = true,
+                _ => {}
+            }
+        }
+
+        // Check for a function that has return types but does not have a return statement
+        if function.signature.returns.len() > 0 && !has_return_statement {
+            errors.push(SemanticError::StatementError(
+                StatementError::WrongNumberOfReturnValuesError {
+                    func_sig: function.signature.clone(),
+                    return_types: Types::new(),
+                },
+            ))
         }
     }
 

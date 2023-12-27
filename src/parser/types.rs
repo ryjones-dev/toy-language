@@ -130,8 +130,10 @@ impl std::ops::DerefMut for Types {
 
 impl std::fmt::Display for Types {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.0.len() == 1 {
-            return write!(f, "{}", self.0[0]);
+        write!(f, "`")?;
+
+        if self.len() == 0 {
+            write!(f, "()")?;
         }
 
         for (i, ty) in self.0.iter().enumerate() {
@@ -141,6 +143,7 @@ impl std::fmt::Display for Types {
                 write!(f, ", ")?;
             }
         }
+        write!(f, "`")?;
 
         Ok(())
     }
