@@ -58,7 +58,7 @@ impl From<StatementError> for Diagnostic {
             StatementError::NonZeroReturnError {
                 ref func_sig,
                 ref function_call,
-            } => Self::new(err.to_string(), DiagnosticLevel::Error).with_context(
+            } => Self::new(&err, DiagnosticLevel::Error).with_context(
                 DiagnosticContext::new(DiagnosticMessage::new(
                     "if this is intentional, use the discard identifier (`_`)",
                     function_call.source(),
@@ -72,7 +72,7 @@ impl From<StatementError> for Diagnostic {
                 ref func_sig,
                 ref return_types,
             } => {
-                Self::new(err.to_string(), DiagnosticLevel::Error).with_context(
+                Self::new(&err, DiagnosticLevel::Error).with_context(
                     DiagnosticContext::new(diag_expected_actual(
                         &func_sig.returns,
                         return_types,
@@ -97,7 +97,7 @@ impl From<StatementError> for Diagnostic {
                 ref func_sig,
                 ref return_types,
                 index,
-            } => Self::new(err.to_string(), DiagnosticLevel::Error).with_context(
+            } => Self::new(&err, DiagnosticLevel::Error).with_context(
                 DiagnosticContext::new(diag_expected_actual(
                     &func_sig.returns[index],
                     &return_types[index],

@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use crate::parser::source_range::SourceRange;
 
 /// Contains a to message, label, or note to display as part of a [`DiagnosticContext`].
@@ -78,15 +80,15 @@ pub(crate) enum DiagnosticLevel {
 
 /// Contains all the information necessary to render a compilation message.
 pub(crate) struct Diagnostic {
-    message: String,
+    err: String,
     level: DiagnosticLevel,
     context: Option<DiagnosticContext>,
 }
 
 impl Diagnostic {
-    pub(crate) fn new(message: impl Into<String>, level: DiagnosticLevel) -> Self {
+    pub(crate) fn new(err: &impl Error, level: DiagnosticLevel) -> Self {
         Self {
-            message: message.into(),
+            err: err.to_string(),
             level,
             context: None,
         }
@@ -94,14 +96,12 @@ impl Diagnostic {
 
     pub(crate) fn with_context(self, context: DiagnosticContext) -> Self {
         Self {
-            message: self.message,
+            err: self.err,
             level: self.level,
             context: Some(context),
         }
     }
-}
 
-impl Diagnostic {
     pub(super) fn to_diagnostic<F: Copy>(
         self,
         file_id: F,
@@ -120,10 +120,10 @@ impl Diagnostic {
 
         match self.level {
             DiagnosticLevel::Error => codespan_reporting::diagnostic::Diagnostic::error()
-                .with_message(self.message)
+                .with_message(self.err)
                 .with_labels(labels),
             DiagnosticLevel::Warning => codespan_reporting::diagnostic::Diagnostic::warning()
-                .with_message(self.message)
+                .with_message(self.err)
                 .with_labels(labels),
         }
     }

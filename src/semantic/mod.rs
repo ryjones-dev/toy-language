@@ -30,7 +30,7 @@ pub enum SemanticError {
 impl From<SemanticError> for Diagnostic {
     fn from(err: SemanticError) -> Self {
         match err {
-            SemanticError::MissingMainError => Self::new(err.to_string(), DiagnosticLevel::Error),
+            SemanticError::MissingMainError => Self::new(&err, DiagnosticLevel::Error),
             SemanticError::StatementError(err) => err.into(),
             SemanticError::ScopeError(err) => err.into(),
         }

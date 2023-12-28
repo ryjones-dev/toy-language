@@ -44,7 +44,7 @@ impl<L: std::fmt::Display> From<peg::error::ParseError<L>> for ParseError {
 
 impl From<ParseError> for Diagnostic {
     fn from(err: ParseError) -> Self {
-        Self::new(err.to_string(), DiagnosticLevel::Error)
+        Self::new(&err, DiagnosticLevel::Error)
     }
 }
 

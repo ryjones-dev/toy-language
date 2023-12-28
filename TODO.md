@@ -28,8 +28,9 @@
 - [x]  Add [codespan-reporting](https://github.com/brendanzab/codespan) and set up one basic error message using source location
 - [x]  Add a `source()` method to expressions and statements so that more source code can be pulled to support recommended fixes
 - [x]  Variables in `Statement::Assignment` should not be optional so that their `SourceRange` can still be utilized for `WrongNumberOfVariablesError`
-- [ ]  `Diagnostic` should take an error instead of a `String` message
+- [x]  `Diagnostic` should take an error instead of a `String` message
 - [ ]  Instead of generating `SourceRange`s in a `source()` method, statements and expressions should have their own parsed `SourceRange` fields that they return
+- [ ]  Add help/suggestions to diagnostics - use this for `NonZeroReturnError` to recommend adding a discarded variable
 - [ ]  Update all error types to use codespan-reporting
 - [ ]  Add a diagnostic error for using a discarded variable
 - [ ]  Add a diagnostic warning for unused variables
