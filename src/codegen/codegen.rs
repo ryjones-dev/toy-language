@@ -17,7 +17,7 @@ use super::{
 
 /// An error that captures all errors that can be thrown during code generation.
 #[derive(Debug, Error)]
-pub enum CodeGenError {
+pub(crate) enum CodeGenError {
     #[error("Error creating codegen module: {0}")]
     CreateError(cranelift_module::ModuleError),
     #[error("Error finalizing compilation: {0}")]

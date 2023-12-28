@@ -15,7 +15,7 @@ use crate::{
 use super::{scope::Scope, EXPECT_VAR_TYPE};
 
 #[derive(Debug, Error)]
-pub enum ExpressionError {
+pub(super) enum ExpressionError {
     #[error("unknown variable \"{0}\" in this scope")]
     UnknownVariableError(Identifier),
     #[error("unknown function \"{0}\" in this scope")]

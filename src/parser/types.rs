@@ -4,7 +4,7 @@ use super::source_range::SourceRange;
 
 #[derive(Debug, Error)]
 #[error("\"{0}\" is not a valid type")]
-pub struct ParseTypeError(String);
+pub(crate) struct ParseTypeError(String);
 
 /// Represents TODO_LANG_NAME built-in data types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

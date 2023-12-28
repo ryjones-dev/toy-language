@@ -8,7 +8,7 @@ use crate::{
 };
 
 #[derive(Debug, Error)]
-pub enum ScopeError {
+pub(super) enum ScopeError {
     #[error("variable \"{0}\" is already defined in this scope")]
     VariableAlreadyDefinedError(Identifier),
     #[error("function \"{0}\" is already defined in this scope")]

@@ -34,7 +34,7 @@ pub(super) mod variable;
 /// [`ParseError`] is transparent and just outputs whatever error message [`peg::error::ParseError`] would have.
 #[derive(Debug, Error)]
 #[error("{0}")]
-pub struct ParseError(String);
+pub(super) struct ParseError(String);
 
 impl<L: std::fmt::Display> From<peg::error::ParseError<L>> for ParseError {
     fn from(value: peg::error::ParseError<L>) -> Self {

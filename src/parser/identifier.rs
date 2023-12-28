@@ -8,7 +8,7 @@ use super::source_range::SourceRange;
 /// Identifiers can be discarded by prefixing the name with an underscore. This means that the variable
 /// is intentionally not used. If the variable is discarded but then later used, this results in a compile error.
 #[derive(Debug, Clone, Eq)]
-pub struct Identifier {
+pub(crate) struct Identifier {
     val: String,
     source: SourceRange,
 }

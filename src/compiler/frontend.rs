@@ -1,5 +1,3 @@
-use thiserror::Error;
-
 use crate::{
     parser::{ast::AbstractSyntaxTree, parser, ParseError},
     semantic::{semantic_analysis, SemanticError},

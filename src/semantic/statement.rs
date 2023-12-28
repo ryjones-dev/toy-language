@@ -17,7 +17,7 @@ use super::{
 };
 
 #[derive(Debug, Error)]
-pub enum StatementError {
+pub(super) enum StatementError {
     #[error("wrong number of variables in expression assignment")]
     WrongNumberOfVariablesError {
         expected: Types,
