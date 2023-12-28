@@ -80,7 +80,7 @@ peg::parser!(pub(crate) grammar parser() for str {
         / _ r:return_statement() _ { r }
 
     rule return_statement() -> Statement
-        = _ "->" _ r:(e:((_ e:expression() _ {e}) ** ",")) _ { Statement::Return(r) }
+        = _ "->" _ r:(e:((_ e:expression() _ {e}) ++ ",")) _ { Statement::Return(r) }
 
     rule assignment() -> Statement
         = idents:((_ i:identifier() _ { Some(i) } / _ "_" _ { None }) ** ",") _ "=" _ e:expression() {

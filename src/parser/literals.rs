@@ -7,12 +7,16 @@ use super::source_range::SourceRange;
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct IntLiteral {
     val: i64,
-    pub(crate) source: SourceRange,
+    source: SourceRange,
 }
 
 impl IntLiteral {
     pub(super) fn new(val: i64, source: SourceRange) -> Self {
         Self { val, source }
+    }
+
+    pub(crate) fn source(&self) -> SourceRange {
+        self.source
     }
 }
 
@@ -29,12 +33,16 @@ impl From<IntLiteral> for i64 {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct BoolLiteral {
     val: bool,
-    pub(crate) source: SourceRange,
+    source: SourceRange,
 }
 
 impl BoolLiteral {
     pub(super) fn new(val: bool, source: SourceRange) -> Self {
         Self { val, source }
+    }
+
+    pub(crate) fn source(&self) -> SourceRange {
+        self.source
     }
 }
 

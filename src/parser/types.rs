@@ -37,13 +37,17 @@ impl std::fmt::Display for DataType {
 /// A TODO_LANG_NAME type parsed from source code.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Type {
-    pub(crate) ty: DataType,
-    pub(crate) source: SourceRange,
+    ty: DataType,
+    source: SourceRange,
 }
 
 impl Type {
     pub(crate) fn new(ty: DataType, source: SourceRange) -> Self {
         Self { ty, source }
+    }
+
+    pub(crate) fn source(&self) -> SourceRange {
+        self.source
     }
 }
 
@@ -57,6 +61,26 @@ impl PartialEq for Type {
 impl std::hash::Hash for Type {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.ty.hash(state);
+    }
+}
+
+/// Helpers for comparing a [`Type`] and [`DataType`] directly.
+impl PartialEq<DataType> for Type {
+    fn eq(&self, other: &DataType) -> bool {
+        self.ty == *other
+    }
+}
+
+impl PartialEq<Type> for DataType {
+    fn eq(&self, other: &Type) -> bool {
+        *self == other.ty
+    }
+}
+
+/// Helper for converting a [`Type`] into a [`DataType`].
+impl From<Type> for DataType {
+    fn from(value: Type) -> Self {
+        value.ty
     }
 }
 

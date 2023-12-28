@@ -11,12 +11,16 @@ use super::source_range::SourceRange;
 #[derive(Debug, Clone, Eq)]
 pub struct Identifier {
     val: String,
-    pub(crate) source: SourceRange,
+    source: SourceRange,
 }
 
 impl Identifier {
     pub(super) fn new(val: String, source: SourceRange) -> Self {
         Self { val, source }
+    }
+
+    pub(crate) fn source(&self) -> SourceRange {
+        self.source
     }
 }
 

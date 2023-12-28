@@ -16,6 +16,12 @@ impl FunctionParameter {
     pub(super) fn new(name: Identifier, ty: Type) -> Self {
         Self { name, ty }
     }
+
+    /// Returns a [`SourceRange`] from the start of the parameter's name
+    /// to the end of the parameter's type.
+    pub(crate) fn source(&self) -> SourceRange {
+        self.name.source().combine(self.ty.source())
+    }
 }
 
 impl std::fmt::Display for FunctionParameter {
@@ -42,9 +48,8 @@ impl FunctionParameters {
             Some(
                 self.first()
                     .unwrap()
-                    .name
-                    .source
-                    .combine(self.last().unwrap().ty.source),
+                    .source()
+                    .combine(self.last().unwrap().source()),
             )
         } else {
             None
@@ -107,14 +112,14 @@ impl FunctionSignature {
     /// The end of the function signature will change depending on if the function signature
     /// has return types and/or parameters defined.
     pub(crate) fn source(&self) -> SourceRange {
-        let start_source = self.name.source;
+        let start_source = self.name.source();
         let end_source = if self.returns.len() > 0 {
             self.returns.source().unwrap()
         } else {
             if self.params.len() > 0 {
                 self.params.source().unwrap()
             } else {
-                self.name.source
+                start_source
             }
         };
 
@@ -147,4 +152,24 @@ pub(crate) struct FunctionCall {
 
     pub(crate) argument_types: Option<Types>,
     pub(crate) return_types: Option<Types>,
+}
+
+impl FunctionCall {
+    /// Returns a [`SourceRange`] from the start of the function call's name to
+    /// the end of the function call's arguments, or to the end of the function call's
+    /// name if the function call has no arguments.
+    pub(crate) fn source(&self) -> SourceRange {
+        let start_source = self.name.source();
+        let end_source = if self.arguments.len() > 0 {
+            self.arguments
+                .first()
+                .unwrap()
+                .source()
+                .combine(self.arguments.last().unwrap().source())
+        } else {
+            start_source
+        };
+
+        start_source.combine(end_source)
+    }
 }

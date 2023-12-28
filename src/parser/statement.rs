@@ -1,4 +1,6 @@
-use super::{expression::Expression, function::FunctionCall, variable::Variable};
+use super::{
+    expression::Expression, function::FunctionCall, source_range::SourceRange, variable::Variable,
+};
 
 /// A TODO_LANG_NAME statement is a single unit of a function's task.
 ///
@@ -18,4 +20,26 @@ pub(crate) enum Statement {
     /// The function must return no values, otherwise a [`Statement::Assignment`] must be used.
     FunctionCall(FunctionCall),
     Return(Vec<Expression>),
+}
+
+impl Statement {
+    /// Returns a [`SourceRange`] that captures the entire statement's source code.
+    pub(crate) fn source(&self) -> SourceRange {
+        match self {
+            Statement::Assignment(variables, expression) => {
+                todo!("Need to refactor variables that might be discarded")
+            }
+            Statement::FunctionCall(function_call) => function_call.source(),
+            Statement::Return(expressions) => expressions
+                .first()
+                .expect("there must be at least one return expression")
+                .source()
+                .combine(
+                    expressions
+                        .last()
+                        .expect("there must be at least one return expression")
+                        .source(),
+                ),
+        }
+    }
 }

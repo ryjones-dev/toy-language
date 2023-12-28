@@ -1,4 +1,6 @@
-use super::{function::FunctionParameter, identifier::Identifier, types::DataType};
+use super::{
+    function::FunctionParameter, identifier::Identifier, source_range::SourceRange, types::DataType,
+};
 
 /// A distinct type that is used to represent a variable.
 ///
@@ -14,6 +16,10 @@ impl Variable {
     pub(crate) fn new(name: Identifier) -> Self {
         Self { name, ty: None }
     }
+
+    pub(crate) fn source(&self) -> SourceRange {
+        self.name.source()
+    }
 }
 
 /// Built in conversion for turning function parameters into variables
@@ -21,7 +27,7 @@ impl From<FunctionParameter> for Variable {
     fn from(value: FunctionParameter) -> Self {
         Self {
             name: value.name,
-            ty: Some(value.ty.ty),
+            ty: Some(value.ty.into()),
         }
     }
 }

@@ -1,6 +1,7 @@
 use super::{
     function::FunctionCall,
     literals::{BoolLiteral, IntLiteral},
+    source_range::SourceRange,
     variable::Variable,
 };
 
@@ -69,4 +70,19 @@ pub(crate) enum Expression {
     Variable(Variable),
     IntLiteral(IntLiteral),
     BoolLiteral(BoolLiteral),
+}
+
+impl Expression {
+    /// Returns a [`SourceRange`] that captures the entire expression's source code.
+    pub(crate) fn source(&self) -> SourceRange {
+        match self {
+            Expression::BooleanComparison(_, lhs, rhs) => lhs.source().combine(rhs.source()),
+            Expression::BinaryMathOperation(_, lhs, rhs) => lhs.source().combine(rhs.source()),
+            Expression::UnaryMathOperation(_, expression) => expression.source(),
+            Expression::FunctionCall(function_call) => function_call.source(),
+            Expression::Variable(variable) => variable.source(),
+            Expression::IntLiteral(int_literal) => int_literal.source(),
+            Expression::BoolLiteral(bool_literal) => bool_literal.source(),
+        }
+    }
 }

@@ -182,7 +182,7 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
                 .func
                 .signature
                 .params
-                .push(AbiParam::new(param.ty.ty.into()));
+                .push(AbiParam::new(param.into()));
         }
 
         // Add the function's return types to the context
@@ -191,7 +191,7 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
                 .func
                 .signature
                 .returns
-                .push(AbiParam::new(return_type.ty.into()));
+                .push(AbiParam::new(return_type.into()));
         }
 
         // We can now declare the function to Cranelift from the context
@@ -221,7 +221,7 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
             let cranelift_variable = cranelift::frontend::Variable::from_u32(
                 block_vars.var(function_param.name.clone()),
             );
-            builder.declare_var(cranelift_variable, function_param.ty.ty.into());
+            builder.declare_var(cranelift_variable, function_param.into());
             builder.def_var(cranelift_variable, builder.block_params(entry_block)[i]);
         }
 

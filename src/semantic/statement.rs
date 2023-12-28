@@ -14,7 +14,6 @@ use super::{
     diagnostic::{diag_expected_actual, diag_func_sig_label, diag_func_sig_return_label},
     expression::{analyze_expression, analyze_function_call, ExpressionError},
     scope::{Scope, ScopeError},
-    EXPECT_VAR_TYPE,
 };
 
 #[derive(Debug, Error)]
@@ -62,7 +61,7 @@ impl From<StatementError> for Diagnostic {
             } => Self::new(err.to_string(), DiagnosticLevel::Error).with_context(
                 DiagnosticContext::new(DiagnosticMessage::new(
                     "if this is intentional, use the discard identifier (`_`)",
-                    function_call.name.source,
+                    function_call.source(),
                 ))
                 .with_labels(vec![
                     diag_func_sig_label(func_sig),
@@ -142,11 +141,10 @@ pub(super) fn analyze_statement(
                         // If the variable type is None, this is a new variable definition.
                         // Set the variable type to the corresponding expression result type.
                         if variable.ty == None {
-                            variable.ty = Some(types[i].ty);
+                            variable.ty = Some(types[i].into());
                         }
 
-                        let var_type = variable.ty.expect(EXPECT_VAR_TYPE);
-                        if var_type != types[i].ty {
+                        if variable.ty.unwrap() != types[i] {
                             errors.push(StatementError::MismatchedTypeAssignmentError {
                                 expected: types[i],
                                 actual: variable.clone(),

@@ -26,7 +26,7 @@
 - [x]  Handle boolean comparison for multiple types
 - [x]  Add source locations to each AST type
 - [x]  Add [codespan-reporting](https://github.com/brendanzab/codespan) and set up one basic error message using source location
-- [ ]  Add a `source()` method to expressions and statements so that more source code can be pulled to support recommended fixes
+- [x]  Add a `source()` method to expressions and statements so that more source code can be pulled to support recommended fixes
 - [ ]  Variables in `Statement::Assignment` should not be optional so that their `SourceRange` can still be utilized for `WrongNumberOfVariablesError`
 - [ ]  Update all error types to use codespan-reporting
 - [ ]  Pattern matching

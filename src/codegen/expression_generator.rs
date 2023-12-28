@@ -223,13 +223,13 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
 
         if let Some(argument_types) = argument_types {
             for ty in &argument_types {
-                sig.params.push(AbiParam::new(ty.ty.into()))
+                sig.params.push(AbiParam::new(ty.into()))
             }
         }
 
         if let Some(return_types) = return_types {
             for ty in &return_types {
-                sig.returns.push(AbiParam::new(ty.ty.into()));
+                sig.returns.push(AbiParam::new(ty.into()));
             }
         }
 
