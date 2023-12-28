@@ -28,7 +28,7 @@ pub(super) enum StatementError {
         if .actual.ty.is_some() { .actual.ty.unwrap().to_string() } else { "unknown".to_string() }
     )]
     MismatchedTypeAssignmentError { expected: Type, actual: Variable },
-    #[error("function return values are not stored in a variable")]
+    #[error("function results are not stored")]
     NonZeroReturnError {
         func_sig: FunctionSignature,
         function_call: FunctionCall,
@@ -64,8 +64,8 @@ impl From<StatementError> for Diagnostic {
                     ]),
                 )
                 .with_suggestion(
-                    "if the results are not needed, \
-                    assign the results to a discarded variable \"_\"",
+                    "If the results are not needed, \
+                    assign each unused result to a discarded variable (\"_\").",
                 ),
             StatementError::ReturnValueMismatchError {
                 ref func_sig,
