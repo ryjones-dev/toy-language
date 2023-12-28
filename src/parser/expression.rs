@@ -1,9 +1,4 @@
-use super::{
-    function::FunctionCall,
-    literals::{BoolLiteral, IntLiteral},
-    source_range::SourceRange,
-    variable::Variable,
-};
+use super::{function::FunctionCall, source_range::SourceRange, variable::Variable};
 
 /// Each type of boolean comparison that can be used in an expression.
 ///
@@ -82,6 +77,6 @@ pub(crate) enum Expression {
     FunctionCall(FunctionCall),
 
     Variable(Variable),
-    IntLiteral(IntLiteral),
-    BoolLiteral(BoolLiteral),
+    IntLiteral(i64, SourceRange),
+    BoolLiteral(bool, SourceRange),
 }

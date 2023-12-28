@@ -10,7 +10,6 @@ use crate::{
         },
         function::FunctionCall,
         identifier::Identifier,
-        literals::{BoolLiteral, IntLiteral},
         types::DataType,
     },
     semantic_assert,
@@ -104,8 +103,10 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
             }
             Expression::FunctionCall(function_call) => self.generate_function_call(function_call),
             Expression::Variable(variable) => vec![self.generate_variable(variable.name)],
-            Expression::IntLiteral(value) => vec![self.generate_int_literal(value)],
-            Expression::BoolLiteral(value) => vec![self.generate_bool_literal(value)],
+            Expression::IntLiteral(value, _) => vec![self.generate_int_literal(value)],
+            Expression::BoolLiteral(value, _) => {
+                vec![self.generate_bool_literal(value)]
+            }
         }
     }
 
@@ -289,19 +290,15 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         )
     }
 
-    fn generate_int_literal(&mut self, value: IntLiteral) -> ExpressionValue {
-        ExpressionValue(
-            self.builder
-                .ins()
-                .iconst::<i64>(DataType::Int.into(), value.into()),
-        )
+    fn generate_int_literal(&mut self, value: i64) -> ExpressionValue {
+        ExpressionValue(self.builder.ins().iconst(DataType::Int.into(), value))
     }
 
-    fn generate_bool_literal(&mut self, value: BoolLiteral) -> ExpressionValue {
+    fn generate_bool_literal(&mut self, value: bool) -> ExpressionValue {
         ExpressionValue(
             self.builder
                 .ins()
-                .iconst(DataType::Bool.into(), if value.into() { 1 } else { 0 }),
+                .iconst(DataType::Bool.into(), if value { 1 } else { 0 }),
         )
     }
 }

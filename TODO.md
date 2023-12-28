@@ -30,7 +30,7 @@
 - [x]  Variables in `Statement::Assignment` should not be optional so that their `SourceRange` can still be utilized for `WrongNumberOfVariablesError`
 - [x]  `Diagnostic` should take an error instead of a `String` message
 - [x]  Instead of generating `SourceRange`s in a `source()` method, statements and expressions should have their own parsed `SourceRange` fields that they return
-- [ ]  Remove `IntLiteral` and `BoolLiteral` types
+- [x]  Remove `IntLiteral` and `BoolLiteral` types
 - [ ]  Add help/suggestions to diagnostics - use this for `NonZeroReturnError` to recommend adding a discarded variable
 - [ ]  Update all error types to use codespan-reporting
 - [ ]  Add a diagnostic error for using a discarded variable

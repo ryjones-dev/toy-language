@@ -169,8 +169,8 @@ pub(super) fn analyze_expression(
             }
             None => errors.push(ExpressionError::UnknownVariableError(variable.name.clone())),
         },
-        Expression::IntLiteral(literal) => types.push(Type::new(DataType::Int, literal.source)),
-        Expression::BoolLiteral(literal) => types.push(Type::new(DataType::Bool, literal.source)),
+        Expression::IntLiteral(_, source) => types.push(Type::new(DataType::Int, *source)),
+        Expression::BoolLiteral(_, source) => types.push(Type::new(DataType::Bool, *source)),
     };
 
     (types, errors)

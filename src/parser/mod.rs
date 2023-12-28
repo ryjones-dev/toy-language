@@ -9,7 +9,6 @@ use self::{
     },
     function::{Function, FunctionCall, FunctionParameter, FunctionSignature},
     identifier::Identifier,
-    literals::{BoolLiteral, IntLiteral},
     statement::Statement,
     types::Type,
     variable::Variable,
@@ -19,7 +18,6 @@ pub(super) mod ast;
 pub(super) mod expression;
 pub(super) mod function;
 pub(super) mod identifier;
-pub(super) mod literals;
 pub(super) mod source_range;
 pub(super) mod statement;
 pub(super) mod types;
@@ -112,8 +110,8 @@ peg::parser!(pub(crate) grammar parser() for str {
         c:call_function() { Expression::FunctionCall(c) }
         --
         "(" _ e:expression() _ ")" { e }
-        l:int_literal() { Expression::IntLiteral(l) }
-        b:bool_literal() { Expression::BoolLiteral(b) }
+        i:int_literal() { i }
+        b:bool_literal() { b }
         i:identifier() { Expression::Variable(Variable::new(i)) }
     } e:position!() {
         match expr {
@@ -122,8 +120,8 @@ peg::parser!(pub(crate) grammar parser() for str {
             Expression::UnaryMathOperation { operation_type, expression, .. } => Expression::UnaryMathOperation { operation_type, expression, source: (s..=e).into() },
             Expression::FunctionCall(function_call) => Expression::FunctionCall(function_call),
             Expression::Variable(variable) => Expression::Variable(variable),
-            Expression::IntLiteral(literal) => Expression::IntLiteral(literal),
-            Expression::BoolLiteral(literal) => Expression::BoolLiteral(literal),
+            Expression::IntLiteral(int_literal, source) => Expression::IntLiteral(int_literal, source),
+            Expression::BoolLiteral(bool_literal, source) => Expression::BoolLiteral(bool_literal, source),
         }
     }
 
@@ -141,12 +139,12 @@ peg::parser!(pub(crate) grammar parser() for str {
             }}
             / expected!("identifier")
 
-    rule int_literal() -> IntLiteral
-        = quiet!{ s:position!() n:$(['0'..='9']+) e:position!() { IntLiteral::new(n.parse().expect("unknown int literal"), (s..=e).into()) }}
+    rule int_literal() -> Expression
+        = quiet!{ s:position!() n:$(['0'..='9']+) e:position!() { Expression::IntLiteral(n.parse().expect("unknown int literal"), (s..=e).into()) }}
         / expected!("integer")
 
-    rule bool_literal() -> BoolLiteral
-        = s:position!() b:$( "true" / "false" ) e:position!() { BoolLiteral::new(b.parse().expect("unknown bool literal"), (s..=e).into()) }
+    rule bool_literal() -> Expression
+        = s:position!() b:$( "true" / "false" ) e:position!() { Expression::BoolLiteral(b.parse().expect("unknown bool literal"), (s..=e).into()) }
 
     rule comment() = "#" (!"\n" [_])* ("\n" / ![_])
 
