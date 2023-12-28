@@ -58,16 +58,20 @@ impl From<StatementError> for Diagnostic {
             StatementError::NonZeroReturnError {
                 ref func_sig,
                 ref function_call,
-            } => Self::new(&err, DiagnosticLevel::Error).with_context(
-                DiagnosticContext::new(DiagnosticMessage::new(
-                    "if this is intentional, use the discard identifier (`_`)",
-                    function_call.source,
-                ))
-                .with_labels(vec![
-                    diag_func_sig_label(func_sig),
-                    diag_func_sig_return_label(func_sig),
-                ]),
-            ),
+            } => Self::new(&err, DiagnosticLevel::Error)
+                .with_context(
+                    DiagnosticContext::new(DiagnosticMessage::new(
+                        "function called here",
+                        function_call.source,
+                    ))
+                    .with_labels(vec![
+                        diag_func_sig_label(func_sig),
+                        diag_func_sig_return_label(func_sig),
+                    ]),
+                )
+                .with_suggestion(
+                    "if the results are not needed, assign the results to a discarded variable \"_\"",
+                ),
             StatementError::WrongNumberOfReturnValuesError {
                 ref func_sig,
                 ref return_types,

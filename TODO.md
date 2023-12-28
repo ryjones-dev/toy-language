@@ -31,7 +31,7 @@
 - [x]  `Diagnostic` should take an error instead of a `String` message
 - [x]  Instead of generating `SourceRange`s in a `source()` method, statements and expressions should have their own parsed `SourceRange` fields that they return
 - [x]  Remove `IntLiteral` and `BoolLiteral` types
-- [ ]  Add help/suggestions to diagnostics - use this for `NonZeroReturnError` to recommend adding a discarded variable
+- [x]  Add help/suggestions to diagnostics - use this for `NonZeroReturnError` to recommend adding a discarded variable
 - [ ]  Update all error types to use codespan-reporting
 - [ ]  Add a diagnostic error for using a discarded variable
 - [ ]  Add a diagnostic warning for unused variables

@@ -83,6 +83,7 @@ pub(crate) struct Diagnostic {
     err: String,
     level: DiagnosticLevel,
     context: Option<DiagnosticContext>,
+    suggestion: Option<String>,
 }
 
 impl Diagnostic {
@@ -91,6 +92,7 @@ impl Diagnostic {
             err: err.to_string(),
             level,
             context: None,
+            suggestion: None,
         }
     }
 
@@ -98,7 +100,17 @@ impl Diagnostic {
         Self {
             err: self.err,
             level: self.level,
+            suggestion: self.suggestion,
             context: Some(context),
+        }
+    }
+
+    pub(crate) fn with_suggestion(self, suggestion: impl Into<String>) -> Self {
+        Self {
+            err: self.err,
+            level: self.level,
+            context: self.context,
+            suggestion: Some(suggestion.into()),
         }
     }
 
@@ -118,13 +130,20 @@ impl Diagnostic {
             );
         }
 
+        let mut suggestions = Vec::new();
+        if let Some(suggestion) = self.suggestion {
+            suggestions.push(suggestion);
+        }
+
         match self.level {
             DiagnosticLevel::Error => codespan_reporting::diagnostic::Diagnostic::error()
                 .with_message(self.err)
-                .with_labels(labels),
+                .with_labels(labels)
+                .with_notes(suggestions),
             DiagnosticLevel::Warning => codespan_reporting::diagnostic::Diagnostic::warning()
                 .with_message(self.err)
-                .with_labels(labels),
+                .with_labels(labels)
+                .with_notes(suggestions),
         }
     }
 }
