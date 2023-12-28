@@ -11,7 +11,7 @@ use crate::{
 };
 
 use super::{
-    diagnostic::{diag_expected_actual, diag_func_sig_label, diag_func_sig_return_label},
+    diagnostic::{diag_expected_actual, diag_func_name_label, diag_func_sig_return_label},
     expression::{analyze_expression, analyze_function_call, ExpressionError},
     scope::{Scope, ScopeError},
 };
@@ -65,7 +65,7 @@ impl From<StatementError> for Diagnostic {
                         function_call.source,
                     ))
                     .with_labels(vec![
-                        diag_func_sig_label(func_sig),
+                        diag_func_name_label(func_sig),
                         diag_func_sig_return_label(func_sig),
                     ]),
                 )
@@ -89,7 +89,7 @@ impl From<StatementError> for Diagnostic {
                         },
                     ))
                     .with_labels({
-                        let mut labels = vec![diag_func_sig_label(func_sig)];
+                        let mut labels = vec![diag_func_name_label(func_sig)];
                         if func_sig.returns.len() > 0 {
                             labels.push(diag_func_sig_return_label(func_sig));
                         }
@@ -108,7 +108,7 @@ impl From<StatementError> for Diagnostic {
                     return_types.source().unwrap(), // Can't have 0 return types for this error
                 ))
                 .with_labels(vec![
-                    diag_func_sig_label(func_sig),
+                    diag_func_name_label(func_sig),
                     diag_func_sig_return_label(func_sig),
                 ]),
             ),
