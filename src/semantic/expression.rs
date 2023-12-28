@@ -4,7 +4,7 @@ use crate::{
     diagnostic::Diagnostic,
     parser::{
         expression::{BooleanComparisonType, Expression},
-        function::FunctionCall,
+        function::{FunctionCall, FunctionSignature},
         identifier::Identifier,
         types::{DataType, Type, Types},
     },
@@ -129,9 +129,16 @@ pub(super) fn analyze_expression(
             }
         }
         Expression::FunctionCall(function_call) => {
-            let (mut tys, mut errs) = analyze_function_call(function_call, scope);
-            types.append(&mut tys);
-            errors.append(&mut errs);
+            let (func_sig, mut errs) = analyze_function_call(function_call, scope);
+            match func_sig {
+                Some(func_sig) => {
+                    for return_type in &func_sig.returns {
+                        types.push(*return_type);
+                    }
+                    errors.append(&mut errs);
+                }
+                None => errors.append(&mut errs),
+            }
         }
         Expression::Variable(variable) => match scope.get_var(&variable.name) {
             Some(scope_var) => {
@@ -153,10 +160,10 @@ pub(super) fn analyze_expression(
     (types, errors)
 }
 
-pub(super) fn analyze_function_call(
+pub(super) fn analyze_function_call<'a>(
     function_call: &mut FunctionCall,
-    scope: &Scope,
-) -> (Types, Vec<ExpressionError>) {
+    scope: &'a Scope,
+) -> (Option<&'a FunctionSignature>, Vec<ExpressionError>) {
     let mut errors = Vec::new();
 
     match scope.get_func_sig(&function_call.name) {
@@ -195,14 +202,13 @@ pub(super) fn analyze_function_call(
                 Some(func_sig.params.iter().map(|param| param.ty).collect());
             function_call.return_types = Some(func_sig.returns.clone());
 
-            // The function's return types are what should be propagated up to the call site
-            (func_sig.returns.clone(), errors)
+            (Some(func_sig), errors)
         }
         None => {
             errors.push(ExpressionError::UnknownFunctionError(
                 function_call.name.clone(),
             ));
-            (Types::new(), errors)
+            (None, errors)
         }
     }
 }

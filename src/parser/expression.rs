@@ -9,7 +9,7 @@ use super::{
 /// This struct is useful when a boolean comparison needs to be addressed separately from an expression.
 /// Using a separate comparsion type instead of binding the operands to this enum
 /// makes the expression generation code cleaner.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) enum BooleanComparisonType {
     Equal,
     NotEqual,
@@ -22,7 +22,7 @@ pub(crate) enum BooleanComparisonType {
 /// Each type of binary math operation that can be used in an expression.
 ///
 /// This works similarly to [`BooleanComparisonType`], but is used for math operations with two operands.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) enum BinaryMathOperationType {
     Add,
     Subtract,
@@ -33,7 +33,7 @@ pub(crate) enum BinaryMathOperationType {
 /// Each type of unary math operation that can be used in an expression.
 ///
 /// This works similarly to [`BinaryMathOperationType`], but is used for math operations with only one operand.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) enum UnaryMathOperationType {
     Negate,
 }
@@ -58,7 +58,7 @@ pub(crate) enum UnaryMathOperationType {
 ///
 /// Expressions support recursive generation, and in those cases the inner expression must be wrapped
 /// in a container type such as [`Box`] or [`Vec`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum Expression {
     BooleanComparison(BooleanComparisonType, Box<Expression>, Box<Expression>),
     BinaryMathOperation(BinaryMathOperationType, Box<Expression>, Box<Expression>),

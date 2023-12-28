@@ -26,9 +26,9 @@
 - [x]  Handle boolean comparison for multiple types
 - [x]  Add source locations to each AST type
 - [x]  Add [codespan-reporting](https://github.com/brendanzab/codespan) and set up one basic error message using source location
-- [ ]  Make a macro to automate implementing a `Diagnostic` trait for easier error messaging
-- [ ]  Update all error types to use codespan-reporting
+- [ ]  Add a `source()` method to expressions and statements so that more source code can be pulled to support recommended fixes
 - [ ]  Variables in `Statement::Assignment` should not be optional so that their `SourceRange` can still be utilized for `WrongNumberOfVariablesError`
+- [ ]  Update all error types to use codespan-reporting
 - [ ]  Pattern matching
 - [ ]  Check that all blocks in a function return the same number and type of values
 - [ ]  Add syntactic sugar for pattern matching on a bool with only a true arm, akin to an if statement
@@ -42,6 +42,7 @@
 - [ ]  Add unit tests for semantic errors
 - [ ]  Handle comparison for more types (casting? comparison interface?)
 - [ ]  Decide how mutability should be handled (allow reassigning to the same variable?)
+- [ ]  Look into ways to insert recommended code in diagnostic messages
 - [ ]  Make `FunctionSignature` generic with fixed sized arrays
 - [ ]  Take a second pass over doc comments, and add more where necessary
 - [ ]  Support lambdas/nested functions (might need to add func keyword for this?)
