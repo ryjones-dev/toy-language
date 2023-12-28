@@ -11,7 +11,7 @@ use crate::{
 };
 
 use super::{
-    diagnostic::{diag_expected_actual, diag_func_name_label, diag_func_sig_return_label},
+    diagnostic::{diag_expected_types, diag_func_name_label, diag_func_sig_return_label},
     expression::{analyze_expression, analyze_function_call, ExpressionError},
     scope::{Scope, ScopeError},
 };
@@ -33,16 +33,10 @@ pub(super) enum StatementError {
         func_sig: FunctionSignature,
         function_call: FunctionCall,
     },
-    #[error("wrong number of return values")]
-    WrongNumberOfReturnValuesError {
+    #[error("return value mismatch")]
+    ReturnValueMismatchError {
         func_sig: FunctionSignature,
         return_types: Types,
-    },
-    #[error("mismatched return value type")]
-    MismatchedReturnValueTypeError {
-        func_sig: FunctionSignature,
-        return_types: Types,
-        index: usize,
     },
     #[error(transparent)]
     ExpressionError(#[from] ExpressionError),
@@ -70,48 +64,23 @@ impl From<StatementError> for Diagnostic {
                     ]),
                 )
                 .with_suggestion(
-                    "if the results are not needed, assign the results to a discarded variable \"_\"",
+                    "if the results are not needed, \
+                    assign the results to a discarded variable \"_\"",
                 ),
-            StatementError::WrongNumberOfReturnValuesError {
+            StatementError::ReturnValueMismatchError {
                 ref func_sig,
                 ref return_types,
-            } => {
-                Self::new(&err, DiagnosticLevel::Error).with_context(
-                    DiagnosticContext::new(diag_expected_actual(
-                        &func_sig.returns,
-                        return_types,
-                        if return_types.len() > 0 {
-                            return_types.source().unwrap()
-                        } else {
-                            // Function signature return types cannot be 0 in this branch,
-                            // otherwise they would be equal and there wouldn't be an error
-                            func_sig.returns.source().unwrap()
-                        },
-                    ))
+            } => Self::new(&err, DiagnosticLevel::Error).with_context(
+                DiagnosticContext::new(diag_expected_types(&func_sig.returns, return_types))
                     .with_labels({
-                        let mut labels = vec![diag_func_name_label(func_sig)];
+                        let mut labels = vec![diag_func_name_label(&func_sig)];
                         if func_sig.returns.len() > 0 {
-                            labels.push(diag_func_sig_return_label(func_sig));
+                            labels.push(diag_func_sig_return_label(&func_sig));
                         }
                         labels
                     }),
-                )
-            }
-            StatementError::MismatchedReturnValueTypeError {
-                ref func_sig,
-                ref return_types,
-                index,
-            } => Self::new(&err, DiagnosticLevel::Error).with_context(
-                DiagnosticContext::new(diag_expected_actual(
-                    &func_sig.returns[index],
-                    &return_types[index],
-                    return_types.source().unwrap(), // Can't have 0 return types for this error
-                ))
-                .with_labels(vec![
-                    diag_func_name_label(func_sig),
-                    diag_func_sig_return_label(func_sig),
-                ]),
             ),
+
             StatementError::ExpressionError(err) => err.into(),
             StatementError::ScopeError(err) => err.into(),
         }
@@ -190,10 +159,7 @@ pub(super) fn analyze_statement(
                 None => {}
             };
         }
-        Statement::Return {
-            expressions,
-            source,
-        } => {
+        Statement::Return { expressions, .. } => {
             let mut return_types = Types::new();
 
             for expression in expressions {
@@ -210,17 +176,16 @@ pub(super) fn analyze_statement(
 
             // Ensure that the function returns the correct types
             if func_sig.returns.len() != return_types.len() {
-                errors.push(StatementError::WrongNumberOfReturnValuesError {
+                errors.push(StatementError::ReturnValueMismatchError {
                     func_sig: func_sig.clone(),
                     return_types,
                 })
             } else {
                 for (i, return_type) in func_sig.returns.iter().enumerate() {
                     if *return_type != return_types[i] {
-                        errors.push(StatementError::MismatchedReturnValueTypeError {
+                        errors.push(StatementError::ReturnValueMismatchError {
                             func_sig: func_sig.clone(),
                             return_types: return_types.clone(),
-                            index: i,
                         })
                     }
                 }

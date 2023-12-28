@@ -85,7 +85,7 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Result<(), Vec<
             }
 
             match statement {
-                Statement::Return { expressions, .. } => has_return_statement = true,
+                Statement::Return { .. } => has_return_statement = true,
                 _ => {}
             }
         }
@@ -93,7 +93,7 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Result<(), Vec<
         // Check for a function that has return types but does not have a return statement
         if !has_return_statement && function.signature.returns.len() > 0 {
             errors.push(SemanticError::StatementError(
-                StatementError::WrongNumberOfReturnValuesError {
+                StatementError::ReturnValueMismatchError {
                     func_sig: function.signature.clone(),
                     return_types: Types::new(),
                 },
