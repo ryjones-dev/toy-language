@@ -20,6 +20,10 @@ impl Variable {
     pub(crate) fn source(&self) -> SourceRange {
         self.name.source()
     }
+
+    pub(crate) fn is_discarded(&self) -> bool {
+        self.name.is_discarded()
+    }
 }
 
 /// Built in conversion for turning function parameters into variables

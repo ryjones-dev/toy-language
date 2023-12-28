@@ -21,7 +21,7 @@ pub enum StatementError {
     #[error("wrong number of variables in expression assignment")]
     WrongNumberOfVariablesError {
         expected: Types,
-        actual: Vec<Option<Variable>>,
+        actual: Vec<Variable>,
     },
     #[error(
         "mismatched variable type in expression assignment for \"{actual}\". expected: {expected}, actual: {}",
@@ -137,29 +137,25 @@ pub(super) fn analyze_statement(
                 });
             } else {
                 for (i, variable) in variables.iter_mut().enumerate() {
-                    if let Some(variable) = variable {
-                        // If the variable type is None, this is a new variable definition.
-                        // Set the variable type to the corresponding expression result type.
-                        if variable.ty == None {
-                            variable.ty = Some(types[i].into());
-                        }
+                    // If the variable type is None, this is a new variable definition.
+                    // Set the variable type to the corresponding expression result type.
+                    if variable.ty == None {
+                        variable.ty = Some(types[i].into());
+                    }
 
-                        if variable.ty.unwrap() != types[i] {
-                            errors.push(StatementError::MismatchedTypeAssignmentError {
-                                expected: types[i],
-                                actual: variable.clone(),
-                            });
-                        }
+                    if variable.ty.unwrap() != types[i] {
+                        errors.push(StatementError::MismatchedTypeAssignmentError {
+                            expected: types[i],
+                            actual: variable.clone(),
+                        });
                     }
                 }
             }
 
             // Always add the variables to the scope so that additional errors are not unnecessarily added downstream
             for variable in variables {
-                if let Some(variable) = variable {
-                    if let Err(err) = scope.insert_var(variable.clone()) {
-                        errors.push(StatementError::ScopeError(err));
-                    }
+                if let Err(err) = scope.insert_var(variable.clone()) {
+                    errors.push(StatementError::ScopeError(err));
                 }
             }
         }

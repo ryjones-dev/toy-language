@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::diagnostic::Diagnostic;
+use crate::diagnostic::{Diagnostic, DiagnosticLevel};
 
 use self::{
     ast::AbstractSyntaxTree,
@@ -44,7 +44,7 @@ impl<L: std::fmt::Display> From<peg::error::ParseError<L>> for ParseError {
 
 impl From<ParseError> for Diagnostic {
     fn from(err: ParseError) -> Self {
-        todo!()
+        Self::new(err.to_string(), DiagnosticLevel::Error)
     }
 }
 
@@ -83,8 +83,8 @@ peg::parser!(pub(crate) grammar parser() for str {
         = _ "->" _ r:(e:((_ e:expression() _ {e}) ++ ",")) _ { Statement::Return(r) }
 
     rule assignment() -> Statement
-        = idents:((_ i:identifier() _ { Some(i) } / _ "_" _ { None }) ** ",") _ "=" _ e:expression() {
-            Statement::Assignment(idents.into_iter().map(|ident| ident.map(|ident| Variable::new(ident))).collect(), e)
+        = idents:((_ i:identifier() _ { i }) ++ ",") _ "=" _ e:expression() {
+            Statement::Assignment(idents.into_iter().map(|ident| Variable::new(ident)).collect(), e)
         }
 
     // Each level of precedence is notated by a "--" line. Precedence is in ascending order.
@@ -120,7 +120,7 @@ peg::parser!(pub(crate) grammar parser() for str {
         = s:position!() t:$("int" / "bool") e:position!()  { Type::new(t.parse().expect("unknown type"), (s..=e).into()) }
 
     rule identifier() -> Identifier
-            = quiet!{ s:position!() n:$(['a'..='z' | 'A'..='Z']['a'..='z' | 'A'..='Z' | '0'..='9' | '_']*) e:position!() {
+            = quiet!{ s:position!() n:$(['_' | 'a'..='z' | 'A'..='Z']['a'..='z' | 'A'..='Z' | '0'..='9' | '_']*) e:position!() {
                 Identifier::new(n.to_string(), (s..=e).into())
             }}
             / expected!("identifier")

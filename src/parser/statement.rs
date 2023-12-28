@@ -13,9 +13,11 @@ use super::{
 /// Anything in a function that is not just an expression is often a statement.
 #[derive(Debug)]
 pub(crate) enum Statement {
-    /// An assignment variable can either be a [`Variable`], or the discard identifier ("_"),
-    /// which is represented by [`None`].
-    Assignment(Vec<Option<Variable>>, Expression),
+    /// Assignments must have an equal number of variables compared with the expression's return values.
+    ///
+    /// If the results of an expression are not needed, they still must be assigned to a variable.
+    /// A discarded variable can be used to signify that the results are intentionally being ignored.
+    Assignment(Vec<Variable>, Expression),
     /// Call a function with no return values as a free-standing statement.
     /// The function must return no values, otherwise a [`Statement::Assignment`] must be used.
     FunctionCall(FunctionCall),

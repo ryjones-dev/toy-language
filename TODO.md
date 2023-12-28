@@ -27,8 +27,12 @@
 - [x]  Add source locations to each AST type
 - [x]  Add [codespan-reporting](https://github.com/brendanzab/codespan) and set up one basic error message using source location
 - [x]  Add a `source()` method to expressions and statements so that more source code can be pulled to support recommended fixes
-- [ ]  Variables in `Statement::Assignment` should not be optional so that their `SourceRange` can still be utilized for `WrongNumberOfVariablesError`
+- [x]  Variables in `Statement::Assignment` should not be optional so that their `SourceRange` can still be utilized for `WrongNumberOfVariablesError`
+- [ ]  `Diagnostic` should take an error instead of a `String` message
+- [ ]  Instead of generating `SourceRange`s in a `source()` method, statements and expressions should have their own parsed `SourceRange` fields that they return
 - [ ]  Update all error types to use codespan-reporting
+- [ ]  Add a diagnostic error for using a discarded variable
+- [ ]  Add a diagnostic warning for unused variables
 - [ ]  Pattern matching
 - [ ]  Check that all blocks in a function return the same number and type of values
 - [ ]  Add syntactic sugar for pattern matching on a bool with only a true arm, akin to an if statement

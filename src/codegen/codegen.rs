@@ -286,7 +286,7 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
                 // Declare and define the variables
                 for (i, variable) in variables.into_iter().enumerate() {
                     // Only declare and define variable identifiers if they are not the discard identifier.
-                    if let Some(variable) = variable {
+                    if !variable.is_discarded() {
                         let cranelift_variable =
                             cranelift::frontend::Variable::from_u32(block_vars.var(variable.name));
 

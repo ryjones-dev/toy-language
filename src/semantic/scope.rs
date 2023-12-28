@@ -61,6 +61,11 @@ impl Scope<'_> {
     }
 
     pub(crate) fn insert_var(&mut self, variable: Variable) -> Result<(), ScopeError> {
+        // Attempting to insert a discarded variable is a no-op
+        if variable.is_discarded() {
+            return Ok(());
+        }
+
         if self.variables.contains_key(&variable.name) {
             return Err(ScopeError::VariableAlreadyDefinedError(variable.name));
         }

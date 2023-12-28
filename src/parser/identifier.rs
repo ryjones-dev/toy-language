@@ -2,12 +2,11 @@ use super::source_range::SourceRange;
 
 /// A distinct type that is used to represent names of functions and variables.
 ///
-/// It contains extra information about where in the source code it is located,
+/// This is just a [`String`] with extra information about where in the source code it is located,
 /// which is needed for helpful error messages.
 ///
-/// While there are contexts where using the discard identifier (`"_"`) makes sense, it is not universal,
-/// so instead of building it in to the type, the discard identifier is individually considered in the contexts
-/// it make sense.
+/// Identifiers can be discarded by prefixing the name with an underscore. This means that the variable
+/// is intentionally not used. If the variable is discarded but then later used, this results in a compile error.
 #[derive(Debug, Clone, Eq)]
 pub struct Identifier {
     val: String,
@@ -21,6 +20,10 @@ impl Identifier {
 
     pub(crate) fn source(&self) -> SourceRange {
         self.source
+    }
+
+    pub(super) fn is_discarded(&self) -> bool {
+        self.val.starts_with("_")
     }
 }
 
