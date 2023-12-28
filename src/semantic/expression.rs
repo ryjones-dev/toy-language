@@ -164,7 +164,7 @@ pub(super) fn analyze_expression(
                 variable.ty = scope_var.ty;
                 types.push(Type::new(
                     variable.ty.expect(EXPECT_VAR_TYPE),
-                    variable.source(),
+                    variable.name.source(),
                 ))
             }
             None => errors.push(ExpressionError::UnknownVariableError(variable.name.clone())),

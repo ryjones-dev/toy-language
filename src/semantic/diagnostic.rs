@@ -1,10 +1,21 @@
 //! Helper functions for creating common [`DiagnosticMessage`]s.
 use crate::{
     diagnostic::DiagnosticMessage,
-    parser::{function::FunctionSignature, types::Types},
+    parser::{
+        function::FunctionSignature,
+        types::{Type, Types},
+        variable::Variable,
+    },
 };
 
-/// Creates a new [`DiagnosticMessage`] comparing lists of types.
+/// Creates a new [`DiagnosticMessage`] comparing two types.
+///
+/// The returned [`DiagnosticMessage`] will have the source range from `actual`.
+pub(super) fn diag_expected_type(expected: &Type, actual: &Type) -> DiagnosticMessage {
+    diag_expected_types(&vec![*expected].into(), &vec![*actual].into())
+}
+
+/// Creates a new [`DiagnosticMessage`] comparing two lists of types.
 ///
 /// The returned [`DiagnosticMessage`] will have the source range from `actual`,
 /// unless `actual` is empty in which case it will have the source range from `expected`.
@@ -21,6 +32,14 @@ pub(super) fn diag_expected_types(expected: &Types, actual: &Types) -> Diagnosti
         } else {
             panic!("no types to get a source range from")
         },
+    )
+}
+
+/// Creates a new [`DiagnosticMessage`] labeling the variable's name.
+pub(super) fn diag_var_name_label(variable: &Variable) -> DiagnosticMessage {
+    DiagnosticMessage::new(
+        format!("for variable `{}`", variable.name),
+        variable.name.source(),
     )
 }
 

@@ -11,9 +11,13 @@ use crate::{
 };
 
 use super::{
-    diagnostic::{diag_expected_types, diag_func_name_label, diag_func_sig_return_label},
+    diagnostic::{
+        diag_expected_type, diag_expected_types, diag_func_name_label, diag_func_sig_return_label,
+        diag_var_name_label,
+    },
     expression::{analyze_expression, analyze_function_call, ExpressionError},
     scope::{Scope, ScopeError},
+    EXPECT_VAR_TYPE,
 };
 
 #[derive(Debug, Error)]
@@ -23,11 +27,8 @@ pub(super) enum StatementError {
         expected: Types,
         actual: Vec<Variable>,
     },
-    #[error(
-        "mismatched variable type in expression assignment for \"{actual}\". expected: {expected}, actual: {}",
-        if .actual.ty.is_some() { .actual.ty.unwrap().to_string() } else { "unknown".to_string() }
-    )]
-    MismatchedTypeAssignmentError { expected: Type, actual: Variable },
+    #[error("assignment type mismatch")]
+    AssignmentTypeMismatchError { expected: Type, actual: Variable },
     #[error("function results are not stored")]
     NonZeroReturnError {
         func_sig: FunctionSignature,
@@ -48,7 +49,16 @@ impl From<StatementError> for Diagnostic {
     fn from(err: StatementError) -> Self {
         match err {
             StatementError::WrongNumberOfVariablesError { expected, actual } => todo!(),
-            StatementError::MismatchedTypeAssignmentError { expected, actual } => todo!(),
+            StatementError::AssignmentTypeMismatchError {
+                ref expected,
+                ref actual,
+            } => Self::new(&err, DiagnosticLevel::Error).with_context(
+                DiagnosticContext::new(diag_expected_type(
+                    expected,
+                    &Type::new(actual.ty.expect(EXPECT_VAR_TYPE), actual.name.source()),
+                ))
+                .with_labels(vec![diag_var_name_label(actual)]),
+            ),
             StatementError::NonZeroReturnError {
                 ref func_sig,
                 ref function_call,
@@ -121,7 +131,7 @@ pub(super) fn analyze_statement(
                     }
 
                     if variable.ty.unwrap() != types[i] {
-                        errors.push(StatementError::MismatchedTypeAssignmentError {
+                        errors.push(StatementError::AssignmentTypeMismatchError {
                             expected: types[i],
                             actual: variable.clone(),
                         });

@@ -17,10 +17,6 @@ impl Variable {
         Self { name, ty: None }
     }
 
-    pub(crate) fn source(&self) -> SourceRange {
-        self.name.source()
-    }
-
     pub(crate) fn is_discarded(&self) -> bool {
         self.name.is_discarded()
     }
