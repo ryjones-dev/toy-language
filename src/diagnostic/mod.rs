@@ -18,13 +18,28 @@ impl DiagnosticMessage {
     }
 
     fn to_primary<F>(self, file_id: F) -> codespan_reporting::diagnostic::Label<F> {
-        codespan_reporting::diagnostic::Label::primary(file_id, self.source)
+        codespan_reporting::diagnostic::Label::primary(file_id, Self::to_range(self.source))
             .with_message(self.message)
     }
 
     fn to_secondary<F>(self, file_id: F) -> codespan_reporting::diagnostic::Label<F> {
-        codespan_reporting::diagnostic::Label::secondary(file_id, self.source)
+        codespan_reporting::diagnostic::Label::secondary(file_id, Self::to_range(self.source))
             .with_message(self.message)
+    }
+
+    /// Gross conversion from [`SourceRange`] -> [`std::ops::RangeInclusive<usize>`] -> [`std::ops::Range<usize>`].
+    ///
+    /// [`codespan_reporting`] only accepts a [`std::ops::Range<usize>`] for some reason, even though it is operating on indices
+    /// and [`std::ops::RangeInclusive<usize>`] would make more sense.
+    /// This is the only place where we need to interface with [`codespan_reporting`]'s range, so
+    /// rather than implementing `From<SourceRange> for Range<usize>` and confuse the rest of the codebase,
+    /// we just do a double conversion here.
+    fn to_range(source: SourceRange) -> std::ops::Range<usize> {
+        let range = std::ops::RangeInclusive::<usize>::from(source);
+
+        // Note that we are not adding 1 to the end when converting to a normal Range,
+        // as this is what codespan_reporting expects for some reason.
+        *range.start()..*range.end()
     }
 }
 

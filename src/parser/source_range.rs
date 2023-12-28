@@ -31,12 +31,6 @@ impl From<SourceRange> for std::ops::RangeInclusive<usize> {
     }
 }
 
-impl From<SourceRange> for std::ops::Range<usize> {
-    fn from(value: SourceRange) -> Self {
-        value.start..value.end + 1
-    }
-}
-
 impl From<std::ops::RangeInclusive<usize>> for SourceRange {
     fn from(value: std::ops::RangeInclusive<usize>) -> Self {
         Self {
