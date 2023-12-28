@@ -16,12 +16,6 @@ impl FunctionParameter {
     pub(super) fn new(name: Identifier, ty: Type) -> Self {
         Self { name, ty }
     }
-
-    /// Returns a [`SourceRange`] from the start of the parameter's name
-    /// to the end of the parameter's type.
-    pub(crate) fn source(&self) -> SourceRange {
-        self.name.source().combine(self.ty.source())
-    }
 }
 
 impl std::fmt::Display for FunctionParameter {
@@ -39,21 +33,6 @@ pub(crate) struct FunctionParameters(Vec<FunctionParameter>);
 impl FunctionParameters {
     pub(crate) fn new() -> Self {
         Self(Vec::new())
-    }
-
-    /// Returns a [`SourceRange`] from the beginning of the parameter list to the end.
-    /// Returns [`None`] if the parameter list is empty.
-    pub(crate) fn source(&self) -> Option<SourceRange> {
-        if self.len() > 0 {
-            Some(
-                self.first()
-                    .unwrap()
-                    .source()
-                    .combine(self.last().unwrap().source()),
-            )
-        } else {
-            None
-        }
     }
 }
 
@@ -105,26 +84,7 @@ pub(crate) struct FunctionSignature {
     pub(crate) name: Identifier,
     pub(crate) params: FunctionParameters,
     pub(crate) returns: Types,
-}
-
-impl FunctionSignature {
-    /// Returns a [`SourceRange`] from the beginning of the function signature to the end.
-    /// The end of the function signature will change depending on if the function signature
-    /// has return types and/or parameters defined.
-    pub(crate) fn source(&self) -> SourceRange {
-        let start_source = self.name.source();
-        let end_source = if self.returns.len() > 0 {
-            self.returns.source().unwrap()
-        } else {
-            if self.params.len() > 0 {
-                self.params.source().unwrap()
-            } else {
-                start_source
-            }
-        };
-
-        start_source.combine(end_source)
-    }
+    pub(crate) source: SourceRange,
 }
 
 /// A TODO_LANG_NAME function is a set of parameterized statements that can be executed from other parts of the program.
@@ -149,27 +109,8 @@ pub(crate) struct Function {
 pub(crate) struct FunctionCall {
     pub(crate) name: Identifier,
     pub(crate) arguments: Vec<Expression>,
+    pub(crate) source: SourceRange,
 
     pub(crate) argument_types: Option<Types>,
     pub(crate) return_types: Option<Types>,
-}
-
-impl FunctionCall {
-    /// Returns a [`SourceRange`] from the start of the function call's name to
-    /// the end of the function call's arguments, or to the end of the function call's
-    /// name if the function call has no arguments.
-    pub(crate) fn source(&self) -> SourceRange {
-        let start_source = self.name.source();
-        let end_source = if self.arguments.len() > 0 {
-            self.arguments
-                .first()
-                .unwrap()
-                .source()
-                .combine(self.arguments.last().unwrap().source())
-        } else {
-            start_source
-        };
-
-        start_source.combine(end_source)
-    }
 }

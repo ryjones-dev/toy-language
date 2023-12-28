@@ -79,13 +79,27 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
     /// so no error needs to be returned.
     pub(super) fn generate(&mut self, expression: Expression) -> Vec<ExpressionValue> {
         match expression {
-            Expression::BooleanComparison(comparison_type, lhs, rhs) => {
+            Expression::BooleanComparison {
+                comparison_type,
+                lhs,
+                rhs,
+                ..
+            } => {
                 vec![self.generate_boolean_comparison(comparison_type, *lhs, *rhs)]
             }
-            Expression::BinaryMathOperation(operation_type, lhs, rhs) => {
+            Expression::BinaryMathOperation {
+                operation_type,
+                lhs,
+                rhs,
+                ..
+            } => {
                 vec![self.generate_binary_operation(operation_type, *lhs, *rhs)]
             }
-            Expression::UnaryMathOperation(operation_type, expression) => {
+            Expression::UnaryMathOperation {
+                operation_type,
+                expression,
+                ..
+            } => {
                 vec![self.generate_unary_operation(operation_type, *expression)]
             }
             Expression::FunctionCall(function_call) => self.generate_function_call(function_call),
@@ -213,6 +227,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
             arguments,
             argument_types,
             return_types,
+            ..
         }: FunctionCall,
     ) -> Vec<ExpressionValue> {
         // Because we've already done semantic analysis, we know that the function being called is defined,

@@ -3,7 +3,9 @@ use thiserror::Error;
 use crate::{
     diagnostic::Diagnostic,
     parser::{
-        expression::{BooleanComparisonType, Expression, UnaryMathOperationType},
+        expression::{
+            BinaryMathOperationType, BooleanComparisonType, Expression, UnaryMathOperationType,
+        },
         function::{FunctionCall, FunctionSignature},
         identifier::Identifier,
         types::{DataType, Type, Types},
@@ -71,7 +73,12 @@ pub(super) fn analyze_expression(
     let mut errors = Vec::new();
 
     match expression {
-        Expression::BooleanComparison(comparison_type, lhs, rhs) => {
+        Expression::BooleanComparison {
+            comparison_type,
+            lhs,
+            rhs,
+            source,
+        } => {
             let (lhs_types, mut errs) = analyze_expression(lhs, scope);
             errors.append(&mut errs);
             let (rhs_types, mut errs) = analyze_expression(rhs, scope);
@@ -81,7 +88,7 @@ pub(super) fn analyze_expression(
                 BooleanComparisonType::Equal | BooleanComparisonType::NotEqual => {
                     if expect_any_single_type(&lhs_types, &mut errors) {
                         if expect_single_type(&rhs_types, lhs_types[0], &mut errors) {
-                            types.push(Type::new(DataType::Bool, expression.source()));
+                            types.push(Type::new(DataType::Bool, *source));
                         }
                     }
                 }
@@ -92,32 +99,48 @@ pub(super) fn analyze_expression(
                 | BooleanComparisonType::GreaterThanEqual => {
                     if expect_single_type(&lhs_types, DataType::Int, &mut errors) {
                         if expect_single_type(&rhs_types, DataType::Int, &mut errors) {
-                            types.push(Type::new(DataType::Bool, expression.source()));
+                            types.push(Type::new(DataType::Bool, *source));
                         }
                     }
                 }
             };
         }
-        Expression::BinaryMathOperation(operation_type, lhs, rhs) => {
-            // TODO: Handle floats later
-            let (lhs_types, mut errs) = analyze_expression(lhs, scope);
-            errors.append(&mut errs);
-            let (rhs_types, mut errs) = analyze_expression(rhs, scope);
-            errors.append(&mut errs);
+        Expression::BinaryMathOperation {
+            operation_type,
+            lhs,
+            rhs,
+            source,
+        } => {
+            match operation_type {
+                BinaryMathOperationType::Add
+                | BinaryMathOperationType::Subtract
+                | BinaryMathOperationType::Multiply
+                | BinaryMathOperationType::Divide => {
+                    // TODO: Handle floats later
+                    let (lhs_types, mut errs) = analyze_expression(lhs, scope);
+                    errors.append(&mut errs);
+                    let (rhs_types, mut errs) = analyze_expression(rhs, scope);
+                    errors.append(&mut errs);
 
-            if expect_single_type(&lhs_types, DataType::Int, &mut errors) {
-                if expect_single_type(&rhs_types, DataType::Int, &mut errors) {
-                    types.push(Type::new(DataType::Int, expression.source()));
+                    if expect_single_type(&lhs_types, DataType::Int, &mut errors) {
+                        if expect_single_type(&rhs_types, DataType::Int, &mut errors) {
+                            types.push(Type::new(DataType::Int, *source));
+                        }
+                    }
                 }
             }
         }
-        Expression::UnaryMathOperation(operation_type, expression) => match operation_type {
+        Expression::UnaryMathOperation {
+            operation_type,
+            expression,
+            source,
+        } => match operation_type {
             UnaryMathOperationType::Negate => {
                 let (ty, mut errs) = analyze_expression(expression, scope);
                 errors.append(&mut errs);
 
                 if expect_single_type(&ty, DataType::Int, &mut errors) {
-                    types.push(Type::new(DataType::Int, expression.source()))
+                    types.push(Type::new(DataType::Int, *source))
                 }
             }
         },
@@ -146,8 +169,8 @@ pub(super) fn analyze_expression(
             }
             None => errors.push(ExpressionError::UnknownVariableError(variable.name.clone())),
         },
-        Expression::IntLiteral(literal) => types.push(Type::new(DataType::Int, literal.source())),
-        Expression::BoolLiteral(literal) => types.push(Type::new(DataType::Bool, literal.source())),
+        Expression::IntLiteral(literal) => types.push(Type::new(DataType::Int, literal.source)),
+        Expression::BoolLiteral(literal) => types.push(Type::new(DataType::Bool, literal.source)),
     };
 
     (types, errors)

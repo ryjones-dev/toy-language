@@ -57,17 +57,18 @@ peg::parser!(pub(crate) grammar parser() for str {
         = f:function()* { AbstractSyntaxTree(f) }
 
     rule function() -> Function
-        = _ i:identifier() _ "(" _
+        = _ s:position!() i:identifier() _ "(" _
         p:((_ i:identifier() _ t:_type() _ { (i, t) }) ** ",") _ ")"
-        r:(_ "->" r:((_ t:_type() _ { t }) ++ ",") {r})?
-        _ s:scope() _ {
+        r:(_ "->" r:((_ t:_type() _ { t }) ++ ",") {r})? e:position!()
+        _ body:scope() _ {
             Function {
                 signature: FunctionSignature {
                     name: i,
                     params: p.into_iter().map(|(param_name, param_type)| FunctionParameter::new(param_name, param_type)).collect(),
-                    returns: r.unwrap_or(Vec::default()).into()
+                    returns: r.unwrap_or(Vec::default()).into(),
+                    source: (s..=e).into()
                 },
-                body: s
+                body
             }
         }
 
@@ -80,30 +81,33 @@ peg::parser!(pub(crate) grammar parser() for str {
         / _ r:return_statement() _ { r }
 
     rule return_statement() -> Statement
-        = _ "->" _ r:(e:((_ e:expression() _ {e}) ++ ",")) _ { Statement::Return(r) }
+        = s:position!() "->" _ r:(e:((_ e:expression() _ {e}) ++ ",")) e:position!() { Statement::Return { expressions: r, source: (s..=e).into() } }
 
     rule assignment() -> Statement
-        = idents:((_ i:identifier() _ { i }) ++ ",") _ "=" _ e:expression() {
-            Statement::Assignment(idents.into_iter().map(|ident| Variable::new(ident)).collect(), e)
+        = s:position!() idents:((_ i:identifier() _ { i }) ++ ",") _ "=" _ expr:expression() e:position!() {
+            Statement::Assignment { variables: idents.into_iter().map(|ident|Variable::new(ident)).collect(), expression: expr, source: (s..=e).into() }
         }
 
     // Each level of precedence is notated by a "--" line. Precedence is in ascending order.
     // Expressions between the same "--" lines have the same level of precedence.
-    rule expression() -> Expression = precedence! {
-        a:(@) _ "==" _ b:@ { Expression::BooleanComparison(BooleanComparisonType::Equal, Box::new(a), Box::new(b)) }
-        a:(@) _ "!=" _ b:@ { Expression::BooleanComparison(BooleanComparisonType::NotEqual, Box::new(a), Box::new(b)) }
-        a:(@) _ "<" _ b:@ { Expression::BooleanComparison(BooleanComparisonType::LessThan, Box::new(a), Box::new(b)) }
-        a:(@) _ "<=" _ b:@ { Expression::BooleanComparison(BooleanComparisonType::LessThanEqual, Box::new(a), Box::new(b)) }
-        a:(@) _ ">" _ b:@ { Expression::BooleanComparison(BooleanComparisonType::GreaterThan, Box::new(a), Box::new(b)) }
-        a:(@) _ ">=" _ b:@ { Expression::BooleanComparison(BooleanComparisonType::GreaterThanEqual, Box::new(a), Box::new(b)) }
+    rule expression() -> Expression = s:position!() expr:precedence! {
+        // We can't add the start and end positions to each expression type due to the precedence!() macro,
+        // so we have to grossly create each expression twice, first with all of the parsed expression info,
+        // then again with the source range.
+        a:(@) _ "==" _ b:@ { Expression::BooleanComparison { comparison_type: BooleanComparisonType::Equal, lhs: Box::new(a), rhs: Box::new(b), source: (0..=0).into() }}
+        a:(@) _ "!=" _ b:@ { Expression::BooleanComparison { comparison_type: BooleanComparisonType::NotEqual, lhs: Box::new(a), rhs: Box::new(b), source: (0..=0).into() }}
+        a:(@) _ "<" _ b:@ { Expression::BooleanComparison { comparison_type: BooleanComparisonType::LessThan, lhs: Box::new(a), rhs: Box::new(b), source: (0..=0).into() }}
+        a:(@) _ "<=" _ b:@ { Expression::BooleanComparison { comparison_type: BooleanComparisonType::LessThanEqual, lhs: Box::new(a), rhs: Box::new(b), source: (0..=0).into() }}
+        a:(@) _ ">" _ b:@ { Expression::BooleanComparison { comparison_type: BooleanComparisonType::GreaterThan, lhs: Box::new(a), rhs: Box::new(b), source: (0..=0).into() }}
+        a:(@) _ ">=" _ b:@ { Expression::BooleanComparison { comparison_type: BooleanComparisonType::GreaterThanEqual, lhs: Box::new(a), rhs: Box::new(b), source: (0..=0).into() }}
         --
-        a:(@) _ "+" _ b:@ { Expression::BinaryMathOperation(BinaryMathOperationType::Add, Box::new(a), Box::new(b)) }
-        a:(@) _ "-" _ b:@ { Expression::BinaryMathOperation(BinaryMathOperationType::Subtract, Box::new(a), Box::new(b)) }
+        a:(@) _ "+" _ b:@ { Expression::BinaryMathOperation { operation_type: BinaryMathOperationType::Add, lhs: Box::new(a), rhs: Box::new(b), source: (0..=0).into() }}
+        a:(@) _ "-" _ b:@ { Expression::BinaryMathOperation { operation_type: BinaryMathOperationType::Subtract, lhs: Box::new(a), rhs: Box::new(b), source: (0..=0).into() }}
         --
-        a:(@) _ "*" _ b:@ { Expression::BinaryMathOperation(BinaryMathOperationType::Multiply, Box::new(a), Box::new(b)) }
-        a:(@) _ "/" _ b:@ { Expression::BinaryMathOperation(BinaryMathOperationType::Divide, Box::new(a), Box::new(b)) }
+        a:(@) _ "*" _ b:@ { Expression::BinaryMathOperation { operation_type: BinaryMathOperationType::Multiply, lhs: Box::new(a), rhs: Box::new(b), source: (0..=0).into() }}
+        a:(@) _ "/" _ b:@ { Expression::BinaryMathOperation { operation_type: BinaryMathOperationType::Divide, lhs: Box::new(a), rhs: Box::new(b), source: (0..=0).into() }}
         --
-        "-" e:@ { Expression::UnaryMathOperation(UnaryMathOperationType::Negate, Box::new(e)) }
+        "-" e:@ { Expression::UnaryMathOperation { operation_type: UnaryMathOperationType::Negate, expression: Box::new(e), source: (0..=0).into() }}
         --
         c:call_function() { Expression::FunctionCall(c) }
         --
@@ -111,10 +115,22 @@ peg::parser!(pub(crate) grammar parser() for str {
         l:int_literal() { Expression::IntLiteral(l) }
         b:bool_literal() { Expression::BoolLiteral(b) }
         i:identifier() { Expression::Variable(Variable::new(i)) }
+    } e:position!() {
+        match expr {
+            Expression::BooleanComparison { comparison_type, lhs, rhs, .. } => Expression::BooleanComparison { comparison_type, lhs, rhs, source: (s..=e).into() },
+            Expression::BinaryMathOperation { operation_type, lhs, rhs, .. } => Expression::BinaryMathOperation { operation_type, lhs, rhs, source: (s..=e).into() },
+            Expression::UnaryMathOperation { operation_type, expression, .. } => Expression::UnaryMathOperation { operation_type, expression, source: (s..=e).into() },
+            Expression::FunctionCall(function_call) => Expression::FunctionCall(function_call),
+            Expression::Variable(variable) => Expression::Variable(variable),
+            Expression::IntLiteral(literal) => Expression::IntLiteral(literal),
+            Expression::BoolLiteral(literal) => Expression::BoolLiteral(literal),
+        }
     }
 
     rule call_function() -> FunctionCall
-        = i:identifier() _ "(" _ args:((_ e:expression() _ {e}) ** ",") _ ")" { FunctionCall {name: i, arguments: args, argument_types: None, return_types: None } }
+        = s:position!() i:identifier() _ "(" _ args:((_ e:expression() _ {e}) ** ",") _ ")" e:position!() {
+            FunctionCall {name: i, arguments: args, source: (s..=e).into(), argument_types: None, return_types: None }
+        }
 
     rule _type() -> Type
         = s:position!() t:$("int" / "bool") e:position!()  { Type::new(t.parse().expect("unknown type"), (s..=e).into()) }

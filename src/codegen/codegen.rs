@@ -274,7 +274,11 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
         statement: Statement,
     ) {
         match statement {
-            Statement::Assignment(variables, expression) => {
+            Statement::Assignment {
+                variables,
+                expression,
+                ..
+            } => {
                 // Generate IR for the expression on the right-hand side of the equals sign
                 let values;
                 {
@@ -305,7 +309,7 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
 
                 expression_generator.generate(Expression::FunctionCall(function_call));
             }
-            Statement::Return(expressions) => {
+            Statement::Return { expressions, .. } => {
                 let mut return_values = Vec::new();
 
                 for expression in expressions {

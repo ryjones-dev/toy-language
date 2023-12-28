@@ -17,31 +17,16 @@ pub(crate) enum Statement {
     ///
     /// If the results of an expression are not needed, they still must be assigned to a variable.
     /// A discarded variable can be used to signify that the results are intentionally being ignored.
-    Assignment(Vec<Variable>, Expression),
+    Assignment {
+        variables: Vec<Variable>,
+        expression: Expression,
+        source: SourceRange,
+    },
     /// Call a function with no return values as a free-standing statement.
     /// The function must return no values, otherwise a [`Statement::Assignment`] must be used.
     FunctionCall(FunctionCall),
-    Return(Vec<Expression>),
-}
-
-impl Statement {
-    /// Returns a [`SourceRange`] that captures the entire statement's source code.
-    pub(crate) fn source(&self) -> SourceRange {
-        match self {
-            Statement::Assignment(variables, expression) => {
-                todo!("Need to refactor variables that might be discarded")
-            }
-            Statement::FunctionCall(function_call) => function_call.source(),
-            Statement::Return(expressions) => expressions
-                .first()
-                .expect("there must be at least one return expression")
-                .source()
-                .combine(
-                    expressions
-                        .last()
-                        .expect("there must be at least one return expression")
-                        .source(),
-                ),
-        }
-    }
+    Return {
+        expressions: Vec<Expression>,
+        source: SourceRange,
+    },
 }

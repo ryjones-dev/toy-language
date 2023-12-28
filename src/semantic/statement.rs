@@ -61,7 +61,7 @@ impl From<StatementError> for Diagnostic {
             } => Self::new(&err, DiagnosticLevel::Error).with_context(
                 DiagnosticContext::new(DiagnosticMessage::new(
                     "if this is intentional, use the discard identifier (`_`)",
-                    function_call.source(),
+                    function_call.source,
                 ))
                 .with_labels(vec![
                     diag_func_sig_label(func_sig),
@@ -121,7 +121,11 @@ pub(super) fn analyze_statement(
 ) -> Result<(), Vec<StatementError>> {
     let mut errors = Vec::new();
     match statement {
-        Statement::Assignment(variables, expression) => {
+        Statement::Assignment {
+            variables,
+            expression,
+            source,
+        } => {
             let (types, errs) = analyze_expression(expression, &scope);
             errors.append(
                 &mut errs
@@ -182,7 +186,10 @@ pub(super) fn analyze_statement(
                 None => {}
             };
         }
-        Statement::Return(expressions) => {
+        Statement::Return {
+            expressions,
+            source,
+        } => {
             let mut return_types = Types::new();
 
             for expression in expressions {

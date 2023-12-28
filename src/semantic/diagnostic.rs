@@ -15,10 +15,7 @@ pub(super) fn diag_expected_actual<T: std::fmt::Display>(
 
 /// Creates a new [`DiagnosticMessage`] labeling the entire function signature.
 pub(super) fn diag_func_sig_label(func_sig: &FunctionSignature) -> DiagnosticMessage {
-    DiagnosticMessage::new(
-        format!("for function `{}`", func_sig.name),
-        func_sig.source(),
-    )
+    DiagnosticMessage::new(format!("for function `{}`", func_sig.name), func_sig.source)
 }
 
 /// Creates a new [`DiagnosticMessage`] labeling a function signature's return types.

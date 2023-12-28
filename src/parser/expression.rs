@@ -61,28 +61,27 @@ pub(crate) enum UnaryMathOperationType {
 /// in a container type such as [`Box`] or [`Vec`].
 #[derive(Debug, Clone)]
 pub(crate) enum Expression {
-    BooleanComparison(BooleanComparisonType, Box<Expression>, Box<Expression>),
-    BinaryMathOperation(BinaryMathOperationType, Box<Expression>, Box<Expression>),
-    UnaryMathOperation(UnaryMathOperationType, Box<Expression>),
+    BooleanComparison {
+        comparison_type: BooleanComparisonType,
+        lhs: Box<Expression>,
+        rhs: Box<Expression>,
+        source: SourceRange,
+    },
+    BinaryMathOperation {
+        operation_type: BinaryMathOperationType,
+        lhs: Box<Expression>,
+        rhs: Box<Expression>,
+        source: SourceRange,
+    },
+    UnaryMathOperation {
+        operation_type: UnaryMathOperationType,
+        expression: Box<Expression>,
+        source: SourceRange,
+    },
 
     FunctionCall(FunctionCall),
 
     Variable(Variable),
     IntLiteral(IntLiteral),
     BoolLiteral(BoolLiteral),
-}
-
-impl Expression {
-    /// Returns a [`SourceRange`] that captures the entire expression's source code.
-    pub(crate) fn source(&self) -> SourceRange {
-        match self {
-            Expression::BooleanComparison(_, lhs, rhs) => lhs.source().combine(rhs.source()),
-            Expression::BinaryMathOperation(_, lhs, rhs) => lhs.source().combine(rhs.source()),
-            Expression::UnaryMathOperation(_, expression) => expression.source(),
-            Expression::FunctionCall(function_call) => function_call.source(),
-            Expression::Variable(variable) => variable.source(),
-            Expression::IntLiteral(int_literal) => int_literal.source(),
-            Expression::BoolLiteral(bool_literal) => bool_literal.source(),
-        }
-    }
 }
