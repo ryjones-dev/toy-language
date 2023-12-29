@@ -39,6 +39,25 @@ impl FunctionParameters {
     pub(crate) fn new() -> Self {
         Self(Vec::new())
     }
+
+    /// Returns a [`SourceRange`] from the beginning of the parameter list to the end.
+    /// Returns [`None`] if the parameter list is empty.
+    pub(crate) fn source(&self) -> Option<SourceRange> {
+        if self.len() > 0 {
+            Some(
+                self.first()
+                    .unwrap()
+                    .source()
+                    .combine(self.last().unwrap().source()),
+            )
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn types(&self) -> Types {
+        self.iter().map(|param| param.ty).collect()
+    }
 }
 
 impl FromIterator<FunctionParameter> for FunctionParameters {

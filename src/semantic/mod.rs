@@ -25,6 +25,7 @@ pub(super) mod scope;
 mod statement;
 
 pub(crate) const EXPECT_VAR_TYPE: &str = "variable should have a type by this point";
+pub(crate) const EXPECT_TYPES: &str = "types should be defined by this point";
 
 #[derive(Debug, Error)]
 pub(super) enum SemanticError {

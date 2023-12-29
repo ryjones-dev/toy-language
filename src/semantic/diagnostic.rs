@@ -2,9 +2,9 @@
 use crate::{
     diagnostic::DiagnosticMessage,
     parser::{
-        function::FunctionSignature,
+        function::{FunctionParameters, FunctionSignature},
         source_range::SourceRange,
-        types::{DataType, Type, Types},
+        types::{DataType, Types},
     },
 };
 
@@ -15,13 +15,6 @@ pub(super) fn diag_expected<T: std::fmt::Display>(
     source: SourceRange,
 ) -> DiagnosticMessage {
     DiagnosticMessage::new(format!("expected {}, found {}", expected, actual), source)
-}
-
-/// Creates a new [`DiagnosticMessage`] comparing two types.
-///
-/// The returned [`DiagnosticMessage`] will have the source range from `actual`.
-pub(super) fn diag_expected_type(expected: &Type, actual: &Type) -> DiagnosticMessage {
-    diag_expected(expected, actual, actual.source())
 }
 
 /// Creates a new [`DiagnosticMessage`] comparing two lists of types.
@@ -53,10 +46,26 @@ pub(super) fn diag_func_name_label(func_sig: &FunctionSignature) -> DiagnosticMe
     )
 }
 
+/// Creates a new [`DiagnosticMessage`] labeling the function's parameters.
+///
+/// # Panics
+/// Panics if [`FunctionParameters`] is empty.
+pub(super) fn diag_func_param_label(params: &FunctionParameters) -> DiagnosticMessage {
+    DiagnosticMessage::new(
+        format!(
+            "function parameter{} defined here",
+            if params.len() == 1 { "" } else { "s" }
+        ),
+        params
+            .source()
+            .expect("should have parameter types for this `DiagnosticMessage`"),
+    )
+}
+
 /// Creates a new [`DiagnosticMessage`] labeling return types.
 ///
 /// # Panics
-/// Panics if [`Types`] empty.
+/// Panics if [`Types`] is empty.
 pub(super) fn diag_return_types_label(return_types: &Types) -> DiagnosticMessage {
     DiagnosticMessage::new(
         format!(

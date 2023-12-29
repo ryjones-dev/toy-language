@@ -7,13 +7,16 @@ use crate::{
             BinaryMathOperationType, BooleanComparisonType, Expression, UnaryMathOperationType,
         },
         function::{FunctionCall, FunctionSignature},
-        identifier::Identifier,
         types::{DataType, Type, Types},
         variable::Variable,
     },
 };
 
-use super::{scope::Scope, EXPECT_VAR_TYPE};
+use super::{
+    diagnostic::{diag_expected, diag_func_name_label, diag_func_param_label},
+    scope::Scope,
+    EXPECT_TYPES, EXPECT_VAR_TYPE,
+};
 
 #[derive(Debug, Error)]
 pub(super) enum ExpressionError {
@@ -21,17 +24,10 @@ pub(super) enum ExpressionError {
     UnknownVariableError(Variable),
     #[error("unknown function")]
     UnknownFunctionError(FunctionCall),
-    #[error("wrong number of arguments in call to function \"{function_name}\". expected: {expected}, actual: {actual}")]
-    WrongNumberOfArgumentsError {
-        function_name: Identifier,
-        expected: usize,
-        actual: usize,
-    },
-    #[error("mismatched argument type in call to function \"{function_name}\". expected: {expected}, actual: {actual}")]
-    MismatchedArgumentTypeError {
-        function_name: Identifier,
-        expected: Type,
-        actual: Type,
+    #[error("argument type mismatch")]
+    ArgumentTypeMismatchError {
+        func_sig: FunctionSignature,
+        function_call: FunctionCall,
     },
     #[error("expected single value, but expression returns {0}")]
     SingleValueError(usize),
@@ -58,16 +54,41 @@ impl From<ExpressionError> for Diagnostic {
                     ),
                 ))
             }
-            ExpressionError::WrongNumberOfArgumentsError {
-                function_name,
-                expected,
-                actual,
-            } => todo!(),
-            ExpressionError::MismatchedArgumentTypeError {
-                function_name,
-                expected,
-                actual,
-            } => todo!(),
+            ExpressionError::ArgumentTypeMismatchError {
+                ref func_sig,
+                ref function_call,
+            } => Self::new(&err, DiagnosticLevel::Error).with_context(
+                DiagnosticContext::new(diag_expected(
+                    &func_sig.params.types(),
+                    &function_call.argument_types.as_ref().expect(EXPECT_TYPES),
+                    if function_call.arguments.len() > 0 {
+                        function_call
+                            .arguments
+                            .first()
+                            .unwrap()
+                            .source()
+                            .combine(function_call.arguments.last().unwrap().source())
+                    } else {
+                        function_call.source
+                    },
+                ))
+                .with_labels({
+                    let mut labels = vec![diag_func_name_label(func_sig)];
+
+                    if func_sig.params.len() > 0 {
+                        labels.push(diag_func_param_label(&func_sig.params));
+                    }
+
+                    for ty in function_call.argument_types.as_ref().expect(EXPECT_TYPES) {
+                        labels.push(DiagnosticMessage::new(
+                            format!("type `{}` defined here", ty),
+                            ty.source(),
+                        ));
+                    }
+
+                    labels
+                }),
+            ),
             ExpressionError::SingleValueError(_) => todo!(),
             ExpressionError::WrongTypeError { expected, actual } => todo!(),
         }
@@ -205,31 +226,17 @@ pub(super) fn analyze_function_call<'a>(
                 errors.append(&mut errs);
             }
 
-            // Check that the function parameters match the function call arguments
-            if func_sig.params.len() != argument_types.len() {
-                errors.push(ExpressionError::WrongNumberOfArgumentsError {
-                    function_name: func_sig.name.clone(),
-                    expected: func_sig.params.len(),
-                    actual: argument_types.len(),
-                });
-            } else {
-                for (i, arg) in argument_types.iter().enumerate() {
-                    // Type check arguments
-                    let param_type = func_sig.params[i].ty;
-                    if *arg != param_type {
-                        errors.push(ExpressionError::MismatchedArgumentTypeError {
-                            function_name: func_sig.name.clone(),
-                            expected: param_type,
-                            actual: *arg,
-                        });
-                    }
-                }
-            }
-
             // Store the function's argument types and return types so codegen has access to them
-            function_call.argument_types =
-                Some(func_sig.params.iter().map(|param| param.ty).collect());
+            function_call.argument_types = Some(argument_types);
             function_call.return_types = Some(func_sig.returns.clone());
+
+            // Check that the function parameters match the function call arguments
+            if func_sig.params.types() != *function_call.argument_types.as_ref().unwrap() {
+                errors.push(ExpressionError::ArgumentTypeMismatchError {
+                    func_sig: func_sig.clone(),
+                    function_call: function_call.clone(),
+                });
+            }
 
             (Some(func_sig), errors)
         }

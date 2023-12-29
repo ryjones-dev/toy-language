@@ -19,7 +19,7 @@ use super::{
     },
     expression::{analyze_expression, analyze_function_call, ExpressionError},
     scope::Scope,
-    EXPECT_VAR_TYPE,
+    EXPECT_TYPES, EXPECT_VAR_TYPE,
 };
 
 #[derive(Debug, Error)]
@@ -107,10 +107,7 @@ impl From<StatementError> for Diagnostic {
                     ];
                     if let Expression::FunctionCall(function_call) = expression {
                         labels.push(diag_return_types_label(
-                            function_call
-                                .return_types
-                                .as_ref()
-                                .expect("return types should be defined by this point"),
+                            function_call.return_types.as_ref().expect(EXPECT_TYPES),
                         ));
                     }
                     labels
@@ -260,7 +257,7 @@ pub(super) fn analyze_statement(
             if func_sig.returns != return_types {
                 errors.push(StatementError::ReturnValueMismatchError {
                     func_sig: func_sig.clone(),
-                    return_types,
+                    return_types, // TODO: FIX THIS
                 })
             }
         }
