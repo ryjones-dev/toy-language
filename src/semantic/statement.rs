@@ -179,36 +179,41 @@ pub(super) fn analyze_statement(
                     .collect(),
             );
 
-            if expression_types.len() != variables.len() {
-                errors.push(StatementError::WrongNumberOfVariablesError {
-                    expression: expression.clone(),
-                    expected: expression_types,
-                    actual: variables.clone(),
-                });
-            } else {
-                for (i, variable) in variables.iter_mut().enumerate() {
-                    match scope.get_var(variable.name()) {
-                        Some(scope_var) => {
-                            // Check if the variable has a different type than the expression result
-                            if scope_var.get_type().expect(EXPECT_VAR_TYPE) != expression_types[i] {
-                                errors.push(StatementError::AssignmentTypeMismatchError {
-                                    expected_type: expression_types[i],
-                                    prev_var: scope_var.clone(),
-                                    var: variable.clone(),
-                                    assignment_source: *source,
-                                    expression: expression.clone(),
-                                });
-                            }
+            // Only continue if the expression did not have errors
+            if errors.len() == 0 {
+                if expression_types.len() != variables.len() {
+                    errors.push(StatementError::WrongNumberOfVariablesError {
+                        expression: expression.clone(),
+                        expected: expression_types,
+                        actual: variables.clone(),
+                    });
+                } else {
+                    for (i, variable) in variables.iter_mut().enumerate() {
+                        match scope.get_var(variable.name()) {
+                            Some(scope_var) => {
+                                // Check if the variable has a different type than the expression result
+                                if scope_var.get_type().expect(EXPECT_VAR_TYPE)
+                                    != expression_types[i]
+                                {
+                                    errors.push(StatementError::AssignmentTypeMismatchError {
+                                        expected_type: expression_types[i],
+                                        prev_var: scope_var.clone(),
+                                        var: variable.clone(),
+                                        assignment_source: *source,
+                                        expression: expression.clone(),
+                                    });
+                                }
 
-                            // Ensure that this variable is the same as variable already defined in scope
-                            *variable = scope_var.clone();
-                        }
-                        // If the variable is not in scope, this is a new variable definition.
-                        // Set the variable type to the corresponding expression result type and add it to the scope.
-                        None => {
-                            variable.set_type(&expression_types[i]);
-                            if let Some(_) = scope.insert_var(variable.clone()) {
-                                unreachable!("variable cannot already be defined");
+                                // Ensure that this variable is the same as variable already defined in scope
+                                *variable = scope_var.clone();
+                            }
+                            // If the variable is not in scope, this is a new variable definition.
+                            // Set the variable type to the corresponding expression result type and add it to the scope.
+                            None => {
+                                variable.set_type(&expression_types[i]);
+                                if let Some(_) = scope.insert_var(variable.clone()) {
+                                    unreachable!("variable cannot already be defined");
+                                }
                             }
                         }
                     }
@@ -225,18 +230,21 @@ pub(super) fn analyze_statement(
                     .collect(),
             );
 
-            match func_sig {
-                Some(func_sig) => {
-                    // Ensure that function calls do not return a value, otherwise an assignment statement needs to be used
-                    if func_sig.returns.len() > 0 {
-                        errors.push(StatementError::NonZeroReturnError {
-                            func_sig: func_sig.clone(),
-                            function_call: function_call.clone(),
-                        });
+            // Only continue if the function call did not have errors
+            if errors.len() == 0 {
+                match func_sig {
+                    Some(func_sig) => {
+                        // Ensure that function calls do not return a value, otherwise an assignment statement needs to be used
+                        if func_sig.returns.len() > 0 {
+                            errors.push(StatementError::NonZeroReturnError {
+                                func_sig: func_sig.clone(),
+                                function_call: function_call.clone(),
+                            });
+                        }
                     }
+                    None => {}
                 }
-                None => {}
-            };
+            }
         }
         Statement::Return { expressions, .. } => {
             let mut return_types = Types::new();
@@ -253,12 +261,15 @@ pub(super) fn analyze_statement(
                 return_types.append(&mut types);
             }
 
-            // Ensure that the function returns the correct types
-            if func_sig.returns != return_types {
-                errors.push(StatementError::ReturnValueMismatchError {
-                    func_sig: func_sig.clone(),
-                    return_types,
-                })
+            // Only continue if the expression did not have errors
+            if errors.len() == 0 {
+                // Ensure that the function returns the correct types
+                if func_sig.returns != return_types {
+                    errors.push(StatementError::ReturnValueMismatchError {
+                        func_sig: func_sig.clone(),
+                        return_types,
+                    });
+                }
             }
         }
     }
