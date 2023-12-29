@@ -62,20 +62,23 @@ pub(super) fn diag_func_param_label(params: &FunctionParameters) -> DiagnosticMe
     )
 }
 
-/// Creates a new [`DiagnosticMessage`] labeling return types.
+/// Returns a [`DiagnosticMessage`] labeling return types, if there are any.
 ///
-/// # Panics
-/// Panics if [`Types`] is empty.
-pub(super) fn diag_return_types_label(return_types: &Types) -> DiagnosticMessage {
-    DiagnosticMessage::new(
-        format!(
-            "return type{} defined here",
-            if return_types.len() == 1 { "" } else { "s" }
-        ),
-        return_types
-            .source()
-            .expect("should have return types for this `DiagnosticMessage`"),
-    )
+/// If the are no return types, this function returns [`None`].
+pub(super) fn diag_return_types_label(return_types: Option<&Types>) -> Option<DiagnosticMessage> {
+    if let Some(return_types) = return_types {
+        if return_types.len() > 0 {
+            return Some(DiagnosticMessage::new(
+                format!(
+                    "return type{} defined here",
+                    if return_types.len() == 1 { "" } else { "s" }
+                ),
+                return_types.source().unwrap(),
+            ));
+        }
+    }
+
+    None
 }
 
 /// Creates a new [`DiagnosticMessage`] labeling where a subject is originally defined.

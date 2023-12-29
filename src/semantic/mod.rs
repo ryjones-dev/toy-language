@@ -97,10 +97,13 @@ impl From<SemanticError> for Diagnostic {
             SemanticError::MissingReturnStatementError { ref func_sig } => {
                 Self::new(&err, DiagnosticLevel::Error).with_context(
                     DiagnosticContext::new(diag_expected_types(&func_sig.returns, &Types::new()))
-                        .with_labels(vec![
-                            diag_func_name_label(func_sig),
-                            diag_return_types_label(&func_sig.returns),
-                        ]),
+                        .with_labels({
+                            let mut labels = vec![diag_func_name_label(func_sig)];
+                            if let Some(label) = diag_return_types_label(Some(&func_sig.returns)) {
+                                labels.push(label);
+                            }
+                            labels
+                        }),
                 )
             }
             SemanticError::StatementError(err) => err.into(),

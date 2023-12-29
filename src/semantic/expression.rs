@@ -31,13 +31,17 @@ pub(super) enum ExpressionError {
         func_sig: FunctionSignature,
         function_call: FunctionCall,
     },
-    #[error("got {value_count} values in a single value context")]
+    #[error("expression returns {value_count} values in a single value context")]
     SingleValueError {
         value_count: usize,
         expression: Expression,
     },
-    #[error("expected type {expected}, but got {actual}")]
-    WrongTypeError { expected: DataType, actual: Type },
+    #[error("type mismatch")]
+    TypeMismatchError {
+        expected: DataType,
+        actual: Type,
+        expression: Expression,
+    },
 }
 
 impl From<ExpressionError> for Diagnostic {
@@ -86,9 +90,11 @@ impl From<ExpressionError> for Diagnostic {
 
                     for expression in &function_call.arguments {
                         if let Expression::FunctionCall(function_call) = expression {
-                            labels.push(diag_return_types_label(
-                                function_call.return_types.as_ref().expect(EXPECT_TYPES),
-                            ));
+                            if let Some(label) =
+                                diag_return_types_label(function_call.return_types.as_ref())
+                            {
+                                labels.push(label);
+                            }
                         }
                     }
 
@@ -106,14 +112,37 @@ impl From<ExpressionError> for Diagnostic {
                 .with_labels({
                     let mut labels = Vec::new();
                     if let Expression::FunctionCall(function_call) = expression {
-                        labels.push(diag_return_types_label(
-                            function_call.return_types.as_ref().expect(EXPECT_TYPES),
-                        ));
+                        if let Some(label) =
+                            diag_return_types_label(function_call.return_types.as_ref())
+                        {
+                            labels.push(label);
+                        }
                     }
                     labels
                 }),
             ),
-            ExpressionError::WrongTypeError { expected, actual } => todo!(),
+            ExpressionError::TypeMismatchError {
+                expected,
+                actual,
+                ref expression,
+            } => Self::new(&err, DiagnosticLevel::Error).with_context(
+                DiagnosticContext::new(diag_expected(
+                    &expected,
+                    &actual.into(),
+                    expression.source(),
+                ))
+                .with_labels({
+                    let mut labels = Vec::new();
+                    if let Expression::FunctionCall(function_call) = expression {
+                        if let Some(label) =
+                            diag_return_types_label(function_call.return_types.as_ref())
+                        {
+                            labels.push(label);
+                        }
+                    }
+                    labels
+                }),
+            ),
         }
     }
 }
@@ -147,9 +176,8 @@ pub(super) fn analyze_expression(
             if errors.len() == 0 {
                 match comparison_type {
                     BooleanComparisonType::Equal | BooleanComparisonType::NotEqual => {
-                        if expect_any_single_type(expression, &lhs_types, &mut errors) {
-                            if expect_single_type(expression, &rhs_types, lhs_types[0], &mut errors)
-                            {
+                        if expect_any_single_type(lhs, &lhs_types, &mut errors) {
+                            if expect_single_type(rhs, &rhs_types, lhs_types[0], &mut errors) {
                                 types.push(Type::new(DataType::Bool, *source));
                             }
                         }
@@ -159,13 +187,8 @@ pub(super) fn analyze_expression(
                     | BooleanComparisonType::LessThanEqual
                     | BooleanComparisonType::GreaterThan
                     | BooleanComparisonType::GreaterThanEqual => {
-                        if expect_single_type(expression, &lhs_types, DataType::Int, &mut errors) {
-                            if expect_single_type(
-                                expression,
-                                &rhs_types,
-                                DataType::Int,
-                                &mut errors,
-                            ) {
+                        if expect_single_type(lhs, &lhs_types, DataType::Int, &mut errors) {
+                            if expect_single_type(rhs, &rhs_types, DataType::Int, &mut errors) {
                                 types.push(Type::new(DataType::Bool, *source));
                             }
                         }
@@ -192,13 +215,8 @@ pub(super) fn analyze_expression(
                     | BinaryMathOperationType::Subtract
                     | BinaryMathOperationType::Multiply
                     | BinaryMathOperationType::Divide => {
-                        if expect_single_type(expression, &lhs_types, DataType::Int, &mut errors) {
-                            if expect_single_type(
-                                expression,
-                                &rhs_types,
-                                DataType::Int,
-                                &mut errors,
-                            ) {
+                        if expect_single_type(lhs, &lhs_types, DataType::Int, &mut errors) {
+                            if expect_single_type(rhs, &rhs_types, DataType::Int, &mut errors) {
                                 types.push(Type::new(DataType::Int, *source));
                             }
                         }
@@ -319,9 +337,10 @@ fn expect_single_type(
 
     let expected_type = expected_type.into();
     if types[0] != expected_type {
-        errors.push(ExpressionError::WrongTypeError {
+        errors.push(ExpressionError::TypeMismatchError {
             expected: expected_type,
             actual: types[0],
+            expression: expression.clone(),
         });
         return false;
     }

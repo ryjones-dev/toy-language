@@ -19,7 +19,7 @@ use super::{
     },
     expression::{analyze_expression, analyze_function_call, ExpressionError},
     scope::Scope,
-    EXPECT_TYPES, EXPECT_VAR_TYPE,
+    EXPECT_VAR_TYPE,
 };
 
 #[derive(Debug, Error)]
@@ -76,10 +76,10 @@ impl From<StatementError> for Diagnostic {
                     )];
 
                     if let Expression::FunctionCall(function_call) = expression {
-                        if let Some(return_types) = &function_call.return_types {
-                            if return_types.len() > 0 {
-                                labels.push(diag_return_types_label(return_types));
-                            }
+                        if let Some(label) =
+                            diag_return_types_label(function_call.return_types.as_ref())
+                        {
+                            labels.push(label);
                         }
                     }
 
@@ -106,9 +106,11 @@ impl From<StatementError> for Diagnostic {
                         diag_newly_defined(var.source(), var.get_type().map(|ty| ty.into())),
                     ];
                     if let Expression::FunctionCall(function_call) = expression {
-                        labels.push(diag_return_types_label(
-                            function_call.return_types.as_ref().expect(EXPECT_TYPES),
-                        ));
+                        if let Some(label) =
+                            diag_return_types_label(function_call.return_types.as_ref())
+                        {
+                            labels.push(label);
+                        }
                     }
                     labels
                 }),
@@ -122,10 +124,13 @@ impl From<StatementError> for Diagnostic {
                         "function called here",
                         function_call.source,
                     ))
-                    .with_labels(vec![
-                        diag_func_name_label(func_sig),
-                        diag_return_types_label(&func_sig.returns),
-                    ]),
+                    .with_labels({
+                        let mut labels = vec![diag_func_name_label(func_sig)];
+                        if let Some(label) = diag_return_types_label(Some(&func_sig.returns)) {
+                            labels.push(label);
+                        }
+                        labels
+                    }),
                 )
                 .with_suggestions(vec![format!(
                     "If the result{} not needed, \
@@ -148,8 +153,8 @@ impl From<StatementError> for Diagnostic {
                 DiagnosticContext::new(diag_expected_types(&func_sig.returns, return_types))
                     .with_labels({
                         let mut labels = vec![diag_func_name_label(func_sig)];
-                        if func_sig.returns.len() > 0 {
-                            labels.push(diag_return_types_label(&func_sig.returns));
+                        if let Some(label) = diag_return_types_label(Some(&func_sig.returns)) {
+                            labels.push(label);
                         }
                         labels
                     }),

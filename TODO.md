@@ -33,7 +33,7 @@
 - [x]  Remove `IntLiteral` and `BoolLiteral` types
 - [x]  Add help/suggestions to diagnostics - use this for `NonZeroReturnError` to recommend adding a discarded variable
 - [x]  Change `Variable`'s type field from `Option<DataType>` to `Option<Type>` to better support parameter conversion and sets up for future type annotation support
-- [ ]  Update all error types to use codespan-reporting
+- [x]  Update all error types to use codespan-reporting
 - [ ]  Add a diagnostic error for using a discarded variable
 - [ ]  Add a diagnostic warning for unused variables
 - [ ]  Add a `FunctionSignature` to `FunctionCall`, replacing `argument_types` and `return_types`
