@@ -5,7 +5,7 @@ use crate::{
         codegen::{CodeGenError, CodeGenerator, JitCodeGenResults},
         options::CodeGenOptions,
     },
-    diagnostic::Diagnostic,
+    diagnostic::{Diagnostic, DiagnosticLevel},
     parser::ast::AbstractSyntaxTree,
 };
 
@@ -18,7 +18,7 @@ pub(super) enum BackendError {
 impl From<BackendError> for Diagnostic {
     fn from(err: BackendError) -> Self {
         match err {
-            BackendError::CodeGenError(err) => todo!(),
+            BackendError::CodeGenError(err) => Self::new(&err, DiagnosticLevel::Error),
         }
     }
 }
