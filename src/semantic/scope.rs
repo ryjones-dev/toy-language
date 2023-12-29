@@ -1,28 +1,6 @@
 use std::collections::HashMap;
 
-use thiserror::Error;
-
-use crate::{
-    diagnostic::Diagnostic,
-    parser::{function::FunctionSignature, identifier::Identifier, variable::Variable},
-};
-
-#[derive(Debug, Error)]
-pub(super) enum ScopeError {
-    #[error("variable \"{0}\" is already defined in this scope")]
-    VariableAlreadyDefinedError(Identifier),
-    #[error("function \"{0}\" is already defined in this scope")]
-    FunctionAlreadyDefinedError(Identifier),
-}
-
-impl From<ScopeError> for Diagnostic {
-    fn from(err: ScopeError) -> Self {
-        match err {
-            ScopeError::VariableAlreadyDefinedError(err) => todo!(),
-            ScopeError::FunctionAlreadyDefinedError(err) => todo!(),
-        }
-    }
-}
+use crate::parser::{function::FunctionSignature, identifier::Identifier, variable::Variable};
 
 /// A [`Scope`] captures the variables and function signatures that the code within the scope has access to.
 ///
@@ -33,14 +11,14 @@ impl From<ScopeError> for Diagnostic {
 /// If the variable or function signature is not found, the outer scope will be checked.
 /// This will continue until there is no outer scope, in which case a compiler error can be thrown.
 #[derive(Debug)]
-pub(crate) struct Scope<'a> {
+pub(super) struct Scope<'a> {
     outer_scope: Option<&'a Scope<'a>>,
     variables: HashMap<Identifier, Variable>,
     function_signatures: HashMap<Identifier, FunctionSignature>,
 }
 
 impl<'a> Scope<'a> {
-    pub(crate) fn new(outer_scope: Option<&'a Scope<'a>>) -> Self {
+    pub(super) fn new(outer_scope: Option<&'a Scope<'a>>) -> Self {
         Self {
             outer_scope,
             variables: HashMap::new(),
@@ -50,7 +28,8 @@ impl<'a> Scope<'a> {
 }
 
 impl Scope<'_> {
-    pub(crate) fn get_var(&self, name: &Identifier) -> Option<&Variable> {
+    /// Returns a [`Variable`] with the given name, or [`None`] if the variable is not in scope.
+    pub(super) fn get_var(&self, name: &Identifier) -> Option<&Variable> {
         match self.variables.get(name) {
             Some(variable) => Some(variable),
             None => match &self.outer_scope {
@@ -60,21 +39,26 @@ impl Scope<'_> {
         }
     }
 
-    pub(crate) fn insert_var(&mut self, variable: Variable) -> Result<(), ScopeError> {
+    /// Adds the given [`Variable`] to the scope.
+    ///
+    /// Returns [`None`] if the variable was added successfully,
+    /// or the previously defined [`Variable`] if it has already been defined.
+    pub(super) fn insert_var(&mut self, variable: Variable) -> Option<&Variable> {
         // Attempting to insert a discarded variable is a no-op
         if variable.is_discarded() {
-            return Ok(());
+            return None;
         }
 
         if self.variables.contains_key(&variable.name) {
-            return Err(ScopeError::VariableAlreadyDefinedError(variable.name));
+            return self.variables.get(&variable.name);
         }
 
         self.variables.insert(variable.name.clone(), variable);
-        Ok(())
+        None
     }
 
-    pub(crate) fn get_func_sig(&self, name: &Identifier) -> Option<&FunctionSignature> {
+    /// Returns a [`FunctionSignature`] with the given name, or [`None`] if the function is not in scope.
+    pub(super) fn get_func_sig(&self, name: &Identifier) -> Option<&FunctionSignature> {
         match self.function_signatures.get(name) {
             Some(func_sig) => Some(func_sig),
             None => match &self.outer_scope {
@@ -84,16 +68,21 @@ impl Scope<'_> {
         }
     }
 
-    pub(crate) fn insert_func_sig(
+    /// Adds the given [`FunctionSignature`] to the scope.
+    ///
+    ///
+    /// Returns [`None`] if the function was added successfully,
+    /// or the previously defined [`FunctionSignature`] if it has already been defined.
+    pub(super) fn insert_func_sig(
         &mut self,
         func_sig: FunctionSignature,
-    ) -> Result<(), ScopeError> {
+    ) -> Option<&FunctionSignature> {
         if self.function_signatures.contains_key(&func_sig.name) {
-            return Err(ScopeError::FunctionAlreadyDefinedError(func_sig.name));
+            return self.function_signatures.get(&func_sig.name);
         }
 
         self.function_signatures
             .insert(func_sig.name.clone(), func_sig);
-        Ok(())
+        None
     }
 }

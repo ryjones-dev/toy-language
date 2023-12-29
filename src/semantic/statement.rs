@@ -17,7 +17,7 @@ use super::{
         diag_return_types_label,
     },
     expression::{analyze_expression, analyze_function_call, ExpressionError},
-    scope::{Scope, ScopeError},
+    scope::Scope,
     EXPECT_VAR_TYPE,
 };
 
@@ -47,8 +47,6 @@ pub(super) enum StatementError {
     },
     #[error(transparent)]
     ExpressionError(#[from] ExpressionError),
-    #[error(transparent)]
-    ScopeError(#[from] ScopeError),
 }
 
 impl From<StatementError> for Diagnostic {
@@ -143,9 +141,7 @@ impl From<StatementError> for Diagnostic {
                         labels
                     }),
             ),
-
             StatementError::ExpressionError(err) => err.into(),
-            StatementError::ScopeError(err) => err.into(),
         }
     }
 }
@@ -196,8 +192,8 @@ pub(super) fn analyze_statement(
                         // Set the variable type to the corresponding expression result type and add it to the scope.
                         None => {
                             variable.ty = Some(expression_types[i].into());
-                            if let Err(err) = scope.insert_var(variable.clone()) {
-                                errors.push(StatementError::ScopeError(err));
+                            if let Some(_) = scope.insert_var(variable.clone()) {
+                                unreachable!("variable cannot already be defined");
                             }
                         }
                     }

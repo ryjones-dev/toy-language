@@ -2,11 +2,16 @@ use thiserror::Error;
 
 use crate::{
     diagnostic::{Diagnostic, DiagnosticLevel},
-    parser::{ast::AbstractSyntaxTree, statement::Statement, types::Types},
+    parser::{
+        ast::AbstractSyntaxTree,
+        function::{FunctionParameter, FunctionSignature},
+        statement::Statement,
+        types::Types,
+    },
 };
 
 use self::{
-    scope::{Scope, ScopeError},
+    scope::Scope,
     statement::{analyze_statement, StatementError},
 };
 
@@ -21,18 +26,27 @@ pub(crate) const EXPECT_VAR_TYPE: &str = "variable should have a type by this po
 pub(super) enum SemanticError {
     #[error("main function is not defined")]
     MissingMainError,
+    #[error("function \"{}\" is already defined in this scope", .new.name)]
+    FunctionAlreadyDefinedError {
+        original: FunctionSignature,
+        new: FunctionSignature,
+    },
+    #[error("duplicate function parameter \"{new}\"")]
+    DuplicateParameterError {
+        original: FunctionParameter,
+        new: FunctionParameter,
+    },
     #[error(transparent)]
     StatementError(#[from] StatementError),
-    #[error(transparent)]
-    ScopeError(#[from] ScopeError),
 }
 
 impl From<SemanticError> for Diagnostic {
     fn from(err: SemanticError) -> Self {
         match err {
             SemanticError::MissingMainError => Self::new(&err, DiagnosticLevel::Error),
+            SemanticError::FunctionAlreadyDefinedError { original, new } => todo!(),
+            SemanticError::DuplicateParameterError { original, new } => todo!(),
             SemanticError::StatementError(err) => err.into(),
-            SemanticError::ScopeError(err) => err.into(),
         }
     }
 }
@@ -46,8 +60,11 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Result<(), Vec<
 
     // Insert each function signature in the global scope
     for function in ast.iter() {
-        if let Err(err) = global_scope.insert_func_sig(function.signature.clone()) {
-            errors.push(SemanticError::ScopeError(err));
+        if let Some(func_sig) = global_scope.insert_func_sig(function.signature.clone()) {
+            errors.push(SemanticError::FunctionAlreadyDefinedError {
+                original: func_sig.clone(),
+                new: function.signature.clone(),
+            });
         } else {
             if function.signature.name.to_string() == "main" {
                 has_main_function = true;
@@ -65,8 +82,11 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Result<(), Vec<
 
         // Insert parameters into function scope
         for param in &function.signature.params {
-            if let Err(err) = function_scope.insert_var(param.clone().into()) {
-                errors.push(SemanticError::ScopeError(err));
+            if let Some(variable) = function_scope.insert_var(param.clone().into()) {
+                errors.push(SemanticError::DuplicateParameterError {
+                    original: variable.to_param().clone(),
+                    new: param.clone(),
+                });
             }
         }
 
