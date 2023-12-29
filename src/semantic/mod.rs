@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use crate::{
-    diagnostic::{Diagnostic, DiagnosticLevel},
+    diagnostic::{Diagnostic, DiagnosticContext, DiagnosticLevel, DiagnosticMessage},
     parser::{
         ast::AbstractSyntaxTree,
         function::{FunctionParameter, FunctionSignature},
@@ -11,6 +11,10 @@ use crate::{
 };
 
 use self::{
+    diagnostic::{
+        diag_expected_types, diag_func_name_label, diag_newly_defined, diag_originally_defined,
+        diag_return_types_label,
+    },
     scope::Scope,
     statement::{analyze_statement, StatementError},
 };
@@ -26,16 +30,19 @@ pub(crate) const EXPECT_VAR_TYPE: &str = "variable should have a type by this po
 pub(super) enum SemanticError {
     #[error("main function is not defined")]
     MissingMainError,
-    #[error("function \"{}\" is already defined in this scope", .new.name)]
+    #[error("duplicate function definition")]
     FunctionAlreadyDefinedError {
         original: FunctionSignature,
         new: FunctionSignature,
     },
-    #[error("duplicate function parameter \"{new}\"")]
+    #[error("duplicate function parameter")]
     DuplicateParameterError {
+        func_sig: FunctionSignature,
         original: FunctionParameter,
         new: FunctionParameter,
     },
+    #[error("missing return statement")]
+    MissingReturnStatementError { func_sig: FunctionSignature },
     #[error(transparent)]
     StatementError(#[from] StatementError),
 }
@@ -44,8 +51,57 @@ impl From<SemanticError> for Diagnostic {
     fn from(err: SemanticError) -> Self {
         match err {
             SemanticError::MissingMainError => Self::new(&err, DiagnosticLevel::Error),
-            SemanticError::FunctionAlreadyDefinedError { original, new } => todo!(),
-            SemanticError::DuplicateParameterError { original, new } => todo!(),
+            SemanticError::FunctionAlreadyDefinedError {
+                ref original,
+                ref new,
+            } => Self::new(&err, DiagnosticLevel::Error)
+                .with_context(
+                    DiagnosticContext::new(DiagnosticMessage::new(
+                        format!("function `{}` already defined in this scope", new.name),
+                        new.source,
+                    ))
+                    .with_labels(vec![
+                        diag_originally_defined(original.source),
+                        diag_newly_defined(new.source),
+                    ]),
+                )
+                .with_suggestions({
+                    let mut suggestions = Vec::new();
+                    if original.params != new.params {
+                        suggestions.push("TODO_LANG_NAME does not support parameter overloading");
+                    }
+                    if original.returns != new.returns {
+                        suggestions.push("TODO_LANG_NAME does not support return type overloading");
+                    }
+                    suggestions
+                }),
+            SemanticError::DuplicateParameterError {
+                ref func_sig,
+                ref original,
+                ref new,
+            } => Self::new(&err, DiagnosticLevel::Error).with_context(
+                DiagnosticContext::new(DiagnosticMessage::new(
+                    format!(
+                        "function `{}` already has a parameter named `{}`",
+                        func_sig.name, new.name
+                    ),
+                    new.source(),
+                ))
+                .with_labels(vec![
+                    diag_func_name_label(func_sig),
+                    diag_originally_defined(original.source()),
+                    diag_newly_defined(new.source()),
+                ]),
+            ),
+            SemanticError::MissingReturnStatementError { ref func_sig } => {
+                Self::new(&err, DiagnosticLevel::Error).with_context(
+                    DiagnosticContext::new(diag_expected_types(&func_sig.returns, &Types::new()))
+                        .with_labels(vec![
+                            diag_func_name_label(func_sig),
+                            diag_return_types_label(&func_sig.returns),
+                        ]),
+                )
+            }
             SemanticError::StatementError(err) => err.into(),
         }
     }
@@ -84,6 +140,7 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Result<(), Vec<
         for param in &function.signature.params {
             if let Some(variable) = function_scope.insert_var(param.clone().into()) {
                 errors.push(SemanticError::DuplicateParameterError {
+                    func_sig: function.signature.clone(),
                     original: variable.to_param().clone(),
                     new: param.clone(),
                 });
@@ -112,12 +169,9 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Result<(), Vec<
 
         // Check for a function that has return types but does not have a return statement
         if !has_return_statement && function.signature.returns.len() > 0 {
-            errors.push(SemanticError::StatementError(
-                StatementError::ReturnValueMismatchError {
-                    func_sig: function.signature.clone(),
-                    return_types: Types::new(),
-                },
-            ))
+            errors.push(SemanticError::MissingReturnStatementError {
+                func_sig: function.signature.clone(),
+            });
         }
     }
 

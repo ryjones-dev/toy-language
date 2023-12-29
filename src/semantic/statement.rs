@@ -114,7 +114,7 @@ impl From<StatementError> for Diagnostic {
                         diag_return_types_label(&func_sig.returns),
                     ]),
                 )
-                .with_suggestion(format!(
+                .with_suggestions(vec![format!(
                     "If the result{} not needed, \
                     assign {} unused result to a discarded variable (\"_\").",
                     if func_sig.returns.len() > 1 {
@@ -127,7 +127,7 @@ impl From<StatementError> for Diagnostic {
                     } else {
                         "the"
                     },
-                )),
+                )]),
             StatementError::ReturnValueMismatchError {
                 ref func_sig,
                 ref return_types,
@@ -239,21 +239,11 @@ pub(super) fn analyze_statement(
             }
 
             // Ensure that the function returns the correct types
-            if func_sig.returns.len() != return_types.len() {
+            if func_sig.returns != return_types {
                 errors.push(StatementError::ReturnValueMismatchError {
                     func_sig: func_sig.clone(),
                     return_types,
-                });
-            } else {
-                for (i, return_type) in func_sig.returns.iter().enumerate() {
-                    if *return_type != return_types[i] {
-                        errors.push(StatementError::ReturnValueMismatchError {
-                            func_sig: func_sig.clone(),
-                            return_types: return_types.clone(),
-                        });
-                        break;
-                    }
-                }
+                })
             }
         }
     }

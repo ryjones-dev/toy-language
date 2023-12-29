@@ -83,7 +83,7 @@ pub(crate) struct Diagnostic {
     err: String,
     level: DiagnosticLevel,
     context: Option<DiagnosticContext>,
-    suggestion: Option<String>,
+    suggestions: Vec<String>,
 }
 
 impl Diagnostic {
@@ -92,7 +92,7 @@ impl Diagnostic {
             err: err.to_string(),
             level,
             context: None,
-            suggestion: None,
+            suggestions: Vec::new(),
         }
     }
 
@@ -100,17 +100,27 @@ impl Diagnostic {
         Self {
             err: self.err,
             level: self.level,
-            suggestion: self.suggestion,
+            suggestions: self.suggestions,
             context: Some(context),
         }
     }
 
-    pub(crate) fn with_suggestion(self, suggestion: impl Into<String>) -> Self {
+    pub(crate) fn with_suggestions(self, suggestions: Vec<impl Into<String>>) -> Self {
         Self {
             err: self.err,
             level: self.level,
             context: self.context,
-            suggestion: Some(suggestion.into()),
+            suggestions: suggestions
+                .into_iter()
+                .filter_map(|str| {
+                    let str = str.into();
+                    if str.len() > 0 {
+                        Some(str)
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
         }
     }
 
@@ -130,20 +140,15 @@ impl Diagnostic {
             );
         }
 
-        let mut suggestions = Vec::new();
-        if let Some(suggestion) = self.suggestion {
-            suggestions.push(suggestion);
-        }
-
         match self.level {
             DiagnosticLevel::Error => codespan_reporting::diagnostic::Diagnostic::error()
                 .with_message(self.err)
                 .with_labels(labels)
-                .with_notes(suggestions),
+                .with_notes(self.suggestions),
             DiagnosticLevel::Warning => codespan_reporting::diagnostic::Diagnostic::warning()
                 .with_message(self.err)
                 .with_labels(labels)
-                .with_notes(suggestions),
+                .with_notes(self.suggestions),
         }
     }
 }

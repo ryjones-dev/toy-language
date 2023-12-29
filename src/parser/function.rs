@@ -6,7 +6,7 @@ use super::{
     types::{Type, Types},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct FunctionParameter {
     pub(crate) name: Identifier,
     pub(crate) ty: Type,
@@ -15,6 +15,11 @@ pub(crate) struct FunctionParameter {
 impl FunctionParameter {
     pub(super) fn new(name: Identifier, ty: Type) -> Self {
         Self { name, ty }
+    }
+
+    /// Returns a [`SourceRange`] starting at the parameter's name and ending at the parameter's type.
+    pub(crate) fn source(&self) -> SourceRange {
+        self.name.source().combine(self.ty.source())
     }
 }
 
@@ -27,7 +32,7 @@ impl std::fmt::Display for FunctionParameter {
 /// A list of related TODO_LANG_NAME parameters.
 ///
 /// Wrapping the list is needed to display better output in error messages when listing parameters.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct FunctionParameters(Vec<FunctionParameter>);
 
 impl FunctionParameters {

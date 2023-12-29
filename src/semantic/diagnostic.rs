@@ -68,3 +68,13 @@ pub(super) fn diag_return_types_label(return_types: &Types) -> DiagnosticMessage
             .expect("should have return types for this `DiagnosticMessage`"),
     )
 }
+
+/// Creates a new [`DiagnosticMessage`] labeling where a subject is originally defined.
+pub(super) fn diag_originally_defined(source: SourceRange) -> DiagnosticMessage {
+    DiagnosticMessage::new("originally defined here", source)
+}
+
+/// Creates a new [`DiagnosticMessage`] labeling where a subject is newly defined.
+pub(super) fn diag_newly_defined(source: SourceRange) -> DiagnosticMessage {
+    DiagnosticMessage::new("newly defined here", source)
+}

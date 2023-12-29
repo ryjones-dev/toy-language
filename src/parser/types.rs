@@ -35,7 +35,7 @@ impl std::fmt::Display for DataType {
 }
 
 /// A TODO_LANG_NAME type parsed from source code.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq)]
 pub(crate) struct Type {
     ty: DataType,
     source: SourceRange,
