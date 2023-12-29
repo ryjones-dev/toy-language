@@ -4,7 +4,7 @@ use crate::{
     parser::{
         function::FunctionSignature,
         source_range::SourceRange,
-        types::{Type, Types},
+        types::{DataType, Type, Types},
     },
 };
 
@@ -70,11 +70,36 @@ pub(super) fn diag_return_types_label(return_types: &Types) -> DiagnosticMessage
 }
 
 /// Creates a new [`DiagnosticMessage`] labeling where a subject is originally defined.
-pub(super) fn diag_originally_defined(source: SourceRange) -> DiagnosticMessage {
-    DiagnosticMessage::new("originally defined here", source)
+/// Provide a [`DataType`] to specify which type the subject is defined with.
+pub(super) fn diag_originally_defined(
+    source: SourceRange,
+    ty: Option<DataType>,
+) -> DiagnosticMessage {
+    DiagnosticMessage::new(
+        format!(
+            "originally defined here{}",
+            if let Some(ty) = ty {
+                format!(" with type `{}`", ty)
+            } else {
+                String::new()
+            }
+        ),
+        source,
+    )
 }
 
 /// Creates a new [`DiagnosticMessage`] labeling where a subject is newly defined.
-pub(super) fn diag_newly_defined(source: SourceRange) -> DiagnosticMessage {
-    DiagnosticMessage::new("newly defined here", source)
+/// Provide a [`DataType`] to specify which type the subject is defined with.
+pub(super) fn diag_newly_defined(source: SourceRange, ty: Option<DataType>) -> DiagnosticMessage {
+    DiagnosticMessage::new(
+        format!(
+            "newly defined here{}",
+            if let Some(ty) = ty {
+                format!(" with type `{}`", ty)
+            } else {
+                String::new()
+            }
+        ),
+        source,
+    )
 }

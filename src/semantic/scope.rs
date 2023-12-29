@@ -49,11 +49,11 @@ impl Scope<'_> {
             return None;
         }
 
-        if self.variables.contains_key(&variable.name) {
-            return self.variables.get(&variable.name);
+        if self.variables.contains_key(variable.name()) {
+            return self.variables.get(variable.name());
         }
 
-        self.variables.insert(variable.name.clone(), variable);
+        self.variables.insert(variable.name().clone(), variable);
         None
     }
 

@@ -156,18 +156,18 @@ pub(super) fn analyze_expression(
                 None => errors.append(&mut errs),
             }
         }
-        Expression::Variable(variable) => match scope.get_var(&variable.name) {
+        Expression::Variable(variable) => match scope.get_var(variable.name()) {
             Some(scope_var) => {
                 // Because parsing a variable expression doesn't say anything about the variable's type,
                 // the Variable won't have its type set. Since the variable has already been added to the scope,
                 // we can update the variable's type here so as to not leave any undefined types in the AST.
-                variable.ty = scope_var.ty;
-                types.push(Type::new(
-                    variable.ty.expect(EXPECT_VAR_TYPE),
-                    variable.name.source(),
-                ))
+                let ty = scope_var.get_type().expect(EXPECT_VAR_TYPE);
+                variable.set_type(&ty);
+                types.push(ty);
             }
-            None => errors.push(ExpressionError::UnknownVariableError(variable.name.clone())),
+            None => errors.push(ExpressionError::UnknownVariableError(
+                variable.name().clone(),
+            )),
         },
         Expression::IntLiteral(_, source) => types.push(Type::new(DataType::Int, *source)),
         Expression::BoolLiteral(_, source) => types.push(Type::new(DataType::Bool, *source)),

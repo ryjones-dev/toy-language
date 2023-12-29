@@ -1,8 +1,7 @@
+use crate::semantic::EXPECT_VAR_TYPE;
+
 use super::{
-    function::FunctionParameter,
-    identifier::Identifier,
-    source_range::SourceRange,
-    types::{DataType, Type},
+    function::FunctionParameter, identifier::Identifier, source_range::SourceRange, types::Type,
 };
 
 /// A distinct type that is used to represent a variable.
@@ -11,8 +10,8 @@ use super::{
 /// until semantic analysis can determine the type.
 #[derive(Debug, Clone)]
 pub(crate) struct Variable {
-    pub(crate) name: Identifier,
-    pub(crate) ty: Option<DataType>,
+    name: Identifier,
+    ty: Option<Type>,
 }
 
 impl Variable {
@@ -20,17 +19,43 @@ impl Variable {
         Self { name, ty: None }
     }
 
+    pub(crate) fn name(&self) -> &Identifier {
+        &self.name
+    }
+
+    pub(crate) fn into_name(self) -> Identifier {
+        self.name
+    }
+
+    pub(crate) fn get_type(&self) -> &Option<Type> {
+        &self.ty
+    }
+
+    pub(crate) fn set_type(&mut self, ty: &Type) {
+        debug_assert!(self.ty.is_none(), "attempted to reassign variable type");
+
+        // Keep the variable's name source for its type
+        self.ty = Some(Type::new((*ty).into(), self.name.source()))
+    }
+
+    /// Returns a [`SourceRange`] from the variable name to the variable's explicit type annotation, if present.
+    /// If not present, it will just be the variable's name.
+    pub(crate) fn source(&self) -> SourceRange {
+        if let Some(ty) = self.ty {
+            self.name.source().combine(ty.source())
+        } else {
+            self.name.source()
+        }
+    }
+
     /// Converts a [`Variable`] to a [`FunctionParameter`].
     ///
     /// # Panics
-    /// Panics if the [`Variable`] does not have a [`DataType`] set.
+    /// Panics if the [`Variable`] does not have a [`Type`] set.
     pub(crate) fn to_param(&self) -> FunctionParameter {
         FunctionParameter {
             name: self.name.clone(),
-            ty: Type::new(
-                self.ty.expect("variable does not have a data type"),
-                self.name.source(),
-            ),
+            ty: self.ty.expect(EXPECT_VAR_TYPE),
         }
     }
 
@@ -69,9 +94,8 @@ impl Variables {
             Some(
                 self.first()
                     .unwrap()
-                    .name
                     .source()
-                    .combine(self.last().unwrap().name.source()),
+                    .combine(self.last().unwrap().source()),
             )
         } else {
             None

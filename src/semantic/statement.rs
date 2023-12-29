@@ -5,6 +5,7 @@ use crate::{
     parser::{
         expression::Expression,
         function::{FunctionCall, FunctionSignature},
+        source_range::SourceRange,
         statement::Statement,
         types::{Type, Types},
         variable::{Variable, Variables},
@@ -13,8 +14,8 @@ use crate::{
 
 use super::{
     diagnostic::{
-        diag_expected, diag_expected_type, diag_expected_types, diag_func_name_label,
-        diag_return_types_label,
+        diag_expected, diag_expected_types, diag_func_name_label, diag_newly_defined,
+        diag_originally_defined, diag_return_types_label,
     },
     expression::{analyze_expression, analyze_function_call, ExpressionError},
     scope::Scope,
@@ -31,9 +32,11 @@ pub(super) enum StatementError {
     },
     #[error("assignment type mismatch")]
     AssignmentTypeMismatchError {
-        expected: Type,
-        actual: Variable,
-        prev_scope: Variable,
+        expected_type: Type,
+        prev_var: Variable,
+        var: Variable,
+        assignment_source: SourceRange,
+        expression: Expression,
     },
     #[error("function result{} not stored", if .func_sig.returns.len() > 1 { "s are" } else { " is" })]
     NonZeroReturnError {
@@ -84,21 +87,34 @@ impl From<StatementError> for Diagnostic {
                 }),
             ),
             StatementError::AssignmentTypeMismatchError {
-                ref expected,
-                ref actual,
-                ref prev_scope,
+                ref expected_type,
+                ref prev_var,
+                ref var,
+                assignment_source,
+                ref expression,
             } => Self::new(&err, DiagnosticLevel::Error).with_context(
-                DiagnosticContext::new(diag_expected_type(
-                    expected,
-                    &Type::new(actual.ty.expect(EXPECT_VAR_TYPE), actual.name.source()),
+                DiagnosticContext::new(DiagnosticMessage::new(
+                    format!("attempted to reassign variable as `{}` here", expected_type),
+                    assignment_source,
                 ))
-                .with_labels(vec![DiagnosticMessage::new(
-                    format!(
-                        "variable defined as `{}` here",
-                        prev_scope.ty.expect(EXPECT_VAR_TYPE)
-                    ),
-                    prev_scope.name.source(),
-                )]),
+                .with_labels({
+                    let mut labels = vec![
+                        diag_originally_defined(
+                            prev_var.source(),
+                            prev_var.get_type().map(|ty| ty.into()),
+                        ),
+                        diag_newly_defined(var.source(), var.get_type().map(|ty| ty.into())),
+                    ];
+                    if let Expression::FunctionCall(function_call) = expression {
+                        labels.push(diag_return_types_label(
+                            function_call
+                                .return_types
+                                .as_ref()
+                                .expect("return types should be defined by this point"),
+                        ));
+                    }
+                    labels
+                }),
             ),
             StatementError::NonZeroReturnError {
                 ref func_sig,
@@ -174,24 +190,26 @@ pub(super) fn analyze_statement(
                 });
             } else {
                 for (i, variable) in variables.iter_mut().enumerate() {
-                    match scope.get_var(&variable.name) {
+                    match scope.get_var(variable.name()) {
                         Some(scope_var) => {
-                            // Ensure that this variable has the same type as the copy already in scope for consistency
-                            variable.ty = scope_var.ty;
-
                             // Check if the variable has a different type than the expression result
-                            if variable.ty != Some(expression_types[i].into()) {
+                            if scope_var.get_type().expect(EXPECT_VAR_TYPE) != expression_types[i] {
                                 errors.push(StatementError::AssignmentTypeMismatchError {
-                                    expected: expression_types[i],
-                                    actual: variable.clone(),
-                                    prev_scope: scope_var.clone(),
+                                    expected_type: expression_types[i],
+                                    prev_var: scope_var.clone(),
+                                    var: variable.clone(),
+                                    assignment_source: *source,
+                                    expression: expression.clone(),
                                 });
                             }
+
+                            // Ensure that this variable is the same as variable already defined in scope
+                            *variable = scope_var.clone();
                         }
                         // If the variable is not in scope, this is a new variable definition.
                         // Set the variable type to the corresponding expression result type and add it to the scope.
                         None => {
-                            variable.ty = Some(expression_types[i].into());
+                            variable.set_type(&expression_types[i]);
                             if let Some(_) = scope.insert_var(variable.clone()) {
                                 unreachable!("variable cannot already be defined");
                             }

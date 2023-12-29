@@ -61,8 +61,8 @@ impl From<SemanticError> for Diagnostic {
                         new.source,
                     ))
                     .with_labels(vec![
-                        diag_originally_defined(original.source),
-                        diag_newly_defined(new.source),
+                        diag_originally_defined(original.source, None),
+                        diag_newly_defined(new.source, None),
                     ]),
                 )
                 .with_suggestions({
@@ -89,8 +89,8 @@ impl From<SemanticError> for Diagnostic {
                 ))
                 .with_labels(vec![
                     diag_func_name_label(func_sig),
-                    diag_originally_defined(original.source()),
-                    diag_newly_defined(new.source()),
+                    diag_originally_defined(original.source(), None),
+                    diag_newly_defined(new.source(), None),
                 ]),
             ),
             SemanticError::MissingReturnStatementError { ref func_sig } => {

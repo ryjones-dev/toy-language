@@ -89,7 +89,7 @@ impl Expression {
             Expression::BinaryMathOperation { source, .. } => *source,
             Expression::UnaryMathOperation { source, .. } => *source,
             Expression::FunctionCall(function_call) => function_call.source,
-            Expression::Variable(variable) => variable.name.source(),
+            Expression::Variable(variable) => variable.source(),
             Expression::IntLiteral(_, source) => *source,
             Expression::BoolLiteral(_, source) => *source,
         }

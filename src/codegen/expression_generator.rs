@@ -9,8 +9,8 @@ use crate::{
             BinaryMathOperationType, BooleanComparisonType, Expression, UnaryMathOperationType,
         },
         function::FunctionCall,
-        identifier::Identifier,
         types::DataType,
+        variable::Variable,
     },
     semantic_assert,
 };
@@ -102,7 +102,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                 vec![self.generate_unary_operation(operation_type, *expression)]
             }
             Expression::FunctionCall(function_call) => self.generate_function_call(function_call),
-            Expression::Variable(variable) => vec![self.generate_variable(variable.name)],
+            Expression::Variable(variable) => vec![self.generate_variable(variable)],
             Expression::IntLiteral(value, _) => vec![self.generate_int_literal(value)],
             Expression::BoolLiteral(value, _) => {
                 vec![self.generate_bool_literal(value)]
@@ -281,11 +281,11 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
             .collect::<Vec<ExpressionValue>>()
     }
 
-    fn generate_variable(&mut self, name: Identifier) -> ExpressionValue {
+    fn generate_variable(&mut self, variable: Variable) -> ExpressionValue {
         ExpressionValue::from(
             self.builder
                 .use_var(cranelift::frontend::Variable::from_u32(
-                    self.block_vars.var(name),
+                    self.block_vars.var(variable.into_name()),
                 )),
         )
     }

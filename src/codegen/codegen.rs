@@ -291,13 +291,14 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
                 for (i, variable) in variables.into_iter().enumerate() {
                     // Only declare and define variable identifiers if they are not the discard identifier.
                     if !variable.is_discarded() {
-                        let cranelift_variable =
-                            cranelift::frontend::Variable::from_u32(block_vars.var(variable.name));
+                        let cranelift_variable = cranelift::frontend::Variable::from_u32(
+                            block_vars.var(variable.name().clone()),
+                        );
 
                         // Intentionally ignore the error, since we don't care if the variable has already been declared.
                         let _ = builder.try_declare_var(
                             cranelift_variable,
-                            variable.ty.expect(EXPECT_VAR_TYPE).into(),
+                            variable.get_type().expect(EXPECT_VAR_TYPE).into(),
                         );
                         builder.def_var(cranelift_variable, values[i].into());
                     }

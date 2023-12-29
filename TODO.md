@@ -32,10 +32,11 @@
 - [x]  Instead of generating `SourceRange`s in a `source()` method, statements and expressions should have their own parsed `SourceRange` fields that they return
 - [x]  Remove `IntLiteral` and `BoolLiteral` types
 - [x]  Add help/suggestions to diagnostics - use this for `NonZeroReturnError` to recommend adding a discarded variable
-- [ ]  Change `Variable`'s type field from `Option<DataType>` to `Option<Type>` to better support parameter conversion and sets up for future type annotation support
+- [x]  Change `Variable`'s type field from `Option<DataType>` to `Option<Type>` to better support parameter conversion and sets up for future type annotation support
 - [ ]  Update all error types to use codespan-reporting
 - [ ]  Add a diagnostic error for using a discarded variable
 - [ ]  Add a diagnostic warning for unused variables
+- [ ]  Allow explicit variable type annotations
 - [ ]  Pattern matching
 - [ ]  Check that all blocks in a function return the same number and type of values
 - [ ]  Add syntactic sugar for pattern matching on a bool with only a true arm, akin to an if statement
