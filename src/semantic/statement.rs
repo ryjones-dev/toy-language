@@ -38,7 +38,7 @@ pub(super) enum StatementError {
         assignment_source: SourceRange,
         expression: Expression,
     },
-    #[error("function result{} not stored", if .func_sig.returns.len() > 1 { "s are" } else { " is" })]
+    #[error("function result{} not stored", if .func_sig.returns.len() == 1 { " is" } else { "s are" })]
     NonZeroReturnError {
         func_sig: FunctionSignature,
         function_call: FunctionCall,
@@ -70,7 +70,7 @@ impl From<StatementError> for Diagnostic {
                         format!(
                             "expression returns {} value{}",
                             expected.len(),
-                            if expected.len() > 1 { "s" } else { "" }
+                            if expected.len() == 1 { "" } else { "s" }
                         ),
                         expression.source(),
                     )];
@@ -133,15 +133,15 @@ impl From<StatementError> for Diagnostic {
                 .with_suggestions(vec![format!(
                     "If the result{} not needed, \
                     assign {} unused result to a discarded variable (\"_\").",
-                    if func_sig.returns.len() > 1 {
-                        "s are"
-                    } else {
+                    if func_sig.returns.len() == 1 {
                         " is"
-                    },
-                    if func_sig.returns.len() > 1 {
-                        "each"
                     } else {
+                        "s are"
+                    },
+                    if func_sig.returns.len() == 1 {
                         "the"
+                    } else {
+                        "each"
                     },
                 )]),
             StatementError::ReturnValueMismatchError {

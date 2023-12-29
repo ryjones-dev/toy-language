@@ -61,7 +61,7 @@ pub(super) fn diag_return_types_label(return_types: &Types) -> DiagnosticMessage
     DiagnosticMessage::new(
         format!(
             "return type{} defined here",
-            if return_types.len() > 1 { "s" } else { "" }
+            if return_types.len() == 1 { "" } else { "s" }
         ),
         return_types
             .source()
