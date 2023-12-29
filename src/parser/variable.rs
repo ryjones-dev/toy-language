@@ -37,3 +37,56 @@ impl std::fmt::Display for Variable {
         write!(f, "{}", self.name)
     }
 }
+
+/// A list of related TODO_LANG_NAME variables.
+///
+/// Wrapping the list is convenient for getting the [`SourceRange`] of the variable list.
+#[derive(Debug, Clone)]
+pub(crate) struct Variables(Vec<Variable>);
+
+impl Variables {
+    /// Returns a [`SourceRange`] from the beginning of the variable list to the end.
+    /// Returns [`None`] if the variable list is empty.
+    pub(crate) fn source(&self) -> Option<SourceRange> {
+        if self.len() > 0 {
+            Some(
+                self.first()
+                    .unwrap()
+                    .name
+                    .source()
+                    .combine(self.last().unwrap().name.source()),
+            )
+        } else {
+            None
+        }
+    }
+}
+
+impl FromIterator<Variable> for Variables {
+    fn from_iter<T: IntoIterator<Item = Variable>>(iter: T) -> Self {
+        Self(Vec::from_iter(iter))
+    }
+}
+
+impl IntoIterator for Variables {
+    type Item = Variable;
+    type IntoIter = std::vec::IntoIter<Variable>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl std::ops::Deref for Variables {
+    type Target = Vec<Variable>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for Variables {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}

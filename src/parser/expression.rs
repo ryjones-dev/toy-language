@@ -80,3 +80,18 @@ pub(crate) enum Expression {
     IntLiteral(i64, SourceRange),
     BoolLiteral(bool, SourceRange),
 }
+
+impl Expression {
+    /// Returns a [`SourceRange`] that captures the expression.
+    pub(crate) fn source(&self) -> SourceRange {
+        match self {
+            Expression::BooleanComparison { source, .. } => *source,
+            Expression::BinaryMathOperation { source, .. } => *source,
+            Expression::UnaryMathOperation { source, .. } => *source,
+            Expression::FunctionCall(function_call) => function_call.source,
+            Expression::Variable(variable) => variable.name.source(),
+            Expression::IntLiteral(_, source) => *source,
+            Expression::BoolLiteral(_, source) => *source,
+        }
+    }
+}

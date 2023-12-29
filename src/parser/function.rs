@@ -26,7 +26,7 @@ impl std::fmt::Display for FunctionParameter {
 
 /// A list of related TODO_LANG_NAME parameters.
 ///
-/// Wrapping the list helpful to display better output in error messages when listing parameters.
+/// Wrapping the list is needed to display better output in error messages when listing parameters.
 #[derive(Debug, Clone)]
 pub(crate) struct FunctionParameters(Vec<FunctionParameter>);
 

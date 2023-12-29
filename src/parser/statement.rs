@@ -1,5 +1,5 @@
 use super::{
-    expression::Expression, function::FunctionCall, source_range::SourceRange, variable::Variable,
+    expression::Expression, function::FunctionCall, source_range::SourceRange, variable::Variables,
 };
 
 /// A TODO_LANG_NAME statement is a single unit of a function's task.
@@ -18,7 +18,7 @@ pub(crate) enum Statement {
     /// If the results of an expression are not needed, they still must be assigned to a variable.
     /// A discarded variable can be used to signify that the results are intentionally being ignored.
     Assignment {
-        variables: Vec<Variable>,
+        variables: Variables,
         expression: Expression,
         source: SourceRange,
     },
