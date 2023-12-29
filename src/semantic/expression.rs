@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use crate::{
-    diagnostic::Diagnostic,
+    diagnostic::{Diagnostic, DiagnosticContext, DiagnosticLevel, DiagnosticMessage},
     parser::{
         expression::{
             BinaryMathOperationType, BooleanComparisonType, Expression, UnaryMathOperationType,
@@ -9,6 +9,7 @@ use crate::{
         function::{FunctionCall, FunctionSignature},
         identifier::Identifier,
         types::{DataType, Type, Types},
+        variable::Variable,
     },
 };
 
@@ -16,10 +17,10 @@ use super::{scope::Scope, EXPECT_VAR_TYPE};
 
 #[derive(Debug, Error)]
 pub(super) enum ExpressionError {
-    #[error("unknown variable \"{0}\" in this scope")]
-    UnknownVariableError(Identifier),
-    #[error("unknown function \"{0}\" in this scope")]
-    UnknownFunctionError(Identifier),
+    #[error("unknown variable")]
+    UnknownVariableError(Variable),
+    #[error("unknown function")]
+    UnknownFunctionError(FunctionCall),
     #[error("wrong number of arguments in call to function \"{function_name}\". expected: {expected}, actual: {actual}")]
     WrongNumberOfArgumentsError {
         function_name: Identifier,
@@ -41,8 +42,22 @@ pub(super) enum ExpressionError {
 impl From<ExpressionError> for Diagnostic {
     fn from(err: ExpressionError) -> Self {
         match err {
-            ExpressionError::UnknownVariableError(_) => todo!(),
-            ExpressionError::UnknownFunctionError(_) => todo!(),
+            ExpressionError::UnknownVariableError(ref variable) => {
+                Self::new(&err, DiagnosticLevel::Error).with_context(DiagnosticContext::new(
+                    DiagnosticMessage::new(
+                        format!("unknown variable `{}` in this scope", variable),
+                        variable.source(),
+                    ),
+                ))
+            }
+            ExpressionError::UnknownFunctionError(ref function_call) => {
+                Self::new(&err, DiagnosticLevel::Error).with_context(DiagnosticContext::new(
+                    DiagnosticMessage::new(
+                        format!("unknown function `{}` in this scope", function_call.name),
+                        function_call.source,
+                    ),
+                ))
+            }
             ExpressionError::WrongNumberOfArgumentsError {
                 function_name,
                 expected,
@@ -165,9 +180,7 @@ pub(super) fn analyze_expression(
                 variable.set_type(&ty);
                 types.push(ty);
             }
-            None => errors.push(ExpressionError::UnknownVariableError(
-                variable.name().clone(),
-            )),
+            None => errors.push(ExpressionError::UnknownVariableError(variable.clone())),
         },
         Expression::IntLiteral(_, source) => types.push(Type::new(DataType::Int, *source)),
         Expression::BoolLiteral(_, source) => types.push(Type::new(DataType::Bool, *source)),
@@ -221,9 +234,7 @@ pub(super) fn analyze_function_call<'a>(
             (Some(func_sig), errors)
         }
         None => {
-            errors.push(ExpressionError::UnknownFunctionError(
-                function_call.name.clone(),
-            ));
+            errors.push(ExpressionError::UnknownFunctionError(function_call.clone()));
             (None, errors)
         }
     }
