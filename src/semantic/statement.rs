@@ -257,7 +257,7 @@ pub(super) fn analyze_statement(
             if func_sig.returns != return_types {
                 errors.push(StatementError::ReturnValueMismatchError {
                     func_sig: func_sig.clone(),
-                    return_types, // TODO: FIX THIS
+                    return_types,
                 })
             }
         }

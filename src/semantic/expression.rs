@@ -13,7 +13,9 @@ use crate::{
 };
 
 use super::{
-    diagnostic::{diag_expected, diag_func_name_label, diag_func_param_label},
+    diagnostic::{
+        diag_expected, diag_func_name_label, diag_func_param_label, diag_return_types_label,
+    },
     scope::Scope,
     EXPECT_TYPES, EXPECT_VAR_TYPE,
 };
@@ -79,11 +81,12 @@ impl From<ExpressionError> for Diagnostic {
                         labels.push(diag_func_param_label(&func_sig.params));
                     }
 
-                    for ty in function_call.argument_types.as_ref().expect(EXPECT_TYPES) {
-                        labels.push(DiagnosticMessage::new(
-                            format!("type `{}` defined here", ty),
-                            ty.source(),
-                        ));
+                    for expression in &function_call.arguments {
+                        if let Expression::FunctionCall(function_call) = expression {
+                            labels.push(diag_return_types_label(
+                                function_call.return_types.as_ref().expect(EXPECT_TYPES),
+                            ));
+                        }
                     }
 
                     labels
@@ -197,9 +200,8 @@ pub(super) fn analyze_expression(
                 // Because parsing a variable expression doesn't say anything about the variable's type,
                 // the Variable won't have its type set. Since the variable has already been added to the scope,
                 // we can update the variable's type here so as to not leave any undefined types in the AST.
-                let ty = scope_var.get_type().expect(EXPECT_VAR_TYPE);
-                variable.set_type(&ty);
-                types.push(ty);
+                variable.set_type(&scope_var.get_type().expect(EXPECT_VAR_TYPE));
+                types.push(variable.get_type().unwrap());
             }
             None => errors.push(ExpressionError::UnknownVariableError(variable.clone())),
         },
