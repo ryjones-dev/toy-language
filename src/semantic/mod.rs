@@ -152,7 +152,7 @@ impl From<SemanticError> for Diagnostic {
     }
 }
 
-pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Result<(), Vec<SemanticError>> {
+pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Vec<SemanticError> {
     let mut errors = Vec::new();
 
     let mut global_scope = Scope::new(None);
@@ -242,9 +242,5 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Result<(), Vec<
         })
     }
 
-    if errors.is_empty() {
-        Ok(())
-    } else {
-        Err(errors)
-    }
+    errors
 }

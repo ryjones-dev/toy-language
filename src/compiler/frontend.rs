@@ -6,16 +6,12 @@ use crate::{
 use super::options::CompileOptions;
 
 pub(super) enum FrontendResults {
-    Success {
+    Parsed {
         ast: AbstractSyntaxTree,
         ast_string: Option<String>,
+        errs: Vec<SemanticError>,
     },
     ParseError(ParseError),
-    SemanticErrors {
-        ast: AbstractSyntaxTree,
-        errs: Vec<SemanticError>,
-        ast_string: Option<String>,
-    },
 }
 
 pub(super) fn frontend(source_code: &str, options: &CompileOptions) -> FrontendResults {
@@ -29,13 +25,10 @@ pub(super) fn frontend(source_code: &str, options: &CompileOptions) -> FrontendR
         ast_string = Some(ast.to_string());
     }
 
-    if let Err(errs) = semantic_analysis(&mut ast) {
-        return FrontendResults::SemanticErrors {
-            ast,
-            errs,
-            ast_string,
-        };
+    let errs = semantic_analysis(&mut ast);
+    FrontendResults::Parsed {
+        ast,
+        ast_string,
+        errs,
     }
-
-    FrontendResults::Success { ast, ast_string }
 }
