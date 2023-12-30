@@ -37,7 +37,7 @@
 - [x]  Add a diagnostic error for using a discarded variable
 - [x]  Add a diagnostic warning for unused variables
 - [x]  Add a diagnostic warning for unused functions
-- [ ]  Add a `FunctionSignature` to `FunctionCall`, replacing `argument_types` and `return_types`
+- [x]  Add a `FunctionSignature` to `FunctionCall`, replacing `argument_types` and `return_types`
 - [ ]  Remove `FunctionParameter` in favor of `Variable`
 - [ ]  Allow explicit variable type annotations
 - [ ]  Pattern matching

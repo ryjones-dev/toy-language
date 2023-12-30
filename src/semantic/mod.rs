@@ -26,7 +26,7 @@ pub(super) mod scope;
 mod statement;
 
 pub(crate) const EXPECT_VAR_TYPE: &str = "variable should have a type by this point";
-pub(crate) const EXPECT_TYPES: &str = "types should be defined by this point";
+pub(crate) const EXPECT_FUNC_SIG: &str = "function signature should be set by this point";
 
 #[derive(Debug, Error)]
 pub(super) enum SemanticError {
@@ -120,7 +120,7 @@ impl From<SemanticError> for Diagnostic {
                     DiagnosticContext::new(diag_expected_types(&func_sig.returns, &Types::new()))
                         .with_labels({
                             let mut labels = vec![diag_func_name_label(func_sig)];
-                            if let Some(label) = diag_return_types_label(Some(&func_sig.returns)) {
+                            if let Some(label) = diag_return_types_label(&func_sig) {
                                 labels.push(label);
                             }
                             labels

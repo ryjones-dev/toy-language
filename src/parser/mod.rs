@@ -127,7 +127,7 @@ peg::parser!(pub(crate) grammar parser() for str {
 
     rule call_function() -> FunctionCall
         = s:position!() i:identifier() _ "(" _ args:((_ e:expression() _ {e}) ** ",") _ ")" e:position!() {
-            FunctionCall {name: i, arguments: args, source: (s..=e).into(), argument_types: None, return_types: None }
+            FunctionCall {name: i, arguments: args, source: (s..=e).into(), function_signature: None }
         }
 
     rule _type() -> Type

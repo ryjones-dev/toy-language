@@ -12,6 +12,7 @@ use crate::{
         types::DataType,
         variable::Variable,
     },
+    semantic::EXPECT_FUNC_SIG,
     semantic_assert,
 };
 
@@ -226,8 +227,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         FunctionCall {
             name,
             arguments,
-            argument_types,
-            return_types,
+            function_signature,
             ..
         }: FunctionCall,
     ) -> Vec<ExpressionValue> {
@@ -237,16 +237,13 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         // This allows for any arbitrary function definition order.
         let mut sig = self.module.make_signature();
 
-        if let Some(argument_types) = argument_types {
-            for ty in &argument_types {
-                sig.params.push(AbiParam::new(ty.into()))
-            }
+        let func_sig = function_signature.expect(EXPECT_FUNC_SIG);
+        for ty in &func_sig.params.types() {
+            sig.params.push(AbiParam::new(ty.into()))
         }
 
-        if let Some(return_types) = return_types {
-            for ty in &return_types {
-                sig.returns.push(AbiParam::new(ty.into()));
-            }
+        for ty in &func_sig.returns {
+            sig.returns.push(AbiParam::new(ty.into()));
         }
 
         let func_id_to_call = self

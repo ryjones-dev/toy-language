@@ -19,7 +19,7 @@ use super::{
     },
     expression::{analyze_expression, analyze_function_call, ExpressionError},
     scope::Scope,
-    EXPECT_VAR_TYPE,
+    EXPECT_FUNC_SIG, EXPECT_VAR_TYPE,
 };
 
 #[derive(Debug, Error)]
@@ -38,11 +38,8 @@ pub(super) enum StatementError {
         assignment_source: SourceRange,
         expression: Expression,
     },
-    #[error("function result{} not stored", if .func_sig.returns.len() == 1 { " is" } else { "s are" })]
-    NonZeroReturnError {
-        func_sig: FunctionSignature,
-        function_call: FunctionCall,
-    },
+    #[error("function result{} not stored", if .function_call.function_signature.as_ref().expect(EXPECT_FUNC_SIG).returns.len() == 1 { " is" } else { "s are" })]
+    NonZeroReturnError { function_call: FunctionCall },
     #[error("return value mismatch")]
     ReturnValueMismatchError {
         func_sig: FunctionSignature,
@@ -76,9 +73,12 @@ impl From<StatementError> for Diagnostic {
                     )];
 
                     if let Expression::FunctionCall(function_call) = expression {
-                        if let Some(label) =
-                            diag_return_types_label(function_call.return_types.as_ref())
-                        {
+                        if let Some(label) = diag_return_types_label(
+                            function_call
+                                .function_signature
+                                .as_ref()
+                                .expect(EXPECT_FUNC_SIG),
+                        ) {
                             labels.push(label);
                         }
                     }
@@ -106,46 +106,52 @@ impl From<StatementError> for Diagnostic {
                         diag_newly_defined(var.source(), var.get_type().map(|ty| ty.into())),
                     ];
                     if let Expression::FunctionCall(function_call) = expression {
-                        if let Some(label) =
-                            diag_return_types_label(function_call.return_types.as_ref())
-                        {
+                        if let Some(label) = diag_return_types_label(
+                            function_call
+                                .function_signature
+                                .as_ref()
+                                .expect(EXPECT_FUNC_SIG),
+                        ) {
                             labels.push(label);
                         }
                     }
                     labels
                 }),
             ),
-            StatementError::NonZeroReturnError {
-                ref func_sig,
-                ref function_call,
-            } => Self::new(&err, DiagnosticLevel::Error)
-                .with_context(
-                    DiagnosticContext::new(DiagnosticMessage::new(
-                        "function called here",
-                        function_call.source,
-                    ))
-                    .with_labels({
-                        let mut labels = vec![diag_func_name_label(func_sig)];
-                        if let Some(label) = diag_return_types_label(Some(&func_sig.returns)) {
-                            labels.push(label);
-                        }
-                        labels
-                    }),
-                )
-                .with_suggestions(vec![format!(
-                    "If the result{} not needed, \
+            StatementError::NonZeroReturnError { ref function_call } => {
+                let func_sig = function_call
+                    .function_signature
+                    .as_ref()
+                    .expect(EXPECT_FUNC_SIG);
+                Self::new(&err, DiagnosticLevel::Error)
+                    .with_context(
+                        DiagnosticContext::new(DiagnosticMessage::new(
+                            "function called here",
+                            function_call.source,
+                        ))
+                        .with_labels({
+                            let mut labels = vec![diag_func_name_label(func_sig)];
+                            if let Some(label) = diag_return_types_label(&func_sig) {
+                                labels.push(label);
+                            }
+                            labels
+                        }),
+                    )
+                    .with_suggestions(vec![format!(
+                        "If the result{} not needed, \
                     assign {} unused result to a discarded variable (\"_\").",
-                    if func_sig.returns.len() == 1 {
-                        " is"
-                    } else {
-                        "s are"
-                    },
-                    if func_sig.returns.len() == 1 {
-                        "the"
-                    } else {
-                        "each"
-                    },
-                )]),
+                        if func_sig.returns.len() == 1 {
+                            " is"
+                        } else {
+                            "s are"
+                        },
+                        if func_sig.returns.len() == 1 {
+                            "the"
+                        } else {
+                            "each"
+                        },
+                    )])
+            }
             StatementError::ReturnValueMismatchError {
                 ref func_sig,
                 ref return_types,
@@ -153,7 +159,7 @@ impl From<StatementError> for Diagnostic {
                 DiagnosticContext::new(diag_expected_types(&func_sig.returns, return_types))
                     .with_labels({
                         let mut labels = vec![diag_func_name_label(func_sig)];
-                        if let Some(label) = diag_return_types_label(Some(&func_sig.returns)) {
+                        if let Some(label) = diag_return_types_label(&func_sig) {
                             labels.push(label);
                         }
                         labels
@@ -250,7 +256,6 @@ pub(super) fn analyze_statement(
                         // Ensure that function calls do not return a value, otherwise an assignment statement needs to be used
                         if func_sig.returns.len() > 0 {
                             errors.push(StatementError::NonZeroReturnError {
-                                func_sig: func_sig.clone(),
                                 function_call: function_call.clone(),
                             });
                         }

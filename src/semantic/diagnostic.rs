@@ -62,20 +62,18 @@ pub(super) fn diag_func_param_label(params: &FunctionParameters) -> DiagnosticMe
     )
 }
 
-/// Returns a [`DiagnosticMessage`] labeling return types, if there are any.
+/// Returns a [`DiagnosticMessage`] labeling return types of a function signature, if there are any.
 ///
 /// If the are no return types, this function returns [`None`].
-pub(super) fn diag_return_types_label(return_types: Option<&Types>) -> Option<DiagnosticMessage> {
-    if let Some(return_types) = return_types {
-        if return_types.len() > 0 {
-            return Some(DiagnosticMessage::new(
-                format!(
-                    "return type{} defined here",
-                    if return_types.len() == 1 { "" } else { "s" }
-                ),
-                return_types.source().unwrap(),
-            ));
-        }
+pub(super) fn diag_return_types_label(func_sig: &FunctionSignature) -> Option<DiagnosticMessage> {
+    if func_sig.returns.len() > 0 {
+        return Some(DiagnosticMessage::new(
+            format!(
+                "return type{} defined here",
+                if func_sig.returns.len() == 1 { "" } else { "s" }
+            ),
+            func_sig.returns.source().unwrap(),
+        ));
     }
 
     None
