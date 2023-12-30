@@ -196,21 +196,24 @@ pub(super) fn analyze_statement(
                     for (i, variable) in variables.iter_mut().enumerate() {
                         match scope.get_var(variable.name()) {
                             Some(scope_var) => {
-                                // Check if the variable has a different type than the expression result
-                                if scope_var.get_type().expect(EXPECT_VAR_TYPE)
-                                    != expression_types[i]
-                                {
-                                    errors.push(StatementError::AssignmentTypeMismatchError {
-                                        expected_type: expression_types[i],
-                                        prev_var: scope_var.clone(),
-                                        var: variable.clone(),
-                                        assignment_source: *source,
-                                        expression: expression.clone(),
-                                    });
-                                }
+                                // We don't care about the variable if it's discarded
+                                if !scope_var.is_discarded() {
+                                    // Check if the variable has a different type than the expression result
+                                    if scope_var.get_type().expect(EXPECT_VAR_TYPE)
+                                        != expression_types[i]
+                                    {
+                                        errors.push(StatementError::AssignmentTypeMismatchError {
+                                            expected_type: expression_types[i],
+                                            prev_var: scope_var.clone(),
+                                            var: variable.clone(),
+                                            assignment_source: *source,
+                                            expression: expression.clone(),
+                                        });
+                                    }
 
-                                // Ensure that this variable is the same as variable already defined in scope
-                                *variable = scope_var.clone();
+                                    // Ensure that this variable is the same as variable already defined in scope
+                                    *variable = scope_var.clone();
+                                }
                             }
                             // If the variable is not in scope, this is a new variable definition.
                             // Set the variable type to the corresponding expression result type and add it to the scope.

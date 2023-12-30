@@ -26,6 +26,11 @@ pub(super) enum ExpressionError {
     UnknownVariableError(Variable),
     #[error("unknown function")]
     UnknownFunctionError(FunctionCall),
+    #[error("read from discarded variable")]
+    ReadFromDiscardedVariableError {
+        variable: Variable,
+        scope_var: Variable,
+    },
     #[error("argument type mismatch")]
     ArgumentTypeMismatchError {
         func_sig: FunctionSignature,
@@ -63,6 +68,25 @@ impl From<ExpressionError> for Diagnostic {
                     ),
                 ))
             }
+            ExpressionError::ReadFromDiscardedVariableError {
+                ref variable,
+                ref scope_var,
+            } => Self::new(&err, DiagnosticLevel::Error)
+                .with_context(
+                    DiagnosticContext::new(DiagnosticMessage::new(
+                        format!("read from discarded variable `{}`", variable),
+                        variable.source(),
+                    ))
+                    .with_labels(vec![DiagnosticMessage::new(
+                        format!("variable `{}` defined here", scope_var),
+                        scope_var.source(),
+                    )]),
+                )
+                .with_suggestions(vec![format!(
+                    "Rename `{}` to `{}` to avoid discarding the variable.",
+                    variable,
+                    &variable.name().to_string()[1..]
+                )]),
             ExpressionError::ArgumentTypeMismatchError {
                 ref func_sig,
                 ref function_call,
@@ -257,13 +281,23 @@ pub(super) fn analyze_expression(
         }
         Expression::Variable(variable) => match scope.get_var(variable.name()) {
             Some(scope_var) => {
-                // Because parsing a variable expression doesn't say anything about the variable's type,
-                // the Variable won't have its type set. Since the variable has already been added to the scope,
-                // we can update the variable's type here so as to not leave any undefined types in the AST.
-                variable.set_type(&scope_var.get_type().expect(EXPECT_VAR_TYPE));
-                types.push(variable.get_type().unwrap());
+                // Throw an error when trying to read from a discarded variable
+                if scope_var.is_discarded() {
+                    errors.push(ExpressionError::ReadFromDiscardedVariableError {
+                        variable: variable.clone(),
+                        scope_var: scope_var.clone(),
+                    });
+                } else {
+                    // Because parsing a variable expression doesn't say anything about the variable's type,
+                    // the Variable won't have its type set. Since the variable has already been added to the scope,
+                    // we can update the variable's type here so as to not leave any undefined types in the AST.
+                    variable.set_type(&scope_var.get_type().expect(EXPECT_VAR_TYPE));
+                    types.push(variable.get_type().unwrap());
+                }
             }
-            None => errors.push(ExpressionError::UnknownVariableError(variable.clone())),
+            None => {
+                errors.push(ExpressionError::UnknownVariableError(variable.clone()));
+            }
         },
         Expression::IntLiteral(_, source) => types.push(Type::new(DataType::Int, *source)),
         Expression::BoolLiteral(_, source) => types.push(Type::new(DataType::Bool, *source)),
@@ -292,12 +326,15 @@ pub(super) fn analyze_function_call<'a>(
             function_call.argument_types = Some(argument_types);
             function_call.return_types = Some(func_sig.returns.clone());
 
-            // Check that the function parameters match the function call arguments
-            if func_sig.params.types() != *function_call.argument_types.as_ref().unwrap() {
-                errors.push(ExpressionError::ArgumentTypeMismatchError {
-                    func_sig: func_sig.clone(),
-                    function_call: function_call.clone(),
-                });
+            // Only continue if the argument expressions did not have errors
+            if errors.len() == 0 {
+                // Check that the function parameters match the function call arguments
+                if func_sig.params.types() != *function_call.argument_types.as_ref().unwrap() {
+                    errors.push(ExpressionError::ArgumentTypeMismatchError {
+                        func_sig: func_sig.clone(),
+                        function_call: function_call.clone(),
+                    });
+                }
             }
 
             (Some(func_sig), errors)

@@ -44,11 +44,6 @@ impl Scope<'_> {
     /// Returns [`None`] if the variable was added successfully,
     /// or the previously defined [`Variable`] if it has already been defined.
     pub(super) fn insert_var(&mut self, variable: Variable) -> Option<&Variable> {
-        // Attempting to insert a discarded variable is a no-op
-        if variable.is_discarded() {
-            return None;
-        }
-
         if self.variables.contains_key(variable.name()) {
             return self.variables.get(variable.name());
         }
