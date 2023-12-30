@@ -111,6 +111,12 @@ pub(crate) struct FunctionSignature {
     pub(crate) source: SourceRange,
 }
 
+impl FunctionSignature {
+    pub(crate) fn is_discarded(&self) -> bool {
+        self.name.is_discarded()
+    }
+}
+
 /// A TODO_LANG_NAME function is a set of parameterized statements that can be executed from other parts of the program.
 ///
 /// This struct contains all of the information that can be parsed from the source code directly.

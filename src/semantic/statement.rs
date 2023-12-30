@@ -194,7 +194,8 @@ pub(super) fn analyze_statement(
                     });
                 } else {
                     for (i, variable) in variables.iter_mut().enumerate() {
-                        match scope.get_var(variable.name()) {
+                        let scope_var = scope.get_var(variable.name());
+                        match scope_var {
                             Some(scope_var) => {
                                 // We don't care about the variable if it's discarded
                                 if !scope_var.is_discarded() {
@@ -218,6 +219,10 @@ pub(super) fn analyze_statement(
                             // If the variable is not in scope, this is a new variable definition.
                             // Set the variable type to the corresponding expression result type and add it to the scope.
                             None => {
+                                // Have to drop this explicitly to appease the borrow checker.
+                                // TODO: When Polonius is ready/stable, we might be able to remove this.
+                                drop(scope_var);
+
                                 variable.set_type(&expression_types[i]);
                                 if let Some(_) = scope.insert_var(variable.clone()) {
                                     unreachable!("variable cannot already be defined");

@@ -35,7 +35,8 @@
 - [x]  Change `Variable`'s type field from `Option<DataType>` to `Option<Type>` to better support parameter conversion and sets up for future type annotation support
 - [x]  Update all error types to use codespan-reporting
 - [x]  Add a diagnostic error for using a discarded variable
-- [ ]  Add a diagnostic warning for unused variables
+- [x]  Add a diagnostic warning for unused variables
+- [x]  Add a diagnostic warning for unused functions
 - [ ]  Add a `FunctionSignature` to `FunctionCall`, replacing `argument_types` and `return_types`
 - [ ]  Remove `FunctionParameter` in favor of `Variable`
 - [ ]  Allow explicit variable type annotations
@@ -48,6 +49,7 @@
 - [ ]  Range loop (for loop)
 - [ ]  Support optionally getting the index and/or value when iterating over a range
 - [ ]  Fix codegen error for empty function (should codegen ignore it, or semantic analysis catch it?)
+- [ ]  Change semantic errors to not actually be Error types?
 - [ ]  Add unit tests for grammar parsing
 - [ ]  Add unit tests for semantic errors
 - [ ]  Handle comparison for more types (casting? comparison interface?)

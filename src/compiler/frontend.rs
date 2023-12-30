@@ -12,6 +12,7 @@ pub(super) enum FrontendResults {
     },
     ParseError(ParseError),
     SemanticErrors {
+        ast: AbstractSyntaxTree,
         errs: Vec<SemanticError>,
         ast_string: Option<String>,
     },
@@ -29,7 +30,11 @@ pub(super) fn frontend(source_code: &str, options: &CompileOptions) -> FrontendR
     }
 
     if let Err(errs) = semantic_analysis(&mut ast) {
-        return FrontendResults::SemanticErrors { errs, ast_string };
+        return FrontendResults::SemanticErrors {
+            ast,
+            errs,
+            ast_string,
+        };
     }
 
     FrontendResults::Success { ast, ast_string }

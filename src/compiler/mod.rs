@@ -72,31 +72,41 @@ pub fn compile_jit(
     let writer = StandardStream::stderr(ColorChoice::Always);
     let config = codespan_reporting::term::Config::default();
 
-    match frontend(source_code, &options) {
-        FrontendResults::Success { ast, ast_string } => {
-            match jit_backend(ast, options.codegen_options) {
-                Ok(results) => Ok(JitCompileResults::Success {
-                    code: results.code,
-                    ast: ast_string,
-                    ir: results.ir,
-                    disassembly: results.disassembly,
-                }),
-                Err(err) => {
-                    report_diagnostic(&writer, &config, &files, file_id, err.into())?;
-                    Ok(JitCompileResults::BackendError { ast: ast_string })
-                }
-            }
+    let compile = |ast, ast_string| match jit_backend(ast, &options.codegen_options) {
+        Ok(results) => Ok(JitCompileResults::Success {
+            code: results.code,
+            ast: ast_string,
+            ir: results.ir,
+            disassembly: results.disassembly,
+        }),
+        Err(err) => {
+            report_diagnostic(&writer, &config, &files, file_id, err.into())?;
+            Ok(JitCompileResults::BackendError { ast: ast_string })
         }
+    };
+
+    match frontend(source_code, &options) {
+        FrontendResults::Success { ast, ast_string } => compile(ast, ast_string),
         FrontendResults::ParseError(err) => {
             report_diagnostic(&writer, &config, &files, file_id, err.into())?;
             Ok(JitCompileResults::ParseError)
         }
-        FrontendResults::SemanticErrors { errs, ast_string } => {
+        FrontendResults::SemanticErrors {
+            ast,
+            errs,
+            ast_string,
+        } => {
+            let fail_compile = errs.iter().any(|err| err.is_error());
+
             for err in errs {
                 report_diagnostic(&writer, &config, &files, file_id, err.into())?;
             }
 
-            Ok(JitCompileResults::SemanticError { ast: ast_string })
+            if fail_compile {
+                Ok(JitCompileResults::SemanticError { ast: ast_string })
+            } else {
+                compile(ast, ast_string)
+            }
         }
     }
 }

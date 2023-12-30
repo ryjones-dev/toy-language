@@ -80,7 +80,7 @@ impl std::fmt::Display for Variable {
     }
 }
 
-/// A list of related TODO_LANG_NAME variables.
+/// A list of related TODO_LANG_NAME variables parsed from source code.
 ///
 /// Wrapping the list is convenient for getting the [`SourceRange`] of the variable list.
 #[derive(Debug, Clone)]

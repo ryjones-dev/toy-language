@@ -52,7 +52,7 @@ impl CodeGeneratorModule for cranelift_jit::JITModule {
 pub(crate) struct CodeGenerator<M: CodeGeneratorModule> {
     module: M,
     context: CodeGenContext,
-    options: CodeGenOptions,
+    request_ir: bool,
     main_function_id: Option<cranelift_module::FuncId>,
 
     ir: Option<String>,
@@ -67,7 +67,7 @@ pub(crate) struct JitCodeGenResults {
 
 impl CodeGenerator<cranelift_jit::JITModule> {
     /// Creates a new [`CodeGenerator`] instance with a given [`OptimizationLevel`].
-    pub(crate) fn new(options: CodeGenOptions) -> Result<Self, CodeGenError> {
+    pub(crate) fn new(options: &CodeGenOptions) -> Result<Self, CodeGenError> {
         let builder = match options.optimization_level {
             OptimizationLevel::None => cranelift_jit::JITBuilder::with_flags(
                 &[("opt_level", "none")],
@@ -90,7 +90,7 @@ impl CodeGenerator<cranelift_jit::JITModule> {
         Ok(Self {
             module,
             context,
-            options,
+            request_ir: options.request_ir,
             main_function_id: None,
             ir: None,
             disassembly: None,
@@ -136,19 +136,22 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
         // Generate each function individually, and build up the IR and/or disassembly if requested
         let mut function_context = FunctionBuilderContext::new();
         for function in ast {
-            let (function_ir, function_disasm) =
-                self.generate_function(&mut function_context, function)?;
+            // Only generate functions if they are not discarded
+            if !function.signature.is_discarded() {
+                let (function_ir, function_disasm) =
+                    self.generate_function(&mut function_context, function)?;
 
-            match function_ir {
-                Some(function_ir) => ir.push_str(format!("{}\n", function_ir).as_str()),
-                None => {}
-            }
-
-            match function_disasm {
-                Some(function_disasm) => {
-                    disassembly.push_str(format!("{}\n", function_disasm).as_str())
+                match function_ir {
+                    Some(function_ir) => ir.push_str(format!("{}\n", function_ir).as_str()),
+                    None => {}
                 }
-                None => {}
+
+                match function_disasm {
+                    Some(function_disasm) => {
+                        disassembly.push_str(format!("{}\n", function_disasm).as_str())
+                    }
+                    None => {}
+                }
             }
         }
 
@@ -244,7 +247,7 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
         let mut ir = None;
         let disassembly = context.compiled_code().unwrap().vcode.clone();
 
-        if self.options.request_ir {
+        if self.request_ir {
             ir = Some(context.func.to_string());
         }
 
@@ -289,13 +292,13 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
 
                 // Declare and define the variables
                 for (i, variable) in variables.into_iter().enumerate() {
-                    // Only declare and define variable identifiers if they are not the discard identifier.
+                    // Only declare and define variables if they are not discarded
                     if !variable.is_discarded() {
                         let cranelift_variable = cranelift::frontend::Variable::from_u32(
                             block_vars.var(variable.name().clone()),
                         );
 
-                        // Intentionally ignore the error, since we don't care if the variable has already been declared.
+                        // Intentionally ignore the error, since we don't care if the variable has already been declared
                         let _ = builder.try_declare_var(
                             cranelift_variable,
                             variable.get_type().expect(EXPECT_VAR_TYPE).into(),

@@ -7,6 +7,7 @@ use crate::{
         function::{FunctionParameter, FunctionSignature},
         statement::Statement,
         types::Types,
+        variable::Variable,
     },
 };
 
@@ -44,8 +45,28 @@ pub(super) enum SemanticError {
     },
     #[error("missing return statement")]
     MissingReturnStatementError { func_sig: FunctionSignature },
+    #[error("unused variable")]
+    UnusedVariableError { variable: Variable },
+    #[error("unused function")]
+    UnusedFunctionError {
+        function_signature: FunctionSignature,
+    },
     #[error(transparent)]
     StatementError(#[from] StatementError),
+}
+
+impl SemanticError {
+    pub(super) fn is_error(&self) -> bool {
+        match self {
+            SemanticError::MissingMainError => true,
+            SemanticError::FunctionAlreadyDefinedError { .. } => true,
+            SemanticError::DuplicateParameterError { .. } => true,
+            SemanticError::MissingReturnStatementError { .. } => true,
+            SemanticError::UnusedVariableError { .. } => false,
+            SemanticError::UnusedFunctionError { .. } => false,
+            SemanticError::StatementError(_) => true,
+        }
+    }
 }
 
 impl From<SemanticError> for Diagnostic {
@@ -106,6 +127,26 @@ impl From<SemanticError> for Diagnostic {
                         }),
                 )
             }
+            SemanticError::UnusedVariableError { ref variable } => {
+                Self::new(&err, DiagnosticLevel::Warning)
+                    .with_context(DiagnosticContext::new(DiagnosticMessage::new(
+                        format!("variable `{}` is never read", variable),
+                        variable.source(),
+                    )))
+                    .with_suggestions(vec![
+                "Either remove the variable, or prefix it with an underscore to discard it.",
+            ])
+            }
+            SemanticError::UnusedFunctionError {
+                ref function_signature,
+            } => Self::new(&err, DiagnosticLevel::Warning)
+                .with_context(DiagnosticContext::new(DiagnosticMessage::new(
+                    format!("function `{}` is never called", function_signature.name),
+                    function_signature.source,
+                )))
+                .with_suggestions(vec![
+                    "Either remove the function, or prefix it with an underscore to discard it.",
+                ]),
             SemanticError::StatementError(err) => err.into(),
         }
     }
@@ -177,6 +218,28 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Result<(), Vec<
                 func_sig: function.signature.clone(),
             });
         }
+
+        // Check for any variables or functions in the immediate scope that have not been used
+        let (unused_variables, function_signatures) = function_scope.get_unused();
+        for variable in unused_variables {
+            errors.push(SemanticError::UnusedVariableError { variable })
+        }
+        for func_sig in function_signatures {
+            errors.push(SemanticError::UnusedFunctionError {
+                function_signature: func_sig,
+            })
+        }
+    }
+
+    // Check for any unused variables or functions in the global scope that have not been used
+    let (unused_variables, function_signatures) = global_scope.get_unused();
+    for variable in unused_variables {
+        errors.push(SemanticError::UnusedVariableError { variable })
+    }
+    for func_sig in function_signatures {
+        errors.push(SemanticError::UnusedFunctionError {
+            function_signature: func_sig,
+        })
     }
 
     if errors.is_empty() {

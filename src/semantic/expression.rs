@@ -1,3 +1,5 @@
+use std::cell::Ref;
+
 use thiserror::Error;
 
 use crate::{
@@ -30,6 +32,11 @@ pub(super) enum ExpressionError {
     ReadFromDiscardedVariableError {
         variable: Variable,
         scope_var: Variable,
+    },
+    #[error("call to discarded function")]
+    CallToDiscardedFunctionError {
+        func_sig: FunctionSignature,
+        function_call: FunctionCall,
     },
     #[error("argument type mismatch")]
     ArgumentTypeMismatchError {
@@ -86,6 +93,25 @@ impl From<ExpressionError> for Diagnostic {
                     "Rename `{}` to `{}` to avoid discarding the variable.",
                     variable,
                     &variable.name().to_string()[1..]
+                )]),
+            ExpressionError::CallToDiscardedFunctionError {
+                ref func_sig,
+                ref function_call,
+            } => Self::new(&err, DiagnosticLevel::Error)
+                .with_context(
+                    DiagnosticContext::new(DiagnosticMessage::new(
+                        format!("call to discarded function `{}`", function_call.name),
+                        function_call.source,
+                    ))
+                    .with_labels(vec![DiagnosticMessage::new(
+                        format!("function `{}` defined here", func_sig.name),
+                        func_sig.source,
+                    )]),
+                )
+                .with_suggestions(vec![format!(
+                    "Rename `{}` to `{}` to avoid discarding the function.",
+                    function_call.name,
+                    &function_call.name.to_string()[1..]
                 )]),
             ExpressionError::ArgumentTypeMismatchError {
                 ref func_sig,
@@ -309,11 +335,19 @@ pub(super) fn analyze_expression(
 pub(super) fn analyze_function_call<'a>(
     function_call: &mut FunctionCall,
     scope: &'a Scope,
-) -> (Option<&'a FunctionSignature>, Vec<ExpressionError>) {
+) -> (Option<Ref<'a, FunctionSignature>>, Vec<ExpressionError>) {
     let mut errors = Vec::new();
 
     match scope.get_func_sig(&function_call.name) {
         Some(func_sig) => {
+            // Check if the function being called is discarded
+            if func_sig.is_discarded() {
+                errors.push(ExpressionError::CallToDiscardedFunctionError {
+                    func_sig: func_sig.clone(),
+                    function_call: function_call.clone(),
+                });
+            }
+
             // Analyze each argument expression to determine their types
             let mut argument_types = Types::new();
             for expression in &mut function_call.arguments {

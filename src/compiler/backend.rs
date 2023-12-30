@@ -31,7 +31,7 @@ pub(super) struct JitBackendResults {
 
 pub(super) fn jit_backend(
     ast: AbstractSyntaxTree,
-    options: CodeGenOptions,
+    options: &CodeGenOptions,
 ) -> Result<JitCodeGenResults, BackendError> {
     let mut code_generator = CodeGenerator::<cranelift_jit::JITModule>::new(options)?;
     code_generator.generate(ast)?;
