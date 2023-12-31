@@ -12,7 +12,7 @@ main(arg1 int, arg2 int) -> int:
     -> sum;
 
 add(left int, right int) -> int:
-    _equal = is_equal(left, right)
+    _equal bool = is_equal(left, right)
     _less = is_less(left, right)
     _greater = is_greater(left, right)
     -> left + right;

@@ -24,25 +24,6 @@ macro_rules! execute_jit {
     };
 }
 
-// TODO: this might not be needed with codespan-reporting crate or similar
-// /// Convert a peg position to a (line, col) tuple.
-// ///
-// /// This function is copied from an older version of peg:
-// /// https://github.com/kevinmehall/rust-peg/blob/8098fab1515dc38ca25cdebda9b17655aa5554e1/src/translate.rs#L189
-// fn pos_to_line_col(input: &str, pos: usize) -> (usize, usize) {
-//     let mut remaining = pos;
-//     let mut lineno: usize = 1;
-//     for line in input.lines() {
-//         let line_length = line.len() + 1;
-//         if remaining < line_length {
-//             return (lineno, remaining + 1);
-//         }
-//         remaining -= line_length;
-//         lineno += 1;
-//     }
-//     return (lineno, remaining + 1);
-// }
-
 fn main() -> Result<(), RenderErrorFailure> {
     let source_code = include_str!("lang/test.txt");
 

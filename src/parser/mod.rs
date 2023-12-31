@@ -82,8 +82,8 @@ peg::parser!(pub(crate) grammar parser() for str {
         = s:position!() "->" _ r:(e:((_ e:expression() _ {e}) ++ ",")) e:position!() { Statement::Return { expressions: r, source: (s..=e).into() } }
 
     rule assignment() -> Statement
-        = s:position!() idents:((_ i:identifier() _ { i }) ++ ",") _ "=" _ expr:expression() e:position!() {
-            Statement::Assignment { variables: idents.into_iter().map(|ident|Variable::new(ident, None)).collect(), expression: expr, source: (s..=e).into() }
+        = s:position!() vars:((_ i:identifier() _ t:_type()? _ { (i, t) }) ++ ",") _ "=" _ expr:expression() e:position!() {
+            Statement::Assignment { variables: vars.into_iter().map(|var|Variable::new(var.0, var.1)).collect(), expression: expr, source: (s..=e).into() }
         }
 
     // Each level of precedence is notated by a "--" line. Precedence is in ascending order.
