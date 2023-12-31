@@ -1,22 +1,24 @@
 use crate::semantic::EXPECT_VAR_TYPE;
 
 use super::{
-    function::FunctionParameter, identifier::Identifier, source_range::SourceRange, types::Type,
+    identifier::Identifier,
+    source_range::SourceRange,
+    types::{Type, Types},
 };
 
 /// A distinct type that is used to represent a variable.
 ///
 /// Only the name is parsable from the source code. The type will be [`None`]
 /// until semantic analysis can determine the type.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Variable {
     name: Identifier,
     ty: Option<Type>,
 }
 
 impl Variable {
-    pub(crate) fn new(name: Identifier) -> Self {
-        Self { name, ty: None }
+    pub(super) fn new(name: Identifier, ty: Option<Type>) -> Self {
+        Self { name, ty }
     }
 
     pub(crate) fn name(&self) -> &Identifier {
@@ -48,29 +50,8 @@ impl Variable {
         }
     }
 
-    /// Converts a [`Variable`] to a [`FunctionParameter`].
-    ///
-    /// # Panics
-    /// Panics if the [`Variable`] does not have a [`Type`] set.
-    pub(crate) fn to_param(&self) -> FunctionParameter {
-        FunctionParameter {
-            name: self.name.clone(),
-            ty: self.ty.expect(EXPECT_VAR_TYPE),
-        }
-    }
-
     pub(crate) fn is_discarded(&self) -> bool {
         self.name.is_discarded()
-    }
-}
-
-/// Built in conversion for turning function parameters into variables
-impl From<FunctionParameter> for Variable {
-    fn from(value: FunctionParameter) -> Self {
-        Self {
-            name: value.name,
-            ty: Some(value.ty.into()),
-        }
     }
 }
 
@@ -83,10 +64,20 @@ impl std::fmt::Display for Variable {
 /// A list of related TODO_LANG_NAME variables parsed from source code.
 ///
 /// Wrapping the list is convenient for getting the [`SourceRange`] of the variable list.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Variables(Vec<Variable>);
 
 impl Variables {
+    /// Returns the type of each [`Variable`] in [`Types`].
+    ///
+    /// # Panics
+    /// Panics if any [`Variable`]'s type is [`None`].
+    pub(crate) fn types(&self) -> Types {
+        self.iter()
+            .map(|var| var.ty.expect(EXPECT_VAR_TYPE))
+            .collect()
+    }
+
     /// Returns a [`SourceRange`] from the beginning of the variable list to the end.
     /// Returns [`None`] if the variable list is empty.
     pub(crate) fn source(&self) -> Option<SourceRange> {
@@ -115,6 +106,15 @@ impl IntoIterator for Variables {
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a Variables {
+    type Item = &'a Variable;
+    type IntoIter = std::slice::Iter<'a, Variable>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 

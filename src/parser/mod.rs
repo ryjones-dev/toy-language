@@ -7,7 +7,7 @@ use self::{
     expression::{
         BinaryMathOperationType, BooleanComparisonType, Expression, UnaryMathOperationType,
     },
-    function::{Function, FunctionCall, FunctionParameter, FunctionSignature},
+    function::{Function, FunctionCall, FunctionSignature},
     identifier::Identifier,
     statement::Statement,
     types::Type,
@@ -62,7 +62,7 @@ peg::parser!(pub(crate) grammar parser() for str {
             Function {
                 signature: FunctionSignature {
                     name: i,
-                    params: p.into_iter().map(|(param_name, param_type)| FunctionParameter::new(param_name, param_type)).collect(),
+                    params: p.into_iter().map(|(param_name, param_type)| Variable::new(param_name, Some(param_type))).collect(),
                     returns: r.unwrap_or(Vec::default()).into(),
                     source: (s..=e).into()
                 },
@@ -83,7 +83,7 @@ peg::parser!(pub(crate) grammar parser() for str {
 
     rule assignment() -> Statement
         = s:position!() idents:((_ i:identifier() _ { i }) ++ ",") _ "=" _ expr:expression() e:position!() {
-            Statement::Assignment { variables: idents.into_iter().map(|ident|Variable::new(ident)).collect(), expression: expr, source: (s..=e).into() }
+            Statement::Assignment { variables: idents.into_iter().map(|ident|Variable::new(ident, None)).collect(), expression: expr, source: (s..=e).into() }
         }
 
     // Each level of precedence is notated by a "--" line. Precedence is in ascending order.
@@ -112,7 +112,7 @@ peg::parser!(pub(crate) grammar parser() for str {
         "(" _ e:expression() _ ")" { e }
         i:int_literal() { i }
         b:bool_literal() { b }
-        i:identifier() { Expression::Variable(Variable::new(i)) }
+        i:identifier() { Expression::Variable(Variable::new(i, None)) }
     } e:position!() {
         match expr {
             Expression::BooleanComparison { comparison_type, lhs, rhs, .. } => Expression::BooleanComparison { comparison_type, lhs, rhs, source: (s..=e).into() },

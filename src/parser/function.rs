@@ -1,104 +1,7 @@
 use super::{
-    expression::Expression,
-    identifier::Identifier,
-    source_range::SourceRange,
-    statement::Statement,
-    types::{Type, Types},
+    expression::Expression, identifier::Identifier, source_range::SourceRange,
+    statement::Statement, types::Types, variable::Variables,
 };
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct FunctionParameter {
-    pub(crate) name: Identifier,
-    pub(crate) ty: Type,
-}
-
-impl FunctionParameter {
-    pub(super) fn new(name: Identifier, ty: Type) -> Self {
-        Self { name, ty }
-    }
-
-    /// Returns a [`SourceRange`] starting at the parameter's name and ending at the parameter's type.
-    pub(crate) fn source(&self) -> SourceRange {
-        self.name.source().combine(self.ty.source())
-    }
-}
-
-impl std::fmt::Display for FunctionParameter {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name)
-    }
-}
-
-/// A list of related TODO_LANG_NAME parameters.
-///
-/// Wrapping the list is needed to display better output in error messages when listing parameters.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct FunctionParameters(Vec<FunctionParameter>);
-
-impl FunctionParameters {
-    pub(crate) fn new() -> Self {
-        Self(Vec::new())
-    }
-
-    /// Returns a [`SourceRange`] from the beginning of the parameter list to the end.
-    /// Returns [`None`] if the parameter list is empty.
-    pub(crate) fn source(&self) -> Option<SourceRange> {
-        if self.len() > 0 {
-            Some(
-                self.first()
-                    .unwrap()
-                    .source()
-                    .combine(self.last().unwrap().source()),
-            )
-        } else {
-            None
-        }
-    }
-
-    pub(crate) fn types(&self) -> Types {
-        self.iter().map(|param| param.ty).collect()
-    }
-}
-
-impl FromIterator<FunctionParameter> for FunctionParameters {
-    fn from_iter<T: IntoIterator<Item = FunctionParameter>>(iter: T) -> Self {
-        Self(Vec::from_iter(iter))
-    }
-}
-
-impl<'a> IntoIterator for &'a FunctionParameters {
-    type Item = &'a FunctionParameter;
-    type IntoIter = std::slice::Iter<'a, FunctionParameter>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.iter()
-    }
-}
-
-impl std::ops::Deref for FunctionParameters {
-    type Target = Vec<FunctionParameter>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for FunctionParameters {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "`(")?;
-
-        for (i, param) in self.0.iter().enumerate() {
-            write!(f, "{}", param)?;
-
-            if i < self.0.len() - 1 {
-                write!(f, ", ")?;
-            }
-        }
-        write!(f, ")`")?;
-
-        Ok(())
-    }
-}
 
 /// The signature of a TODO_LANG_NAME function.
 ///
@@ -106,7 +9,7 @@ impl std::fmt::Display for FunctionParameters {
 #[derive(Debug, Clone)]
 pub(crate) struct FunctionSignature {
     pub(crate) name: Identifier,
-    pub(crate) params: FunctionParameters,
+    pub(crate) params: Variables,
     pub(crate) returns: Types,
     pub(crate) source: SourceRange,
 }

@@ -2,9 +2,10 @@
 use crate::{
     diagnostic::DiagnosticMessage,
     parser::{
-        function::{FunctionParameters, FunctionSignature},
+        function::FunctionSignature,
         source_range::SourceRange,
         types::{DataType, Types},
+        variable::Variables,
     },
 };
 
@@ -49,8 +50,8 @@ pub(super) fn diag_func_name_label(func_sig: &FunctionSignature) -> DiagnosticMe
 /// Creates a new [`DiagnosticMessage`] labeling the function's parameters.
 ///
 /// # Panics
-/// Panics if [`FunctionParameters`] is empty.
-pub(super) fn diag_func_param_label(params: &FunctionParameters) -> DiagnosticMessage {
+/// Panics if [`Variables`] is empty.
+pub(super) fn diag_func_param_label(params: &Variables) -> DiagnosticMessage {
     DiagnosticMessage::new(
         format!(
             "function parameter{} defined here",

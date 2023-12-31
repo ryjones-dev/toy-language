@@ -222,7 +222,7 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
         let mut block_vars = BlockVariables::new();
         for (i, function_param) in signature.params.iter().enumerate() {
             let cranelift_variable = cranelift::frontend::Variable::from_u32(
-                block_vars.var(function_param.name.clone()),
+                block_vars.var(function_param.name().clone()),
             );
             builder.declare_var(cranelift_variable, function_param.into());
             builder.def_var(cranelift_variable, builder.block_params(entry_block)[i]);

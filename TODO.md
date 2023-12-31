@@ -38,7 +38,7 @@
 - [x]  Add a diagnostic warning for unused variables
 - [x]  Add a diagnostic warning for unused functions
 - [x]  Add a `FunctionSignature` to `FunctionCall`, replacing `argument_types` and `return_types`
-- [ ]  Remove `FunctionParameter` in favor of `Variable`
+- [x]  Remove `FunctionParameter` in favor of `Variable`
 - [ ]  Allow explicit variable type annotations
 - [ ]  Pattern matching
 - [ ]  Check that all blocks in a function return the same number and type of values

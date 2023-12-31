@@ -1,8 +1,11 @@
 //! Implement conversions to Cranelift's "Type" type so that the parser
 //! doesn't need to know about Cranelift at all.
-use crate::parser::{
-    function::FunctionParameter,
-    types::{DataType, Type},
+use crate::{
+    parser::{
+        types::{DataType, Type},
+        variable::Variable,
+    },
+    semantic::EXPECT_VAR_TYPE,
 };
 
 impl From<DataType> for cranelift::codegen::ir::Type {
@@ -28,8 +31,8 @@ impl From<&Type> for cranelift::codegen::ir::Type {
     }
 }
 
-impl From<&FunctionParameter> for cranelift::codegen::ir::Type {
-    fn from(value: &FunctionParameter) -> Self {
-        value.ty.into()
+impl From<&Variable> for cranelift::codegen::ir::Type {
+    fn from(value: &Variable) -> Self {
+        value.get_type().expect(EXPECT_VAR_TYPE).into()
     }
 }

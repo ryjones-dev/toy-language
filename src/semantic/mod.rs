@@ -3,10 +3,7 @@ use thiserror::Error;
 use crate::{
     diagnostic::{Diagnostic, DiagnosticContext, DiagnosticLevel, DiagnosticMessage},
     parser::{
-        ast::AbstractSyntaxTree,
-        function::{FunctionParameter, FunctionSignature},
-        statement::Statement,
-        types::Types,
+        ast::AbstractSyntaxTree, function::FunctionSignature, statement::Statement, types::Types,
         variable::Variable,
     },
 };
@@ -40,8 +37,8 @@ pub(super) enum SemanticError {
     #[error("duplicate function parameter")]
     DuplicateParameterError {
         func_sig: FunctionSignature,
-        original: FunctionParameter,
-        new: FunctionParameter,
+        original: Variable,
+        new: Variable,
     },
     #[error("missing return statement")]
     MissingReturnStatementError { func_sig: FunctionSignature },
@@ -105,7 +102,8 @@ impl From<SemanticError> for Diagnostic {
                 DiagnosticContext::new(DiagnosticMessage::new(
                     format!(
                         "function `{}` already has a parameter named `{}`",
-                        func_sig.name, new.name
+                        func_sig.name,
+                        new.name()
                     ),
                     new.source(),
                 ))
@@ -186,7 +184,7 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Vec<SemanticErr
             if let Some(variable) = function_scope.insert_var(param.clone().into()) {
                 errors.push(SemanticError::DuplicateParameterError {
                     func_sig: function.signature.clone(),
-                    original: variable.to_param().clone(),
+                    original: variable.clone(),
                     new: param.clone(),
                 });
             }
