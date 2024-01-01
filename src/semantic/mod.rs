@@ -235,9 +235,12 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Vec<SemanticErr
         errors.push(SemanticError::UnusedVariableError { variable })
     }
     for func_sig in function_signatures {
-        errors.push(SemanticError::UnusedFunctionError {
-            function_signature: func_sig,
-        })
+        // main function can be unused
+        if func_sig.name.to_string() != "main" {
+            errors.push(SemanticError::UnusedFunctionError {
+                function_signature: func_sig,
+            })
+        }
     }
 
     errors

@@ -147,9 +147,8 @@ impl Scope<'_> {
         }
 
         for (_, mut func_meta) in self.function_metadata {
-            // Ignore discarded functions and the main function
+            // Ignore discarded functions
             if !func_meta.get_mut().function_signature.is_discarded()
-                && func_meta.get_mut().function_signature.name.to_string() != "main"
                 && func_meta.get_mut().read_count == 0
             {
                 unused_functions.push(func_meta.get_mut().function_signature.clone());
