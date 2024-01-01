@@ -40,10 +40,11 @@
 - [x]  Add a `FunctionSignature` to `FunctionCall`, replacing `argument_types` and `return_types`
 - [x]  Remove `FunctionParameter` in favor of `Variable`
 - [x]  Allow explicit variable type annotations
+- [ ]  The last expression in a scope should be what the scope returns
+- [ ]  Add range types that represent a continuous range of values
 - [ ]  Pattern matching
 - [ ]  Check that all blocks in a function return the same number and type of values
-- [ ]  Add syntactic sugar for pattern matching on a bool with only a true arm, akin to an if statement
-- [ ]  Add range operator
+- [ ]  Add syntactic sugar for pattern matching on a bool, akin to an if statement
 - [ ]  Support tuples
 - [ ]  Bool condition loop (while loop)
 - [ ]  Range loop (for loop)
