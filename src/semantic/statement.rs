@@ -33,7 +33,6 @@ pub(super) enum StatementError {
     #[error("assignment type mismatch")]
     AssignmentTypeMismatchError {
         expected_type: Type,
-        prev_var: Option<Variable>,
         var: Variable,
         assignment_source: SourceRange,
         expression: Expression,
@@ -90,7 +89,6 @@ impl From<StatementError> for Diagnostic {
             ),
             StatementError::AssignmentTypeMismatchError {
                 ref expected_type,
-                ref prev_var,
                 ref var,
                 assignment_source,
                 ref expression,
@@ -99,33 +97,15 @@ impl From<StatementError> for Diagnostic {
                     format!(
                         "attempted to assign result of type `{}` to variable of type `{}`",
                         expected_type,
-                        if let Some(var_type) = var.get_type() {
-                            *var_type
-                        } else {
-                            prev_var
-                                .as_ref()
-                                .expect("previous variable should be set here")
-                                .get_type()
-                                .expect(EXPECT_VAR_TYPE)
-                        }
+                        var.get_type().expect(EXPECT_VAR_TYPE)
                     ),
                     assignment_source,
                 ))
                 .with_labels({
-                    let mut labels = if let Some(prev_var) = prev_var {
-                        vec![
-                            diag_originally_defined(
-                                prev_var.source(),
-                                prev_var.get_type().map(|ty| ty.into()),
-                            ),
-                            diag_newly_defined(var.source(), var.get_type().map(|ty| ty.into())),
-                        ]
-                    } else {
-                        vec![DiagnosticMessage::new(
-                            "variable type defined here",
-                            var.get_type().as_ref().expect(EXPECT_VAR_TYPE).source(),
-                        )]
-                    };
+                    let mut labels = vec![DiagnosticMessage::new(
+                        "variable type defined here",
+                        var.get_type().as_ref().expect(EXPECT_VAR_TYPE).source(),
+                    )];
                     if let Expression::FunctionCall(function_call) = expression {
                         if let Some(label) = diag_return_types_label(
                             function_call
@@ -238,59 +218,30 @@ pub(super) fn analyze_statement(
                     });
                 } else {
                     for (i, variable) in variables.iter_mut().enumerate() {
-                        let scope_var = scope.get_var(variable.name());
-                        match scope_var {
-                            Some(scope_var) => {
-                                // Check if the variable has a different type than the previously defined variable
-                                if variable.get_type() != scope_var.get_type() {
-                                    errors.push(StatementError::VariableTypeRedefinitionError {
-                                        prev_var: scope_var.clone(),
-                                        var: variable.clone(),
-                                    });
-
-                                // Check if the variable has a different type than the expression result
-                                } else if scope_var.get_type().expect(EXPECT_VAR_TYPE)
-                                    != expression_types[i]
-                                {
-                                    errors.push(StatementError::AssignmentTypeMismatchError {
-                                        expected_type: expression_types[i],
-                                        prev_var: Some(scope_var.clone()),
-                                        var: variable.clone(),
-                                        assignment_source: *source,
-                                        expression: expression.clone(),
-                                    });
-                                }
-
-                                // Ensure that this variable is the same as variable already defined in scope
-                                *variable = scope_var.clone();
+                        if let Some(var_type) = variable.get_type() {
+                            // Check if the expression result matches the variable's annotated type
+                            if *var_type != expression_types[i] {
+                                errors.push(StatementError::AssignmentTypeMismatchError {
+                                    expected_type: expression_types[i],
+                                    var: variable.clone(),
+                                    assignment_source: *source,
+                                    expression: expression.clone(),
+                                });
                             }
-                            // If the variable is not in scope, this is a new variable definition
-                            None => {
-                                // Have to drop this explicitly to appease the borrow checker.
-                                // TODO: When Polonius is ready/stable, we might be able to remove this.
-                                drop(scope_var);
+                        } else {
+                            // Variable has not been explicitly assigned a type,
+                            // so give it the same type as the expression result
+                            variable.set_type(&expression_types[i]);
+                        }
 
-                                // If the type was explicitly annotated, make sure it matches the expression result
-                                if let Some(var_type) = variable.get_type() {
-                                    if *var_type != expression_types[i] {
-                                        errors.push(StatementError::AssignmentTypeMismatchError {
-                                            expected_type: expression_types[i],
-                                            prev_var: None,
-                                            var: variable.clone(),
-                                            assignment_source: *source,
-                                            expression: expression.clone(),
-                                        });
-                                    }
-                                } else {
-                                    // If the variable is not explicitly annotated, set the variable's type
-                                    // to the corresponding expression result type
-                                    variable.set_type(&expression_types[i]);
-                                }
-
-                                // Add the variable to the scope
-                                if let Some(_) = scope.insert_var(variable.clone()) {
-                                    unreachable!("variable cannot already be defined");
-                                }
+                        // Add the variable to the scope
+                        if let Some(scope_var) = scope.insert_var(variable.clone()) {
+                            // The variable has already been added to the scope, so make sure it has the same type
+                            if scope_var.get_type() != variable.get_type() {
+                                errors.push(StatementError::VariableTypeRedefinitionError {
+                                    prev_var: scope_var.clone(),
+                                    var: variable.clone(),
+                                });
                             }
                         }
                     }
