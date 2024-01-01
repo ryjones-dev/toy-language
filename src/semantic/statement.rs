@@ -273,7 +273,7 @@ pub(super) fn analyze_statement(
                 }
             }
         }
-        Statement::Return { expressions, .. } => {
+        Statement::FunctionReturn { expressions, .. } => {
             let mut return_types = Types::new();
 
             for expression in expressions {

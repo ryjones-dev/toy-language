@@ -313,7 +313,7 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
 
                 expression_generator.generate(Expression::FunctionCall(function_call));
             }
-            Statement::Return { expressions, .. } => {
+            Statement::FunctionReturn { expressions, .. } => {
                 let mut return_values = Vec::new();
 
                 for expression in expressions {

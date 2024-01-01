@@ -76,10 +76,10 @@ peg::parser!(pub(crate) grammar parser() for str {
     rule statement() -> Statement
         = _ a:assignment() _  { a }
         / _ c:call_function() _ { Statement::FunctionCall(c) }
-        / _ r:return_statement() _ { r }
+        / _ r:function_return_statement() _ { r }
 
-    rule return_statement() -> Statement
-        = s:position!() "->" _ r:(e:((_ e:expression() _ {e}) ++ ",")) e:position!() { Statement::Return { expressions: r, source: (s..=e).into() } }
+    rule function_return_statement() -> Statement
+        = s:position!() "->" _ r:(e:((_ e:expression() _ {e}) ++ ",")) e:position!() { Statement::FunctionReturn { expressions: r, source: (s..=e).into() } }
 
     rule assignment() -> Statement
         = s:position!() vars:((_ i:identifier() _ t:_type()? _ { (i, t) }) ++ ",") _ "=" _ expr:expression() e:position!() {

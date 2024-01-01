@@ -25,7 +25,7 @@ pub(crate) enum Statement {
     /// Call a function with no return values as a free-standing statement.
     /// The function must return no values, otherwise a [`Statement::Assignment`] must be used.
     FunctionCall(FunctionCall),
-    Return {
+    FunctionReturn {
         expressions: Vec<Expression>,
         source: SourceRange,
     },

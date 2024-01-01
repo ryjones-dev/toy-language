@@ -205,7 +205,7 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Vec<SemanticErr
             }
 
             match statement {
-                Statement::Return { .. } => has_return_statement = true,
+                Statement::FunctionReturn { .. } => has_return_statement = true,
                 _ => {}
             }
         }
