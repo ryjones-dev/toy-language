@@ -93,7 +93,7 @@ impl std::fmt::Display for Type {
 /// A list of related TODO_LANG_NAME types.
 ///
 /// Wrapping the list is needed to display better output in error messages when listing types.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct Types(Vec<Type>);
 
 impl Types {

@@ -1,4 +1,7 @@
-use super::{function::FunctionCall, source_range::SourceRange, variable::Variable};
+use super::{
+    function::FunctionSignature, identifier::Identifier, source_range::SourceRange,
+    variable::Variable,
+};
 
 /// Each type of boolean comparison that can be used in an expression.
 ///
@@ -74,7 +77,15 @@ pub(crate) enum Expression {
         source: SourceRange,
     },
 
-    FunctionCall(FunctionCall),
+    /// The called function signature can't be parsed from the function call expression itself,
+    /// but can be deduced during semantic analysis.
+    /// Until then, the function signature will have a value of [`None`].
+    FunctionCall {
+        name: Identifier,
+        arguments: Vec<Expression>,
+        source: SourceRange,
+        function_signature: Option<FunctionSignature>,
+    },
 
     Variable(Variable),
     IntLiteral(i64, SourceRange),
@@ -88,7 +99,7 @@ impl Expression {
             Expression::BooleanComparison { source, .. } => *source,
             Expression::BinaryMathOperation { source, .. } => *source,
             Expression::UnaryMathOperation { source, .. } => *source,
-            Expression::FunctionCall(function_call) => function_call.source,
+            Expression::FunctionCall { source, .. } => *source,
             Expression::Variable(variable) => variable.source(),
             Expression::IntLiteral(_, source) => *source,
             Expression::BoolLiteral(_, source) => *source,

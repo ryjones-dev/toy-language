@@ -4,7 +4,7 @@ use crate::{
     diagnostic::{Diagnostic, DiagnosticContext, DiagnosticLevel, DiagnosticMessage},
     parser::{
         expression::Expression,
-        function::{FunctionCall, FunctionSignature},
+        function::FunctionSignature,
         source_range::SourceRange,
         statement::Statement,
         types::{Type, Types},
@@ -14,11 +14,10 @@ use crate::{
 
 use super::{
     diagnostic::{
-        diag_expected, diag_expected_types, diag_func_name_label, diag_newly_defined,
-        diag_originally_defined, diag_return_types_label,
+        diag_expected, diag_newly_defined, diag_originally_defined, diag_return_types_label,
     },
-    expression::{analyze_expression, analyze_function_call, ExpressionError},
-    scope::Scope,
+    expression::{analyze_expression, ExpressionError},
+    scope::{Scope, ScopeError},
     EXPECT_FUNC_SIG, EXPECT_VAR_TYPE,
 };
 
@@ -39,13 +38,6 @@ pub(super) enum StatementError {
     },
     #[error("variable type redefinition")]
     VariableTypeRedefinitionError { prev_var: Variable, var: Variable },
-    #[error("function result{} not stored", if .function_call.function_signature.as_ref().expect(EXPECT_FUNC_SIG).returns.len() == 1 { " is" } else { "s are" })]
-    NonZeroReturnError { function_call: FunctionCall },
-    #[error("return value mismatch")]
-    ReturnValueMismatchError {
-        func_sig: FunctionSignature,
-        return_types: Types,
-    },
     #[error(transparent)]
     ExpressionError(#[from] ExpressionError),
 }
@@ -73,12 +65,12 @@ impl From<StatementError> for Diagnostic {
                         expression.source(),
                     )];
 
-                    if let Expression::FunctionCall(function_call) = expression {
+                    if let Expression::FunctionCall {
+                        function_signature, ..
+                    } = expression
+                    {
                         if let Some(label) = diag_return_types_label(
-                            function_call
-                                .function_signature
-                                .as_ref()
-                                .expect(EXPECT_FUNC_SIG),
+                            function_signature.as_ref().expect(EXPECT_FUNC_SIG),
                         ) {
                             labels.push(label);
                         }
@@ -106,12 +98,12 @@ impl From<StatementError> for Diagnostic {
                         "variable type defined here",
                         var.get_type().as_ref().expect(EXPECT_VAR_TYPE).source(),
                     )];
-                    if let Expression::FunctionCall(function_call) = expression {
+                    if let Expression::FunctionCall {
+                        function_signature, ..
+                    } = expression
+                    {
                         if let Some(label) = diag_return_types_label(
-                            function_call
-                                .function_signature
-                                .as_ref()
-                                .expect(EXPECT_FUNC_SIG),
+                            function_signature.as_ref().expect(EXPECT_FUNC_SIG),
                         ) {
                             labels.push(label);
                         }
@@ -136,63 +128,155 @@ impl From<StatementError> for Diagnostic {
                     diag_newly_defined(var.source(), var.get_type().map(|ty| ty.into())),
                 ]),
             ),
-            StatementError::NonZeroReturnError { ref function_call } => {
-                let func_sig = function_call
-                    .function_signature
-                    .as_ref()
-                    .expect(EXPECT_FUNC_SIG);
-                Self::new(&err, DiagnosticLevel::Error)
-                    .with_context(
-                        DiagnosticContext::new(DiagnosticMessage::new(
-                            "function called here",
-                            function_call.source,
-                        ))
-                        .with_labels({
-                            let mut labels = vec![diag_func_name_label(func_sig)];
-                            if let Some(label) = diag_return_types_label(&func_sig) {
-                                labels.push(label);
-                            }
-                            labels
-                        }),
-                    )
-                    .with_suggestions(vec![format!(
-                        "If the result{} not needed, \
-                    assign {} unused result to a discarded variable (\"_\").",
-                        if func_sig.returns.len() == 1 {
-                            " is"
-                        } else {
-                            "s are"
-                        },
-                        if func_sig.returns.len() == 1 {
-                            "the"
-                        } else {
-                            "each"
-                        },
-                    )])
-            }
-            StatementError::ReturnValueMismatchError {
-                ref func_sig,
-                ref return_types,
-            } => Self::new(&err, DiagnosticLevel::Error).with_context(
-                DiagnosticContext::new(diag_expected_types(&func_sig.returns, return_types))
-                    .with_labels({
-                        let mut labels = vec![diag_func_name_label(func_sig)];
-                        if let Some(label) = diag_return_types_label(&func_sig) {
-                            labels.push(label);
-                        }
-                        labels
-                    }),
-            ),
             StatementError::ExpressionError(err) => err.into(),
         }
     }
 }
 
-pub(super) fn analyze_statement(
-    func_sig: &FunctionSignature,
-    scope: &mut Scope,
+#[derive(Debug, Error)]
+pub(super) enum StatementsError {
+    #[error("return before end of scope")]
+    EarlyReturnError {
+        return_statement: Statement,
+        expected_types: Types,
+        remaining_code_source: SourceRange,
+    },
+    #[error(transparent)]
+    StatementError(#[from] StatementError),
+    #[error(transparent)]
+    ScopeError(#[from] ScopeError),
+}
+
+impl From<StatementsError> for Diagnostic {
+    fn from(err: StatementsError) -> Self {
+        match err {
+            StatementsError::EarlyReturnError {
+                ref return_statement,
+                ref expected_types,
+                remaining_code_source,
+            } => Self::new(&err, DiagnosticLevel::Error)
+                .with_context(
+                    DiagnosticContext::new(DiagnosticMessage::new(
+                        "there is more code below this return statement",
+                        return_statement.source(),
+                    ))
+                    .with_labels(vec![DiagnosticMessage::new(
+                        "unreachable code",
+                        remaining_code_source,
+                    )]),
+                )
+                .with_suggestions({
+                    if expected_types.len() > 0 {
+                        vec![format!(
+                            "If returning from the scope is not intentional, \
+                            assign the result{} to {}discarded variable{} instead.",
+                            if expected_types.len() == 1 { "" } else { "s" },
+                            if expected_types.len() == 1 { "a " } else { "" },
+                            if expected_types.len() == 1 { "" } else { "s" }
+                        )]
+                    } else {
+                        Vec::new() // TODO: How do we handle a function call that returns nothing, but is not meant to be a return statement?
+                    }
+                }),
+            StatementsError::StatementError(err) => err.into(),
+            StatementsError::ScopeError(err) => err.into(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(super) enum ScopeResults {
+    /// The scope should return the given types.
+    ///
+    /// The return statement is optional since no return statement means no return types.
+    ConvergentReturn(Option<Statement>, Types),
+    /// The scope is divergent, meaning that it should return the given types as the result
+    /// of an outer function.
+    ///
+    /// The statement is not optional because scopes cannot diverge without a return statement.
+    DivergentReturn(Statement, Types),
+}
+
+impl Default for ScopeResults {
+    fn default() -> Self {
+        ScopeResults::ConvergentReturn(None, Types::default())
+    }
+}
+
+pub(super) fn analyze_statements(
+    statements: &mut Vec<Statement>,
+    mut scope: Scope,
+) -> (ScopeResults, Vec<StatementsError>) {
+    let mut scope_results = None;
+    let mut errors = Vec::new();
+
+    let statements_len = statements.len();
+    let mut first_return_index = None;
+    for (i, statement) in statements.iter_mut().enumerate() {
+        let (results, errs) = analyze_statement(statement, &mut scope);
+        errors.append(
+            &mut errs
+                .into_iter()
+                .map(|err| StatementsError::StatementError(err))
+                .collect(),
+        );
+
+        if let Some(results) = results {
+            if let None = scope_results {
+                scope_results = Some(results);
+
+                if i != statements_len - 1 {
+                    // Scope has more statements after the return.
+                    // We can't generate an error here because the statement list is mutably borrowed
+                    // during this loop.
+                    // Instead, keep track of the index and generate the error after iteration is done.
+                    first_return_index = Some(i);
+                }
+            }
+        }
+    }
+
+    // If we detected an early return, generate that error now
+    if let Some(i) = first_return_index {
+        let statement = statements[i].clone();
+        let remaining = &statements[i + 1..];
+        errors.push(StatementsError::EarlyReturnError {
+            return_statement: statement.clone(),
+            expected_types: match scope_results.as_ref().unwrap() {
+                ScopeResults::ConvergentReturn(_, types) => types.clone(),
+                ScopeResults::DivergentReturn(_, types) => types.clone(),
+            },
+            remaining_code_source: remaining
+                .first()
+                .unwrap()
+                .source()
+                .combine(remaining.last().unwrap().source()),
+        });
+    }
+
+    // Check for any variables or functions in the immediate scope that have not been used
+    let (unused_variables, function_signatures) = scope.get_unused();
+    for variable in unused_variables {
+        errors.push(StatementsError::ScopeError(
+            ScopeError::UnusedVariableError { variable },
+        ))
+    }
+    for func_sig in function_signatures {
+        errors.push(StatementsError::ScopeError(
+            ScopeError::UnusedFunctionError {
+                function_signature: func_sig,
+            },
+        ))
+    }
+
+    (scope_results.unwrap_or_default(), errors)
+}
+
+/// Returns the types that statement returns, if any, and any errors the statement produced.
+fn analyze_statement(
     statement: &mut Statement,
-) -> Result<(), Vec<StatementError>> {
+    scope: &mut Scope,
+) -> (Option<ScopeResults>, Vec<StatementError>) {
     let mut errors = Vec::new();
     match statement {
         Statement::Assignment {
@@ -200,13 +284,8 @@ pub(super) fn analyze_statement(
             expression,
             source,
         } => {
-            let (expression_types, errs) = analyze_expression(expression, &scope);
-            errors.append(
-                &mut errs
-                    .into_iter()
-                    .map(|err| StatementError::ExpressionError(err))
-                    .collect(),
-            );
+            let (expression_types, mut errs) = get_expression_types(expression, scope);
+            errors.append(&mut errs);
 
             // Only continue if the expression did not have errors
             if errors.len() == 0 {
@@ -247,63 +326,59 @@ pub(super) fn analyze_statement(
                     }
                 }
             }
+
+            (None, errors)
         }
-        Statement::FunctionCall(function_call) => {
-            let (func_sig, errs) = analyze_function_call(function_call, &scope);
-
-            errors.append(
-                &mut errs
-                    .into_iter()
-                    .map(|err| StatementError::ExpressionError(err))
-                    .collect(),
-            );
-
-            // Only continue if the function call did not have errors
-            if errors.len() == 0 {
-                match func_sig {
-                    Some(func_sig) => {
-                        // Ensure that function calls do not return a value, otherwise an assignment statement needs to be used
-                        if func_sig.returns.len() > 0 {
-                            errors.push(StatementError::NonZeroReturnError {
-                                function_call: function_call.clone(),
-                            });
-                        }
-                    }
-                    None => {}
-                }
-            }
+        Statement::ScopeReturn { expressions, .. } => {
+            let (return_types, mut errs) = get_expressions_types(expressions, scope);
+            errors.append(&mut errs);
+            (
+                Some(ScopeResults::ConvergentReturn(
+                    Some(statement.clone()),
+                    return_types,
+                )),
+                errors,
+            )
         }
         Statement::FunctionReturn { expressions, .. } => {
-            let mut return_types = Types::new();
-
-            for expression in expressions {
-                let (mut types, errs) = analyze_expression(expression, &scope);
-                errors.append(
-                    &mut errs
-                        .into_iter()
-                        .map(|err| StatementError::ExpressionError(err))
-                        .collect(),
-                );
-
-                return_types.append(&mut types);
-            }
-
-            // Only continue if the expression did not have errors
-            if errors.len() == 0 {
-                // Ensure that the function returns the correct types
-                if func_sig.returns != return_types {
-                    errors.push(StatementError::ReturnValueMismatchError {
-                        func_sig: func_sig.clone(),
-                        return_types,
-                    });
-                }
-            }
+            let (return_types, mut errs) = get_expressions_types(expressions, scope);
+            errors.append(&mut errs);
+            (
+                Some(ScopeResults::DivergentReturn(
+                    statement.clone(),
+                    return_types,
+                )),
+                errors,
+            )
         }
     }
+}
 
-    if errors.is_empty() {
-        Ok(())
-    } else {
-        Err(errors)
+fn get_expression_types(
+    expression: &mut Expression,
+    scope: &Scope,
+) -> (Types, Vec<StatementError>) {
+    let (types, errs) = analyze_expression(expression, &scope);
+    let errs = errs
+        .into_iter()
+        .map(|err| StatementError::ExpressionError(err))
+        .collect();
+
+    (types, errs)
+}
+
+fn get_expressions_types(
+    expressions: &mut Vec<Expression>,
+    scope: &Scope,
+) -> (Types, Vec<StatementError>) {
+    let mut types = Types::new();
+    let mut errors = Vec::new();
+
+    for expression in expressions {
+        let (mut tys, mut errs) = get_expression_types(expression, scope);
+        types.append(&mut tys);
+        errors.append(&mut errs);
     }
+
+    (types, errors)
 }

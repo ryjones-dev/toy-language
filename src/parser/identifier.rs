@@ -27,6 +27,12 @@ impl Identifier {
     }
 }
 
+impl<'a> From<&'a Identifier> for &'a str {
+    fn from(value: &'a Identifier) -> Self {
+        &value.val
+    }
+}
+
 // The source range should not affect equivalence or hashing
 impl PartialEq for Identifier {
     fn eq(&self, other: &Self) -> bool {
@@ -37,12 +43,6 @@ impl PartialEq for Identifier {
 impl std::hash::Hash for Identifier {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.val.hash(state);
-    }
-}
-
-impl From<Identifier> for String {
-    fn from(value: Identifier) -> Self {
-        value.val
     }
 }
 

@@ -8,7 +8,8 @@ use crate::{
         expression::{
             BinaryMathOperationType, BooleanComparisonType, Expression, UnaryMathOperationType,
         },
-        function::FunctionCall,
+        function::FunctionSignature,
+        identifier::Identifier,
         types::DataType,
         variable::Variable,
     },
@@ -102,7 +103,16 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
             } => {
                 vec![self.generate_unary_operation(operation_type, *expression)]
             }
-            Expression::FunctionCall(function_call) => self.generate_function_call(function_call),
+            Expression::FunctionCall {
+                name,
+                arguments,
+                function_signature,
+                ..
+            } => self.generate_function_call(
+                name,
+                arguments,
+                function_signature.expect(EXPECT_FUNC_SIG),
+            ),
             Expression::Variable(variable) => vec![self.generate_variable(variable)],
             Expression::IntLiteral(value, _) => vec![self.generate_int_literal(value)],
             Expression::BoolLiteral(value, _) => {
@@ -224,12 +234,9 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
 
     fn generate_function_call(
         &mut self,
-        FunctionCall {
-            name,
-            arguments,
-            function_signature,
-            ..
-        }: FunctionCall,
+        name: Identifier,
+        arguments: Vec<Expression>,
+        func_sig: FunctionSignature,
     ) -> Vec<ExpressionValue> {
         // Because we've already done semantic analysis, we know that the function being called is defined,
         // and this call to that function is correct.
@@ -237,7 +244,6 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         // This allows for any arbitrary function definition order.
         let mut sig = self.module.make_signature();
 
-        let func_sig = function_signature.expect(EXPECT_FUNC_SIG);
         for ty in &func_sig.params.types() {
             sig.params.push(AbiParam::new(ty.into()))
         }
@@ -248,7 +254,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
 
         let func_id_to_call = self
             .module
-            .declare_function(&String::from(name), cranelift_module::Linkage::Local, &sig)
+            .declare_function(&name.to_string(), cranelift_module::Linkage::Local, &sig)
             .unwrap(); // TODO: this could have a genuine error but it's extremely unlikely, so it's not worth changing the API right now
 
         // Get the function to be called

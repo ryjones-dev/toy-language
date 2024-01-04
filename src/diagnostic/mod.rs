@@ -1,6 +1,14 @@
 use std::error::Error;
 
+use codespan_reporting::{files::SimpleFiles, term::termcolor::StandardStream};
+use thiserror::Error;
+
 use crate::parser::source_range::SourceRange;
+
+/// An error that is returned when the compiler is unable to render error messages to stderr.
+#[derive(Debug, Error)]
+#[error("failed to render error message: {0}")]
+pub struct RenderErrorFailure(codespan_reporting::files::Error);
 
 /// Contains a to message, label, or note to display as part of a [`DiagnosticContext`].
 ///
@@ -71,6 +79,7 @@ impl DiagnosticContext {
 }
 
 /// Different levels of diagnostic messages that a [`Diagnostic`] can produce.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DiagnosticLevel {
     /// Error level messages need to be addressed for compilation to succeed.
     Error,
@@ -94,6 +103,10 @@ impl Diagnostic {
             context: None,
             suggestions: Vec::new(),
         }
+    }
+
+    pub(crate) fn level(&self) -> DiagnosticLevel {
+        self.level
     }
 
     pub(crate) fn with_context(self, context: DiagnosticContext) -> Self {
@@ -124,10 +137,7 @@ impl Diagnostic {
         }
     }
 
-    pub(super) fn to_diagnostic<F: Copy>(
-        self,
-        file_id: F,
-    ) -> codespan_reporting::diagnostic::Diagnostic<F> {
+    fn to_diagnostic<F: Copy>(self, file_id: F) -> codespan_reporting::diagnostic::Diagnostic<F> {
         let mut labels = Vec::new();
         if let Some(context) = self.context {
             labels.push(context.message.to_primary(file_id));
@@ -151,4 +161,23 @@ impl Diagnostic {
                 .with_notes(self.suggestions),
         }
     }
+}
+
+pub(crate) fn report_diagnostic(
+    writer: &StandardStream,
+    config: &codespan_reporting::term::Config,
+    files: &SimpleFiles<&str, &str>,
+    file_id: usize,
+    message: Diagnostic,
+) -> Result<(), RenderErrorFailure> {
+    if let Err(err) = codespan_reporting::term::emit(
+        &mut writer.lock(),
+        config,
+        files,
+        &message.to_diagnostic(file_id),
+    ) {
+        return Err(RenderErrorFailure(err));
+    }
+
+    Ok(())
 }

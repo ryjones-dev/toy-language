@@ -213,10 +213,10 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
         // Instantiate the function builder and create the function entry block where IR code will be emitted.
         // Because this is the entry block of the function, we can seal it early as no other blocks can branch to it.
         let mut builder = FunctionBuilder::new(&mut context.func, function_context);
-        let entry_block = builder.create_block();
-        builder.append_block_params_for_function_params(entry_block);
-        builder.switch_to_block(entry_block);
-        builder.seal_block(entry_block);
+        let function_block = builder.create_block();
+        builder.append_block_params_for_function_params(function_block);
+        builder.switch_to_block(function_block);
+        builder.seal_block(function_block);
 
         // Prime the block variables with the function parameters
         let mut block_vars = BlockVariables::new();
@@ -225,11 +225,11 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
                 block_vars.var(function_param.name().clone()),
             );
             builder.declare_var(cranelift_variable, function_param.into());
-            builder.def_var(cranelift_variable, builder.block_params(entry_block)[i]);
+            builder.def_var(cranelift_variable, builder.block_params(function_block)[i]);
         }
 
         // Now we can generate the function body
-        Self::generate_function_body(&mut self.module, builder, block_vars, body);
+        Self::generate_function_body(&mut self.module, builder, block_vars, body, function_block);
 
         // Mark the function as defined to kick off Cranelift IR compilation
         self.module
@@ -261,10 +261,17 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
         mut builder: FunctionBuilder,
         mut block_vars: BlockVariables,
         body: Vec<Statement>,
+        function_block: Block,
     ) {
         // Emit IR code for each statement in the function
         for statement in body {
-            Self::generate_statement(module, &mut builder, &mut block_vars, statement);
+            Self::generate_statement(
+                module,
+                &mut builder,
+                &mut block_vars,
+                statement,
+                function_block,
+            );
         }
 
         builder.finalize();
@@ -275,6 +282,7 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
         builder: &mut FunctionBuilder,
         block_vars: &mut BlockVariables,
         statement: Statement,
+        function_block: Block,
     ) {
         match statement {
             Statement::Assignment {
@@ -307,36 +315,48 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
                     }
                 }
             }
-            Statement::FunctionCall(function_call) => {
-                let mut expression_generator =
-                    ExpressionGenerator::new(module, builder, block_vars);
-
-                expression_generator.generate(Expression::FunctionCall(function_call));
+            Statement::ScopeReturn { expressions, .. } => {
+                if let Some(current_block) = builder.current_block() {
+                    if function_block == current_block {
+                        Self::generate_function_return(module, builder, block_vars, expressions)
+                    } else {
+                        todo!("Handle non-function return")
+                    }
+                }
             }
             Statement::FunctionReturn { expressions, .. } => {
-                let mut return_values = Vec::new();
-
-                for expression in expressions {
-                    // Generate IR for the return value expressions
-                    let mut values;
-                    {
-                        let mut expression_generator =
-                            ExpressionGenerator::new(module, builder, block_vars);
-                        values = expression_generator.generate(expression);
-                    }
-
-                    return_values.append(&mut values);
-                }
-
-                // Add the IR instruction to actually return from the function
-                builder.ins().return_(
-                    &return_values
-                        .iter()
-                        .map(|value| Value::from(*value))
-                        .collect::<Vec<Value>>(),
-                );
+                Self::generate_function_return(module, builder, block_vars, expressions)
             }
         }
+    }
+
+    fn generate_function_return(
+        module: &mut M,
+        builder: &mut FunctionBuilder,
+        block_vars: &mut BlockVariables,
+        expressions: Vec<Expression>,
+    ) {
+        let mut return_values = Vec::new();
+
+        for expression in expressions {
+            // Generate IR for the return value expressions
+            let mut values;
+            {
+                let mut expression_generator =
+                    ExpressionGenerator::new(module, builder, block_vars);
+                values = expression_generator.generate(expression);
+            }
+
+            return_values.append(&mut values);
+        }
+
+        // Add the IR instruction to actually return from the function
+        builder.ins().return_(
+            &return_values
+                .iter()
+                .map(|value| Value::from(*value))
+                .collect::<Vec<Value>>(),
+        );
     }
 
     /// Check if a given module error is caused by an error in the IR code, or a bug in the code generation.

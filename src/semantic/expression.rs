@@ -1,5 +1,3 @@
-use std::cell::Ref;
-
 use thiserror::Error;
 
 use crate::{
@@ -8,7 +6,9 @@ use crate::{
         expression::{
             BinaryMathOperationType, BooleanComparisonType, Expression, UnaryMathOperationType,
         },
-        function::{FunctionCall, FunctionSignature},
+        function::FunctionSignature,
+        identifier::Identifier,
+        source_range::SourceRange,
         types::{DataType, Type, Types},
         variable::Variable,
     },
@@ -27,17 +27,24 @@ pub(super) enum ExpressionError {
     #[error("unknown variable")]
     UnknownVariableError(Variable),
     #[error("unknown function")]
-    UnknownFunctionError(FunctionCall),
+    UnknownFunctionError(Identifier, SourceRange),
     #[error("read from discarded variable")]
     ReadFromDiscardedVariableError {
         variable: Variable,
         scope_var: Variable,
     },
     #[error("call to discarded function")]
-    CallToDiscardedFunctionError { function_call: FunctionCall },
+    CallToDiscardedFunctionError {
+        name: Identifier,
+        source_range: SourceRange,
+        function_signature: FunctionSignature,
+    },
     #[error("argument type mismatch")]
     ArgumentTypeMismatchError {
-        function_call: FunctionCall,
+        name: Identifier,
+        arguments: Vec<Expression>,
+        source_range: SourceRange,
+        function_signature: FunctionSignature,
         argument_types: Types,
     },
     #[error("expression returns {value_count} values in a single value context")]
@@ -64,11 +71,11 @@ impl From<ExpressionError> for Diagnostic {
                     ),
                 ))
             }
-            ExpressionError::UnknownFunctionError(ref function_call) => {
+            ExpressionError::UnknownFunctionError(ref name, source) => {
                 Self::new(&err, DiagnosticLevel::Error).with_context(DiagnosticContext::new(
                     DiagnosticMessage::new(
-                        format!("unknown function `{}` in this scope", function_call.name),
-                        function_call.source,
+                        format!("unknown function `{}` in this scope", name),
+                        source,
                     ),
                 ))
             }
@@ -91,75 +98,69 @@ impl From<ExpressionError> for Diagnostic {
                     variable,
                     &variable.name().to_string()[1..]
                 )]),
-            ExpressionError::CallToDiscardedFunctionError { ref function_call } => {
-                let func_sig = function_call
-                    .function_signature
-                    .as_ref()
-                    .expect(EXPECT_FUNC_SIG);
-                Self::new(&err, DiagnosticLevel::Error)
-                    .with_context(
-                        DiagnosticContext::new(DiagnosticMessage::new(
-                            format!("call to discarded function `{}`", function_call.name),
-                            function_call.source,
-                        ))
-                        .with_labels(vec![DiagnosticMessage::new(
-                            format!("function `{}` defined here", func_sig.name),
-                            func_sig.source,
-                        )]),
-                    )
-                    .with_suggestions(vec![format!(
-                        "Rename `{}` to `{}` to avoid discarding the function.",
-                        function_call.name,
-                        &function_call.name.to_string()[1..]
-                    )])
-            }
-            ExpressionError::ArgumentTypeMismatchError {
-                ref function_call,
-                ref argument_types,
-            } => {
-                let func_sig = function_call
-                    .function_signature
-                    .as_ref()
-                    .expect(EXPECT_FUNC_SIG);
-                Self::new(&err, DiagnosticLevel::Error).with_context(
-                    DiagnosticContext::new(diag_expected(
-                        &func_sig.params.types(),
-                        argument_types,
-                        if function_call.arguments.len() > 0 {
-                            function_call
-                                .arguments
-                                .first()
-                                .unwrap()
-                                .source()
-                                .combine(function_call.arguments.last().unwrap().source())
-                        } else {
-                            function_call.source
-                        },
+            ExpressionError::CallToDiscardedFunctionError {
+                ref name,
+                source_range,
+                ref function_signature,
+            } => Self::new(&err, DiagnosticLevel::Error)
+                .with_context(
+                    DiagnosticContext::new(DiagnosticMessage::new(
+                        format!("call to discarded function `{}`", name),
+                        source_range,
                     ))
-                    .with_labels({
-                        let mut labels = vec![diag_func_name_label(func_sig)];
+                    .with_labels(vec![DiagnosticMessage::new(
+                        format!("function `{}` defined here", function_signature.name),
+                        function_signature.source,
+                    )]),
+                )
+                .with_suggestions(vec![format!(
+                    "Rename `{}` to `{}` to avoid discarding the function.",
+                    name,
+                    &name.to_string()[1..]
+                )]),
+            ExpressionError::ArgumentTypeMismatchError {
+                ref arguments,
+                source_range,
+                ref function_signature,
+                ref argument_types,
+                ..
+            } => Self::new(&err, DiagnosticLevel::Error).with_context(
+                DiagnosticContext::new(diag_expected(
+                    &function_signature.params.types(),
+                    argument_types,
+                    if arguments.len() > 0 {
+                        arguments
+                            .first()
+                            .unwrap()
+                            .source()
+                            .combine(arguments.last().unwrap().source())
+                    } else {
+                        source_range
+                    },
+                ))
+                .with_labels({
+                    let mut labels = vec![diag_func_name_label(&function_signature)];
 
-                        if func_sig.params.len() > 0 {
-                            labels.push(diag_func_param_label(&func_sig.params));
-                        }
+                    if function_signature.params.len() > 0 {
+                        labels.push(diag_func_param_label(&function_signature.params));
+                    }
 
-                        for expression in &function_call.arguments {
-                            if let Expression::FunctionCall(function_call) = expression {
-                                if let Some(label) = diag_return_types_label(
-                                    function_call
-                                        .function_signature
-                                        .as_ref()
-                                        .expect(EXPECT_FUNC_SIG),
-                                ) {
-                                    labels.push(label);
-                                }
+                    for expression in arguments {
+                        if let Expression::FunctionCall {
+                            function_signature, ..
+                        } = expression
+                        {
+                            if let Some(label) = diag_return_types_label(
+                                function_signature.as_ref().expect(EXPECT_FUNC_SIG),
+                            ) {
+                                labels.push(label);
                             }
                         }
+                    }
 
-                        labels
-                    }),
-                )
-            }
+                    labels
+                }),
+            ),
             ExpressionError::SingleValueError {
                 value_count,
                 ref expression,
@@ -170,12 +171,12 @@ impl From<ExpressionError> for Diagnostic {
                 ))
                 .with_labels({
                     let mut labels = Vec::new();
-                    if let Expression::FunctionCall(function_call) = expression {
+                    if let Expression::FunctionCall {
+                        function_signature, ..
+                    } = expression
+                    {
                         if let Some(label) = diag_return_types_label(
-                            function_call
-                                .function_signature
-                                .as_ref()
-                                .expect(EXPECT_FUNC_SIG),
+                            function_signature.as_ref().expect(EXPECT_FUNC_SIG),
                         ) {
                             labels.push(label);
                         }
@@ -195,12 +196,12 @@ impl From<ExpressionError> for Diagnostic {
                 ))
                 .with_labels({
                     let mut labels = Vec::new();
-                    if let Expression::FunctionCall(function_call) = expression {
+                    if let Expression::FunctionCall {
+                        function_signature, ..
+                    } = expression
+                    {
                         if let Some(label) = diag_return_types_label(
-                            function_call
-                                .function_signature
-                                .as_ref()
-                                .expect(EXPECT_FUNC_SIG),
+                            function_signature.as_ref().expect(EXPECT_FUNC_SIG),
                         ) {
                             labels.push(label);
                         }
@@ -308,14 +309,22 @@ pub(super) fn analyze_expression(
                 }
             }
         }
-        Expression::FunctionCall(function_call) => {
-            let (func_sig, mut errs) = analyze_function_call(function_call, scope);
+        Expression::FunctionCall {
+            name,
+            arguments,
+            source,
+            function_signature,
+        } => {
+            let (func_sig, mut errs) = analyze_function_call(name, arguments, &source, scope);
             match func_sig {
                 Some(func_sig) => {
                     for return_type in &func_sig.returns {
                         types.push(*return_type);
                     }
                     errors.append(&mut errs);
+
+                    // Update the function call's cached signature in the AST
+                    *function_signature = Some(func_sig);
                 }
                 None => errors.append(&mut errs),
             }
@@ -347,27 +356,28 @@ pub(super) fn analyze_expression(
     (types, errors)
 }
 
-pub(super) fn analyze_function_call<'a>(
-    function_call: &mut FunctionCall,
-    scope: &'a Scope,
-) -> (Option<Ref<'a, FunctionSignature>>, Vec<ExpressionError>) {
+pub(super) fn analyze_function_call(
+    name: &Identifier,
+    arguments: &mut Vec<Expression>,
+    source: &SourceRange,
+    scope: &Scope,
+) -> (Option<FunctionSignature>, Vec<ExpressionError>) {
     let mut errors = Vec::new();
 
-    match scope.get_func_sig(&function_call.name) {
+    match scope.get_func_sig(name) {
         Some(func_sig) => {
-            // Store the function's signature for later use
-            function_call.function_signature = Some(func_sig.clone());
-
             // Check if the function being called is discarded
             if func_sig.is_discarded() {
                 errors.push(ExpressionError::CallToDiscardedFunctionError {
-                    function_call: function_call.clone(),
+                    name: name.clone(),
+                    source_range: *source,
+                    function_signature: func_sig.clone(),
                 });
             }
 
             // Analyze each argument expression to determine their types
             let mut argument_types = Types::new();
-            for expression in &mut function_call.arguments {
+            for expression in arguments.iter_mut() {
                 let (mut args, mut errs) = analyze_expression(expression, scope);
                 argument_types.append(&mut args);
                 errors.append(&mut errs);
@@ -378,16 +388,22 @@ pub(super) fn analyze_function_call<'a>(
                 // Check that the function parameter types match the function call arguments' types
                 if func_sig.params.types() != argument_types {
                     errors.push(ExpressionError::ArgumentTypeMismatchError {
-                        function_call: function_call.clone(),
+                        name: name.clone(),
+                        arguments: arguments.clone(),
+                        source_range: *source,
+                        function_signature: func_sig.clone(),
                         argument_types,
                     });
                 }
             }
 
-            (Some(func_sig), errors)
+            (Some(func_sig.clone()), errors)
         }
         None => {
-            errors.push(ExpressionError::UnknownFunctionError(function_call.clone()));
+            errors.push(ExpressionError::UnknownFunctionError(
+                name.clone(),
+                source.clone(),
+            ));
             (None, errors)
         }
     }

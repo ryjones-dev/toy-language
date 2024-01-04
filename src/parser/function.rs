@@ -1,6 +1,6 @@
 use super::{
-    expression::Expression, identifier::Identifier, source_range::SourceRange,
-    statement::Statement, types::Types, variable::Variables,
+    identifier::Identifier, source_range::SourceRange, statement::Statement, types::Types,
+    variable::Variables,
 };
 
 /// The signature of a TODO_LANG_NAME function.
@@ -28,21 +28,4 @@ impl FunctionSignature {
 pub(crate) struct Function {
     pub(crate) signature: FunctionSignature,
     pub(crate) body: Vec<Statement>,
-}
-
-/// A container type that represents a function call.
-///
-/// Because a function call can either be an expression or statement depending on the context,
-/// it is helpful to have an underlying type that captures the info needed to make the function call.
-///
-/// The called function signature can't be parsed from the function call expression itself,
-/// but can be deduced during semantic analysis.
-/// Until then, the function signature will have a value of [`None`].
-#[derive(Debug, Clone)]
-pub(crate) struct FunctionCall {
-    pub(crate) name: Identifier,
-    pub(crate) arguments: Vec<Expression>,
-    pub(crate) source: SourceRange,
-
-    pub(crate) function_signature: Option<FunctionSignature>,
 }

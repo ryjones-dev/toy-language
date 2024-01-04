@@ -1,5 +1,5 @@
 use codegen::options::CodeGenOptions;
-use compiler::RenderErrorFailure;
+use diagnostic::RenderErrorFailure;
 
 use crate::compiler::{compile_jit, options::CompileOptions, JitCompileResults};
 

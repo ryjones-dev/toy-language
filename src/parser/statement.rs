@@ -1,6 +1,4 @@
-use super::{
-    expression::Expression, function::FunctionCall, source_range::SourceRange, variable::Variables,
-};
+use super::{expression::Expression, source_range::SourceRange, variable::Variables};
 
 /// A TODO_LANG_NAME statement is a single unit of a function's task.
 ///
@@ -9,9 +7,9 @@ use super::{
 /// In TODO_LANG_NAME, an explicit line-ending separator character is not needed, instead opting for whitespace
 /// (either a newline character '\n', or a space character ' ' if the code is all on one line).
 ///
-/// In practice, statements often encompasses variable assignments or control flow.
+/// In practice, statements often encompass things like variable assignments or function returns.
 /// Anything in a function that is not just an expression is often a statement.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum Statement {
     /// Assignments must have an equal number of variables compared with the expression's return values.
     ///
@@ -22,11 +20,26 @@ pub(crate) enum Statement {
         expression: Expression,
         source: SourceRange,
     },
-    /// Call a function with no return values as a free-standing statement.
-    /// The function must return no values, otherwise a [`Statement::Assignment`] must be used.
-    FunctionCall(FunctionCall),
+    /// Represents expression values returned from a scope. This is different than [`Statement::FunctionReturn`],
+    /// although can be used instead of [`Statement::FunctionReturn`] at the end of a function scope.
+    ScopeReturn {
+        expressions: Vec<Expression>,
+        source: SourceRange,
+    },
+    /// Represents returning from a function. This is more specific than [`Statement::ScopeReturn`],
+    /// and allows for early returning from a function scope.
     FunctionReturn {
         expressions: Vec<Expression>,
         source: SourceRange,
     },
+}
+
+impl Statement {
+    pub(crate) fn source(&self) -> SourceRange {
+        match self {
+            Statement::Assignment { source, .. } => *source,
+            Statement::ScopeReturn { source, .. } => *source,
+            Statement::FunctionReturn { source, .. } => *source,
+        }
+    }
 }

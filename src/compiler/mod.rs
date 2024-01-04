@@ -2,9 +2,8 @@ use codespan_reporting::{
     files::SimpleFiles,
     term::termcolor::{ColorChoice, StandardStream},
 };
-use thiserror::Error;
 
-use crate::diagnostic::Diagnostic;
+use crate::diagnostic::{report_diagnostic, Diagnostic, DiagnosticLevel, RenderErrorFailure};
 
 use self::{
     backend::jit_backend,
@@ -15,11 +14,6 @@ use self::{
 mod backend;
 mod frontend;
 pub mod options;
-
-/// An error that is returned when the compiler is unable to render error messages to stderr.
-#[derive(Debug, Error)]
-#[error("failed to render error message: {0}")]
-pub struct RenderErrorFailure(codespan_reporting::files::Error);
 
 pub enum JitCompileResults {
     Success {
@@ -78,10 +72,13 @@ pub fn compile_jit(
             ast_string,
             errs,
         } => {
-            let should_codegen = !errs.iter().any(|err| err.is_error());
+            let diagnostics: Vec<Diagnostic> = errs.into_iter().map(|err| err.into()).collect();
+            let should_codegen = !diagnostics
+                .iter()
+                .any(|diag| diag.level() == DiagnosticLevel::Error);
 
-            for err in errs {
-                report_diagnostic(&writer, &config, &files, file_id, err.into())?;
+            for diag in diagnostics {
+                report_diagnostic(&writer, &config, &files, file_id, diag)?;
             }
 
             if should_codegen {
@@ -106,23 +103,4 @@ pub fn compile_jit(
             Ok(JitCompileResults::ParseError)
         }
     }
-}
-
-fn report_diagnostic(
-    writer: &StandardStream,
-    config: &codespan_reporting::term::Config,
-    files: &SimpleFiles<&str, &str>,
-    file_id: usize,
-    message: Diagnostic,
-) -> Result<(), RenderErrorFailure> {
-    if let Err(err) = codespan_reporting::term::emit(
-        &mut writer.lock(),
-        config,
-        files,
-        &message.to_diagnostic(file_id),
-    ) {
-        return Err(RenderErrorFailure(err));
-    }
-
-    Ok(())
 }

@@ -3,7 +3,49 @@ use std::{
     collections::HashMap,
 };
 
-use crate::parser::{function::FunctionSignature, identifier::Identifier, variable::Variable};
+use thiserror::Error;
+
+use crate::{
+    diagnostic::{Diagnostic, DiagnosticContext, DiagnosticLevel, DiagnosticMessage},
+    parser::{function::FunctionSignature, variable::Variable},
+};
+
+#[derive(Debug, Error)]
+pub(super) enum ScopeError {
+    #[error("unused variable")]
+    UnusedVariableError { variable: Variable },
+    #[error("unused function")]
+    UnusedFunctionError {
+        function_signature: FunctionSignature,
+    },
+}
+
+impl From<ScopeError> for Diagnostic {
+    fn from(err: ScopeError) -> Self {
+        match err {
+            ScopeError::UnusedVariableError { ref variable } => {
+                Self::new(&err, DiagnosticLevel::Warning)
+                    .with_context(DiagnosticContext::new(DiagnosticMessage::new(
+                        format!("variable `{}` is never read", variable),
+                        variable.source(),
+                    )))
+                    .with_suggestions(vec![
+                "Either remove the variable, or prefix it with an underscore to discard it.",
+            ])
+            }
+            ScopeError::UnusedFunctionError {
+                ref function_signature,
+            } => Self::new(&err, DiagnosticLevel::Warning)
+                .with_context(DiagnosticContext::new(DiagnosticMessage::new(
+                    format!("function `{}` is never called", function_signature.name),
+                    function_signature.source,
+                )))
+                .with_suggestions(vec![
+                    "Either remove the function, or prefix it with an underscore to discard it.",
+                ]),
+        }
+    }
+}
 
 /// A wrapping struct to keep track of how many times a [`Variable`] is read.
 /// This is later used to determine unused variables.
@@ -34,8 +76,8 @@ pub(super) struct Scope<'a> {
     outer_scope: Option<&'a Scope<'a>>,
 
     // RefCell is needed so we can update metadata during read access
-    variable_metadata: HashMap<Identifier, RefCell<VariableMetadata>>,
-    function_metadata: HashMap<Identifier, RefCell<FunctionMetadata>>,
+    variable_metadata: HashMap<String, RefCell<VariableMetadata>>,
+    function_metadata: HashMap<String, RefCell<FunctionMetadata>>,
 }
 
 impl<'a> Scope<'a> {
@@ -50,7 +92,11 @@ impl<'a> Scope<'a> {
 
 impl Scope<'_> {
     /// Returns a [`Variable`] with the given name, or [`None`] if the variable is not in scope.
-    pub(super) fn get_var(&self, name: &Identifier) -> Option<Ref<Variable>> {
+    pub(super) fn get_var<'a>(
+        &self,
+        name: impl Into<&'a str> + Eq + std::hash::Hash,
+    ) -> Option<Ref<Variable>> {
+        let name = name.into();
         match self.variable_metadata.get(name) {
             Some(var_meta) => {
                 var_meta.borrow_mut().read_count += 1;
@@ -68,15 +114,16 @@ impl Scope<'_> {
     /// Returns [`None`] if the variable was added successfully,
     /// or the previously defined [`Variable`] if it has already been defined.
     pub(super) fn insert_var(&mut self, variable: Variable) -> Option<Ref<Variable>> {
-        if self.variable_metadata.contains_key(variable.name()) {
+        let var_name: &str = variable.name().into();
+        if self.variable_metadata.contains_key(var_name) {
             return self
                 .variable_metadata
-                .get(variable.name())
+                .get(var_name)
                 .map(|var_meta| Ref::map(var_meta.borrow(), |var_meta| &var_meta.variable));
         }
 
         self.variable_metadata.insert(
-            variable.name().clone(),
+            var_name.to_string(),
             RefCell::new(VariableMetadata {
                 variable,
                 read_count: 0,
@@ -86,7 +133,11 @@ impl Scope<'_> {
     }
 
     /// Returns a [`FunctionSignature`] with the given name, or [`None`] if the function is not in scope.
-    pub(super) fn get_func_sig(&self, name: &Identifier) -> Option<Ref<FunctionSignature>> {
+    pub(super) fn get_func_sig<'a>(
+        &self,
+        name: impl Into<&'a str> + Eq + std::hash::Hash,
+    ) -> Option<Ref<FunctionSignature>> {
+        let name = name.into();
         match self.function_metadata.get(name) {
             Some(func_meta) => {
                 func_meta.borrow_mut().read_count += 1;
@@ -101,6 +152,14 @@ impl Scope<'_> {
         }
     }
 
+    pub(super) fn has_main_func(&self) -> bool {
+        if let None = self.get_func_sig("main") {
+            false
+        } else {
+            true
+        }
+    }
+
     /// Adds the given [`FunctionSignature`] to the scope.
     ///
     ///
@@ -110,8 +169,9 @@ impl Scope<'_> {
         &mut self,
         func_sig: FunctionSignature,
     ) -> Option<Ref<FunctionSignature>> {
-        if self.function_metadata.contains_key(&func_sig.name) {
-            return self.function_metadata.get(&func_sig.name).map(|func_meta| {
+        let func_name: &str = (&func_sig.name).into();
+        if self.function_metadata.contains_key(func_name) {
+            return self.function_metadata.get(func_name).map(|func_meta| {
                 Ref::map(func_meta.borrow(), |func_meta| {
                     &func_meta.function_signature
                 })
@@ -119,7 +179,7 @@ impl Scope<'_> {
         }
 
         self.function_metadata.insert(
-            func_sig.name.clone(),
+            func_name.to_string(),
             RefCell::new(FunctionMetadata {
                 function_signature: func_sig,
                 read_count: 0,

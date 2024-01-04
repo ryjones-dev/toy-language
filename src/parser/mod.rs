@@ -7,7 +7,7 @@ use self::{
     expression::{
         BinaryMathOperationType, BooleanComparisonType, Expression, UnaryMathOperationType,
     },
-    function::{Function, FunctionCall, FunctionSignature},
+    function::{Function, FunctionSignature},
     identifier::Identifier,
     statement::Statement,
     types::Type,
@@ -75,15 +75,41 @@ peg::parser!(pub(crate) grammar parser() for str {
 
     rule statement() -> Statement
         = _ a:assignment() _  { a }
-        / _ c:call_function() _ { Statement::FunctionCall(c) }
         / _ r:function_return_statement() _ { r }
-
-    rule function_return_statement() -> Statement
-        = s:position!() "->" _ r:(e:((_ e:expression() _ {e}) ++ ",")) e:position!() { Statement::FunctionReturn { expressions: r, source: (s..=e).into() } }
+        / _ r:return_statement() _ { r }
 
     rule assignment() -> Statement
         = s:position!() vars:((_ i:identifier() _ t:_type()? _ { (i, t) }) ++ ",") _ "=" _ expr:expression() e:position!() {
             Statement::Assignment { variables: vars.into_iter().map(|var|Variable::new(var.0, var.1)).collect(), expression: expr, source: (s..=e).into() }
+        }
+
+    rule return_statement() -> Statement
+        = rs:((_ s:position!() expr:expression() e:position!() _ { (s, expr, e) }) ++ ",") {
+            let mut start = None;
+            let mut end = None;
+            let mut expressions = Vec::new();
+            for r in rs {
+                let (s, expr, e) = r;
+                if let None = start {
+                    start = Some(s);
+                }
+                end = Some(e);
+                expressions.push(expr);
+            }
+            Statement::ScopeReturn { expressions, source: (start.unwrap()..=end.unwrap()).into() }
+        }
+
+    rule function_return_statement() -> Statement
+        = rs:(s:position!() "->" _ r:((_ expr:expression() e:position!() _ { (expr, e) }) ++ ",") { (s, r) }) {
+            let (start, rs) = rs;
+            let mut end = None;
+            let mut expressions = Vec::new();
+            for r in rs {
+                let (expr, e) = r;
+                end = Some(e);
+                expressions.push(expr);
+            }
+            Statement::FunctionReturn { expressions, source: (start..=end.unwrap()).into() }
         }
 
     // Each level of precedence is notated by a "--" line. Precedence is in ascending order.
@@ -107,7 +133,9 @@ peg::parser!(pub(crate) grammar parser() for str {
         --
         "-" e:@ { Expression::UnaryMathOperation { operation_type: UnaryMathOperationType::Negate, expression: Box::new(e), source: (0..=0).into() }}
         --
-        c:call_function() { Expression::FunctionCall(c) }
+        i:identifier() _ "(" _ args:((_ e:expression() _ {e}) ** ",") _ ")" {
+            Expression::FunctionCall { name: i, arguments: args, source: (0..=0).into(), function_signature: None }
+        }
         --
         "(" _ e:expression() _ ")" { e }
         i:int_literal() { i }
@@ -118,17 +146,12 @@ peg::parser!(pub(crate) grammar parser() for str {
             Expression::BooleanComparison { comparison_type, lhs, rhs, .. } => Expression::BooleanComparison { comparison_type, lhs, rhs, source: (s..=e).into() },
             Expression::BinaryMathOperation { operation_type, lhs, rhs, .. } => Expression::BinaryMathOperation { operation_type, lhs, rhs, source: (s..=e).into() },
             Expression::UnaryMathOperation { operation_type, expression, .. } => Expression::UnaryMathOperation { operation_type, expression, source: (s..=e).into() },
-            Expression::FunctionCall(function_call) => Expression::FunctionCall(function_call),
+            Expression::FunctionCall { name, arguments, source, function_signature } => Expression::FunctionCall { name, arguments, source: (s..=e).into(), function_signature },
             Expression::Variable(variable) => Expression::Variable(variable),
             Expression::IntLiteral(int_literal, source) => Expression::IntLiteral(int_literal, source),
             Expression::BoolLiteral(bool_literal, source) => Expression::BoolLiteral(bool_literal, source),
         }
     }
-
-    rule call_function() -> FunctionCall
-        = s:position!() i:identifier() _ "(" _ args:((_ e:expression() _ {e}) ** ",") _ ")" e:position!() {
-            FunctionCall {name: i, arguments: args, source: (s..=e).into(), function_signature: None }
-        }
 
     rule _type() -> Type
         = s:position!() t:$("int" / "bool") e:position!()  { Type::new(t.parse().expect("unknown type"), (s..=e).into()) }
