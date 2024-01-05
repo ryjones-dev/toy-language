@@ -3,49 +3,7 @@ use std::{
     collections::HashMap,
 };
 
-use thiserror::Error;
-
-use crate::{
-    diagnostic::{Diagnostic, DiagnosticContext, DiagnosticLevel, DiagnosticMessage},
-    parser::{function::FunctionSignature, variable::Variable},
-};
-
-#[derive(Debug, Error)]
-pub(super) enum ScopeError {
-    #[error("unused variable")]
-    UnusedVariableError { variable: Variable },
-    #[error("unused function")]
-    UnusedFunctionError {
-        function_signature: FunctionSignature,
-    },
-}
-
-impl From<ScopeError> for Diagnostic {
-    fn from(err: ScopeError) -> Self {
-        match err {
-            ScopeError::UnusedVariableError { ref variable } => {
-                Self::new(&err, DiagnosticLevel::Warning)
-                    .with_context(DiagnosticContext::new(DiagnosticMessage::new(
-                        format!("variable `{}` is never read", variable),
-                        variable.source(),
-                    )))
-                    .with_suggestions(vec![
-                "Either remove the variable, or prefix it with an underscore to discard it.",
-            ])
-            }
-            ScopeError::UnusedFunctionError {
-                ref function_signature,
-            } => Self::new(&err, DiagnosticLevel::Warning)
-                .with_context(DiagnosticContext::new(DiagnosticMessage::new(
-                    format!("function `{}` is never called", function_signature.name),
-                    function_signature.source,
-                )))
-                .with_suggestions(vec![
-                    "Either remove the function, or prefix it with an underscore to discard it.",
-                ]),
-        }
-    }
-}
+use crate::parser::{function::FunctionSignature, variable::Variable};
 
 /// A wrapping struct to keep track of how many times a [`Variable`] is read.
 /// This is later used to determine unused variables.

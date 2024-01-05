@@ -1,5 +1,5 @@
 use super::{
-    identifier::Identifier, source_range::SourceRange, statement::Statement, types::Types,
+    identifier::Identifier, scope::Scope, source_range::SourceRange, types::Types,
     variable::Variables,
 };
 
@@ -27,5 +27,5 @@ impl FunctionSignature {
 #[derive(Debug)]
 pub(crate) struct Function {
     pub(crate) signature: FunctionSignature,
-    pub(crate) body: Vec<Statement>,
+    pub(crate) body: Scope,
 }

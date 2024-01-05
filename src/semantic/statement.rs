@@ -16,7 +16,7 @@ use super::{
         diag_expected, diag_newly_defined, diag_originally_defined, diag_return_types_label,
     },
     expression::{analyze_expression, ExpressionError},
-    scope_tracker::{ScopeError, ScopeTracker},
+    scope_tracker::ScopeTracker,
     EXPECT_FUNC_SIG, EXPECT_VAR_TYPE,
 };
 
@@ -132,150 +132,30 @@ impl From<StatementError> for Diagnostic {
     }
 }
 
-#[derive(Debug, Error)]
-pub(super) enum StatementsError {
-    #[error("return before end of scope")]
-    EarlyReturnError {
-        return_statement: Statement,
-        expected_types: Types,
-        remaining_code_source: SourceRange,
-    },
-    #[error(transparent)]
-    StatementError(#[from] StatementError),
-    #[error(transparent)]
-    ScopeError(#[from] ScopeError),
-}
-
-impl From<StatementsError> for Diagnostic {
-    fn from(err: StatementsError) -> Self {
-        match err {
-            StatementsError::EarlyReturnError {
-                ref return_statement,
-                ref expected_types,
-                remaining_code_source,
-            } => Self::new(&err, DiagnosticLevel::Error)
-                .with_context(
-                    DiagnosticContext::new(DiagnosticMessage::new(
-                        "there is more code below this return statement",
-                        return_statement.source(),
-                    ))
-                    .with_labels(vec![DiagnosticMessage::new(
-                        "unreachable code",
-                        remaining_code_source,
-                    )]),
-                )
-                .with_suggestions({
-                    if expected_types.len() > 0 {
-                        vec![format!(
-                            "If returning from the scope is not intentional, \
-                            assign the result{} to {}discarded variable{} instead.",
-                            if expected_types.len() == 1 { "" } else { "s" },
-                            if expected_types.len() == 1 { "a " } else { "" },
-                            if expected_types.len() == 1 { "" } else { "s" }
-                        )]
-                    } else {
-                        Vec::new() // TODO: How do we handle a function call that returns nothing, but is not meant to be a return statement?
-                    }
-                }),
-            StatementsError::StatementError(err) => err.into(),
-            StatementsError::ScopeError(err) => err.into(),
-        }
-    }
-}
-
 #[derive(Debug)]
-pub(super) enum ScopeResults {
-    /// The scope should return the given types.
+pub(super) enum ReturnResults {
+    /// The enclosing scope should return the given types.
     ///
-    /// The return statement is optional since no return statement means no return types.
+    /// The statement is optional since no return expression means no return types.
     ConvergentReturn(Option<Statement>, Types),
-    /// The scope is divergent, meaning that it should return the given types as the result
+    /// The enclosing scope is divergent, meaning that it should return the given types as the result
     /// of an outer function.
     ///
-    /// The statement is not optional because scopes cannot diverge without a return statement.
+    /// The statement is not optional because scopes cannot diverge without a function return expression.
     DivergentReturn(Statement, Types),
 }
 
-impl Default for ScopeResults {
+impl Default for ReturnResults {
     fn default() -> Self {
-        ScopeResults::ConvergentReturn(None, Types::default())
+        ReturnResults::ConvergentReturn(None, Types::default())
     }
-}
-
-pub(super) fn analyze_statements(
-    statements: &mut Vec<Statement>,
-    mut scope_tracker: ScopeTracker,
-) -> (ScopeResults, Vec<StatementsError>) {
-    let mut scope_results = None;
-    let mut errors = Vec::new();
-
-    let statements_len = statements.len();
-    let mut first_return_index = None;
-    for (i, statement) in statements.iter_mut().enumerate() {
-        let (results, errs) = analyze_statement(statement, &mut scope_tracker);
-        errors.append(
-            &mut errs
-                .into_iter()
-                .map(|err| StatementsError::StatementError(err))
-                .collect(),
-        );
-
-        if let Some(results) = results {
-            if let None = scope_results {
-                scope_results = Some(results);
-
-                if i != statements_len - 1 {
-                    // Scope has more statements after the return.
-                    // We can't generate an error here because the statement list is mutably borrowed
-                    // during this loop.
-                    // Instead, keep track of the index and generate the error after iteration is done.
-                    first_return_index = Some(i);
-                }
-            }
-        }
-    }
-
-    // If we detected an early return, generate that error now
-    if let Some(i) = first_return_index {
-        let statement = statements[i].clone();
-        let remaining = &statements[i + 1..];
-        errors.push(StatementsError::EarlyReturnError {
-            return_statement: statement.clone(),
-            expected_types: match scope_results.as_ref().unwrap() {
-                ScopeResults::ConvergentReturn(_, types) => types.clone(),
-                ScopeResults::DivergentReturn(_, types) => types.clone(),
-            },
-            remaining_code_source: remaining
-                .first()
-                .unwrap()
-                .source()
-                .combine(remaining.last().unwrap().source()),
-        });
-    }
-
-    // Check for any variables or functions in the immediate scope that have not been used
-    let (unused_variables, function_signatures) = scope_tracker.get_unused();
-    for variable in unused_variables {
-        errors.push(StatementsError::ScopeError(
-            ScopeError::UnusedVariableError { variable },
-        ))
-    }
-    for func_sig in function_signatures {
-        errors.push(StatementsError::ScopeError(
-            ScopeError::UnusedFunctionError {
-                function_signature: func_sig,
-            },
-        ))
-    }
-
-    (scope_results.unwrap_or_default(), errors)
 }
 
 /// Returns the types that statement returns, if any, and any errors the statement produced.
-fn analyze_statement(
+pub(super) fn analyze_statement(
     statement: &mut Statement,
     scope_tracker: &mut ScopeTracker,
-) -> (Option<ScopeResults>, Vec<StatementError>) {
+) -> (Option<ReturnResults>, Vec<StatementError>) {
     let mut errors = Vec::new();
     match statement {
         Statement::Assignment {
@@ -332,7 +212,7 @@ fn analyze_statement(
             let (return_types, mut errs) = get_expressions_types(expressions, scope_tracker);
             errors.append(&mut errs);
             (
-                Some(ScopeResults::ConvergentReturn(
+                Some(ReturnResults::ConvergentReturn(
                     Some(statement.clone()),
                     return_types,
                 )),
@@ -343,7 +223,7 @@ fn analyze_statement(
             let (return_types, mut errs) = get_expressions_types(expressions, scope_tracker);
             errors.append(&mut errs);
             (
-                Some(ScopeResults::DivergentReturn(
+                Some(ReturnResults::DivergentReturn(
                     statement.clone(),
                     return_types,
                 )),

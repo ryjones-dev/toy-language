@@ -8,12 +8,14 @@ use crate::{
 use self::{
     diagnostic::{diag_newly_defined, diag_originally_defined},
     function::{analyze_function, FunctionError},
-    scope_tracker::{ScopeError, ScopeTracker},
+    scope::ScopeError,
+    scope_tracker::ScopeTracker,
 };
 
 mod diagnostic;
 mod expression;
 mod function;
+mod scope;
 mod scope_tracker;
 mod statement;
 

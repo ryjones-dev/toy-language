@@ -9,6 +9,7 @@ use self::{
     },
     function::{Function, FunctionSignature},
     identifier::Identifier,
+    scope::Scope,
     statement::Statement,
     types::Type,
     variable::Variable,
@@ -18,6 +19,7 @@ pub(super) mod ast;
 pub(super) mod expression;
 pub(super) mod function;
 pub(super) mod identifier;
+pub(super) mod scope;
 pub(super) mod source_range;
 pub(super) mod statement;
 pub(super) mod types;
@@ -70,8 +72,8 @@ peg::parser!(pub(crate) grammar parser() for str {
             }
         }
 
-    rule scope() -> Vec<Statement>
-        = ":" _ s:statement()* _ ";" { s }
+    rule scope() -> Scope
+        = ":" _ s:statement()* _ ";" { Scope::new(s) }
 
     rule statement() -> Statement
         = _ a:assignment() _  { a }

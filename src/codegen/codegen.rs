@@ -3,7 +3,8 @@ use thiserror::Error;
 
 use crate::{
     parser::{
-        ast::AbstractSyntaxTree, expression::Expression, function::Function, statement::Statement,
+        ast::AbstractSyntaxTree, expression::Expression, function::Function, scope::Scope,
+        statement::Statement,
     },
     semantic::EXPECT_VAR_TYPE,
 };
@@ -260,7 +261,7 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
         module: &mut M,
         mut builder: FunctionBuilder,
         mut block_vars: BlockVariables,
-        body: Vec<Statement>,
+        body: Scope,
         function_block: Block,
     ) {
         // Emit IR code for each statement in the function
