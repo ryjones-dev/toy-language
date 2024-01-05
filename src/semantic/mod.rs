@@ -8,13 +8,13 @@ use crate::{
 use self::{
     diagnostic::{diag_newly_defined, diag_originally_defined},
     function::{analyze_function, FunctionError},
-    scope::{Scope, ScopeError},
+    scope_tracker::{ScopeError, ScopeTracker},
 };
 
 mod diagnostic;
 mod expression;
 mod function;
-pub(super) mod scope;
+mod scope_tracker;
 mod statement;
 
 pub(crate) const EXPECT_VAR_TYPE: &str = "variable should have a type by this point";
@@ -72,12 +72,12 @@ impl From<SemanticError> for Diagnostic {
 pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Vec<SemanticError> {
     let mut errors = Vec::new();
 
-    let mut global_scope = Scope::new(None);
+    let mut global_scope_tracker = ScopeTracker::new(None);
 
     // Add each function to the global scope.
     // This needs to be done first so that function definition order does not matter.
     for function in ast.iter() {
-        if let Some(func_sig) = global_scope.insert_func_sig(function.signature.clone()) {
+        if let Some(func_sig) = global_scope_tracker.insert_func_sig(function.signature.clone()) {
             errors.push(SemanticError::FunctionAlreadyDefinedError {
                 original: func_sig.clone(),
                 new: function.signature.clone(),
@@ -87,7 +87,7 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Vec<SemanticErr
 
     // Analyze each function
     for function in ast.iter_mut() {
-        let errs = analyze_function(function, &mut global_scope);
+        let errs = analyze_function(function, &mut global_scope_tracker);
         errors.append(
             &mut errs
                 .into_iter()
@@ -96,12 +96,12 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Vec<SemanticErr
         );
     }
 
-    if !global_scope.has_main_func() {
+    if !global_scope_tracker.has_main_func() {
         errors.push(SemanticError::MissingMainError);
     }
 
     // Check for any unused variables or functions in the global scope that have not been used
-    let (unused_variables, function_signatures) = global_scope.get_unused();
+    let (unused_variables, function_signatures) = global_scope_tracker.get_unused();
     for variable in unused_variables {
         errors.push(SemanticError::ScopeError(ScopeError::UnusedVariableError {
             variable,

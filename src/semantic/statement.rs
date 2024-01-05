@@ -4,7 +4,6 @@ use crate::{
     diagnostic::{Diagnostic, DiagnosticContext, DiagnosticLevel, DiagnosticMessage},
     parser::{
         expression::Expression,
-        function::FunctionSignature,
         source_range::SourceRange,
         statement::Statement,
         types::{Type, Types},
@@ -17,7 +16,7 @@ use super::{
         diag_expected, diag_newly_defined, diag_originally_defined, diag_return_types_label,
     },
     expression::{analyze_expression, ExpressionError},
-    scope::{Scope, ScopeError},
+    scope_tracker::{ScopeError, ScopeTracker},
     EXPECT_FUNC_SIG, EXPECT_VAR_TYPE,
 };
 
@@ -205,7 +204,7 @@ impl Default for ScopeResults {
 
 pub(super) fn analyze_statements(
     statements: &mut Vec<Statement>,
-    mut scope: Scope,
+    mut scope_tracker: ScopeTracker,
 ) -> (ScopeResults, Vec<StatementsError>) {
     let mut scope_results = None;
     let mut errors = Vec::new();
@@ -213,7 +212,7 @@ pub(super) fn analyze_statements(
     let statements_len = statements.len();
     let mut first_return_index = None;
     for (i, statement) in statements.iter_mut().enumerate() {
-        let (results, errs) = analyze_statement(statement, &mut scope);
+        let (results, errs) = analyze_statement(statement, &mut scope_tracker);
         errors.append(
             &mut errs
                 .into_iter()
@@ -255,7 +254,7 @@ pub(super) fn analyze_statements(
     }
 
     // Check for any variables or functions in the immediate scope that have not been used
-    let (unused_variables, function_signatures) = scope.get_unused();
+    let (unused_variables, function_signatures) = scope_tracker.get_unused();
     for variable in unused_variables {
         errors.push(StatementsError::ScopeError(
             ScopeError::UnusedVariableError { variable },
@@ -275,7 +274,7 @@ pub(super) fn analyze_statements(
 /// Returns the types that statement returns, if any, and any errors the statement produced.
 fn analyze_statement(
     statement: &mut Statement,
-    scope: &mut Scope,
+    scope_tracker: &mut ScopeTracker,
 ) -> (Option<ScopeResults>, Vec<StatementError>) {
     let mut errors = Vec::new();
     match statement {
@@ -284,7 +283,7 @@ fn analyze_statement(
             expression,
             source,
         } => {
-            let (expression_types, mut errs) = get_expression_types(expression, scope);
+            let (expression_types, mut errs) = get_expression_types(expression, scope_tracker);
             errors.append(&mut errs);
 
             // Only continue if the expression did not have errors
@@ -314,7 +313,7 @@ fn analyze_statement(
                         }
 
                         // Add the variable to the scope
-                        if let Some(scope_var) = scope.insert_var(variable.clone()) {
+                        if let Some(scope_var) = scope_tracker.insert_var(variable.clone()) {
                             // The variable has already been added to the scope, so make sure it has the same type
                             if scope_var.get_type() != variable.get_type() {
                                 errors.push(StatementError::VariableTypeRedefinitionError {
@@ -330,7 +329,7 @@ fn analyze_statement(
             (None, errors)
         }
         Statement::ScopeReturn { expressions, .. } => {
-            let (return_types, mut errs) = get_expressions_types(expressions, scope);
+            let (return_types, mut errs) = get_expressions_types(expressions, scope_tracker);
             errors.append(&mut errs);
             (
                 Some(ScopeResults::ConvergentReturn(
@@ -341,7 +340,7 @@ fn analyze_statement(
             )
         }
         Statement::FunctionReturn { expressions, .. } => {
-            let (return_types, mut errs) = get_expressions_types(expressions, scope);
+            let (return_types, mut errs) = get_expressions_types(expressions, scope_tracker);
             errors.append(&mut errs);
             (
                 Some(ScopeResults::DivergentReturn(
@@ -356,9 +355,9 @@ fn analyze_statement(
 
 fn get_expression_types(
     expression: &mut Expression,
-    scope: &Scope,
+    scope_tracker: &ScopeTracker,
 ) -> (Types, Vec<StatementError>) {
-    let (types, errs) = analyze_expression(expression, &scope);
+    let (types, errs) = analyze_expression(expression, &scope_tracker);
     let errs = errs
         .into_iter()
         .map(|err| StatementError::ExpressionError(err))
@@ -369,13 +368,13 @@ fn get_expression_types(
 
 fn get_expressions_types(
     expressions: &mut Vec<Expression>,
-    scope: &Scope,
+    scope_tracker: &ScopeTracker,
 ) -> (Types, Vec<StatementError>) {
     let mut types = Types::new();
     let mut errors = Vec::new();
 
     for expression in expressions {
-        let (mut tys, mut errs) = get_expression_types(expression, scope);
+        let (mut tys, mut errs) = get_expression_types(expression, scope_tracker);
         types.append(&mut tys);
         errors.append(&mut errs);
     }

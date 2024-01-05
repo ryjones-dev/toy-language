@@ -16,7 +16,7 @@ use super::{
         diag_expected, diag_expected_types, diag_func_name_label, diag_newly_defined,
         diag_originally_defined, diag_return_types_label,
     },
-    scope::Scope,
+    scope_tracker::ScopeTracker,
     statement::{ScopeResults, StatementsError},
 };
 
@@ -87,15 +87,15 @@ impl From<FunctionError> for Diagnostic {
 
 pub(super) fn analyze_function(
     function: &mut Function,
-    outer_scope: &mut Scope,
+    outer_scope_tracker: &mut ScopeTracker,
 ) -> Vec<FunctionError> {
     let mut errors = Vec::new();
 
-    let mut scope = Scope::new(Some(&outer_scope));
+    let mut scope_tracker = ScopeTracker::new(Some(&outer_scope_tracker));
 
     // Insert parameters into function scope
     for param in &function.signature.params {
-        if let Some(variable) = scope.insert_var(param.clone().into()) {
+        if let Some(variable) = scope_tracker.insert_var(param.clone().into()) {
             errors.push(FunctionError::DuplicateParameterError {
                 func_sig: function.signature.clone(),
                 original: variable.clone(),
@@ -104,7 +104,7 @@ pub(super) fn analyze_function(
         }
     }
 
-    let (results, errs) = analyze_statements(&mut function.body, scope);
+    let (results, errs) = analyze_statements(&mut function.body, scope_tracker);
     errors.append(
         &mut errs
             .into_iter()

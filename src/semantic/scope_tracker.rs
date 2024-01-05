@@ -63,25 +63,25 @@ struct FunctionMetadata {
     read_count: i32,
 }
 
-/// A [`Scope`] captures the variables and function signatures that the code within the scope has access to.
+/// A [`ScopeTracker`] captures the variables and function signatures that the code within a scope has access to.
 ///
-/// Any syntax in TODO_LANG_NAME between a colon (":") and a semicolon (";") will have a scope.
+/// Every [`Scope`] will have a corresponding [`ScopeTracker`].
 ///
-/// [`Scope`] provides wrappers for [`Variable`] and [`FunctionSignature`] access that implement typical scoping rules.
+/// [`ScopeTracker`] provides wrappers for [`Variable`] and [`FunctionSignature`] access that implement typical scoping rules.
 /// When trying to access a variable or function signature, the current scope will be checked first.
 /// If the variable or function signature is not found, the outer scope will be checked.
 /// This will continue until there is no outer scope, in which case a compiler error can be thrown.
 #[derive(Debug)]
-pub(super) struct Scope<'a> {
-    outer_scope: Option<&'a Scope<'a>>,
+pub(super) struct ScopeTracker<'a> {
+    outer_scope: Option<&'a ScopeTracker<'a>>,
 
     // RefCell is needed so we can update metadata during read access
     variable_metadata: HashMap<String, RefCell<VariableMetadata>>,
     function_metadata: HashMap<String, RefCell<FunctionMetadata>>,
 }
 
-impl<'a> Scope<'a> {
-    pub(super) fn new(outer_scope: Option<&'a Scope<'a>>) -> Self {
+impl<'a> ScopeTracker<'a> {
+    pub(super) fn new(outer_scope: Option<&'a ScopeTracker<'a>>) -> Self {
         Self {
             outer_scope,
             variable_metadata: HashMap::new(),
@@ -90,7 +90,7 @@ impl<'a> Scope<'a> {
     }
 }
 
-impl Scope<'_> {
+impl ScopeTracker<'_> {
     /// Returns a [`Variable`] with the given name, or [`None`] if the variable is not in scope.
     pub(super) fn get_var<'a>(
         &self,
@@ -188,7 +188,7 @@ impl Scope<'_> {
         None
     }
 
-    /// Consumes the scope and returns a list of [`Variable`]s and [`FunctionSignature`]s
+    /// Consumes the [`ScopeTracker`] and returns a list of [`Variable`]s and [`FunctionSignature`]s
     /// that have not been read from in this scope.
     ///
     /// This intentionally does not check outer scopes, as those still have the potential to be used.

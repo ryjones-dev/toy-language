@@ -42,8 +42,10 @@
 - [x]  Allow explicit variable type annotations
 - [x]  The last expression in a scope should be what the scope returns
 - [x]  Add error for unreachable code
+- [x]  Rename `Scope` -> `ScopeTracker`
+- [ ]  Change `Vec<Statement>` into `Scope`
 - [ ]  Remove statements as a concept, only allow expressions
-- [ ]  Make the return expression a separate, optional field at the parsing level
+- [ ]  Make the return expression in a scope a separate, optional field at the parsing level
 - [ ]  Add range types that represent a continuous range of values
 - [ ]  Pattern matching
 - [ ]  Check that all blocks in a function return the same number and type of values

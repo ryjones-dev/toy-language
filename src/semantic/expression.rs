@@ -18,7 +18,7 @@ use super::{
     diagnostic::{
         diag_expected, diag_func_name_label, diag_func_param_label, diag_return_types_label,
     },
-    scope::Scope,
+    scope_tracker::ScopeTracker,
     EXPECT_FUNC_SIG, EXPECT_VAR_TYPE,
 };
 
@@ -221,7 +221,7 @@ impl From<ExpressionError> for Diagnostic {
 /// even if the expression is not valid.
 pub(super) fn analyze_expression(
     expression: &mut Expression,
-    scope: &Scope,
+    scope_tracker: &ScopeTracker,
 ) -> (Types, Vec<ExpressionError>) {
     let mut types = Types::new();
     let mut errors = Vec::new();
@@ -233,9 +233,9 @@ pub(super) fn analyze_expression(
             rhs,
             ref source,
         } => {
-            let (lhs_types, mut errs) = analyze_expression(lhs, scope);
+            let (lhs_types, mut errs) = analyze_expression(lhs, scope_tracker);
             errors.append(&mut errs);
-            let (rhs_types, mut errs) = analyze_expression(rhs, scope);
+            let (rhs_types, mut errs) = analyze_expression(rhs, scope_tracker);
             errors.append(&mut errs);
 
             // Only continue if the lhs or rhs did not have errors
@@ -269,9 +269,9 @@ pub(super) fn analyze_expression(
             ref source,
         } => {
             // TODO: Handle floats later
-            let (lhs_types, mut errs) = analyze_expression(lhs, scope);
+            let (lhs_types, mut errs) = analyze_expression(lhs, scope_tracker);
             errors.append(&mut errs);
-            let (rhs_types, mut errs) = analyze_expression(rhs, scope);
+            let (rhs_types, mut errs) = analyze_expression(rhs, scope_tracker);
             errors.append(&mut errs);
 
             // Only continue if the lhs or rhs did not have errors
@@ -295,7 +295,7 @@ pub(super) fn analyze_expression(
             expression,
             source,
         } => {
-            let (ty, mut errs) = analyze_expression(expression, scope);
+            let (ty, mut errs) = analyze_expression(expression, scope_tracker);
             errors.append(&mut errs);
 
             // Only continue if the inner expression did not have errors
@@ -315,7 +315,8 @@ pub(super) fn analyze_expression(
             source,
             function_signature,
         } => {
-            let (func_sig, mut errs) = analyze_function_call(name, arguments, &source, scope);
+            let (func_sig, mut errs) =
+                analyze_function_call(name, arguments, &source, scope_tracker);
             match func_sig {
                 Some(func_sig) => {
                     for return_type in &func_sig.returns {
@@ -329,7 +330,7 @@ pub(super) fn analyze_expression(
                 None => errors.append(&mut errs),
             }
         }
-        Expression::Variable(variable) => match scope.get_var(variable.name()) {
+        Expression::Variable(variable) => match scope_tracker.get_var(variable.name()) {
             Some(scope_var) => {
                 // Throw an error when trying to read from a discarded variable
                 if scope_var.is_discarded() {
@@ -360,11 +361,11 @@ pub(super) fn analyze_function_call(
     name: &Identifier,
     arguments: &mut Vec<Expression>,
     source: &SourceRange,
-    scope: &Scope,
+    scope_tracker: &ScopeTracker,
 ) -> (Option<FunctionSignature>, Vec<ExpressionError>) {
     let mut errors = Vec::new();
 
-    match scope.get_func_sig(name) {
+    match scope_tracker.get_func_sig(name) {
         Some(func_sig) => {
             // Check if the function being called is discarded
             if func_sig.is_discarded() {
@@ -378,7 +379,7 @@ pub(super) fn analyze_function_call(
             // Analyze each argument expression to determine their types
             let mut argument_types = Types::new();
             for expression in arguments.iter_mut() {
-                let (mut args, mut errs) = analyze_expression(expression, scope);
+                let (mut args, mut errs) = analyze_expression(expression, scope_tracker);
                 argument_types.append(&mut args);
                 errors.append(&mut errs);
             }
