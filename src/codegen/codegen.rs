@@ -1,13 +1,7 @@
 use cranelift::prelude::*;
 use thiserror::Error;
 
-use crate::{
-    parser::{
-        ast::AbstractSyntaxTree, expression::Expression, function::Function, scope::Scope,
-        statement::Statement,
-    },
-    semantic::EXPECT_VAR_TYPE,
-};
+use crate::parser::{ast::AbstractSyntaxTree, function::Function};
 
 use super::{
     block::BlockVariables,
@@ -178,7 +172,7 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
         // Pull out the wrapped context
         let context = self.context.get_inner_context_mut();
 
-        let Function { signature, body } = function;
+        let Function { signature, scope } = function;
 
         // Add the function's parameters to the context
         for param in &signature.params {
@@ -229,8 +223,15 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
             builder.def_var(cranelift_variable, builder.block_params(function_block)[i]);
         }
 
-        // Now we can generate the function body
-        Self::generate_function_body(&mut self.module, builder, block_vars, body, function_block);
+        // Now we can generate the function scope by generating each expression in the scope
+        let mut expression_generator =
+            ExpressionGenerator::new(&mut self.module, &mut builder, &mut block_vars);
+
+        for expression in scope {
+            expression_generator.generate(expression);
+        }
+
+        builder.finalize();
 
         // Mark the function as defined to kick off Cranelift IR compilation
         self.module
@@ -255,109 +256,6 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
         self.context.clear(&self.module);
 
         Ok((ir, disassembly))
-    }
-
-    fn generate_function_body(
-        module: &mut M,
-        mut builder: FunctionBuilder,
-        mut block_vars: BlockVariables,
-        body: Scope,
-        function_block: Block,
-    ) {
-        // Emit IR code for each statement in the function
-        for statement in body {
-            Self::generate_statement(
-                module,
-                &mut builder,
-                &mut block_vars,
-                statement,
-                function_block,
-            );
-        }
-
-        builder.finalize();
-    }
-
-    fn generate_statement(
-        module: &mut M,
-        builder: &mut FunctionBuilder,
-        block_vars: &mut BlockVariables,
-        statement: Statement,
-        function_block: Block,
-    ) {
-        match statement {
-            Statement::Assignment {
-                variables,
-                expression,
-                ..
-            } => {
-                // Generate IR for the expression on the right-hand side of the equals sign
-                let values;
-                {
-                    let mut expression_generator =
-                        ExpressionGenerator::new(module, builder, block_vars);
-                    values = expression_generator.generate(expression);
-                }
-
-                // Declare and define the variables
-                for (i, variable) in variables.into_iter().enumerate() {
-                    // Only declare and define variables if they are not discarded
-                    if !variable.is_discarded() {
-                        let cranelift_variable = cranelift::frontend::Variable::from_u32(
-                            block_vars.var(variable.name().clone()),
-                        );
-
-                        // Intentionally ignore the error, since we don't care if the variable has already been declared
-                        let _ = builder.try_declare_var(
-                            cranelift_variable,
-                            variable.get_type().expect(EXPECT_VAR_TYPE).into(),
-                        );
-                        builder.def_var(cranelift_variable, values[i].into());
-                    }
-                }
-            }
-            Statement::ScopeReturn { expressions, .. } => {
-                if let Some(current_block) = builder.current_block() {
-                    if function_block == current_block {
-                        Self::generate_function_return(module, builder, block_vars, expressions)
-                    } else {
-                        todo!("Handle non-function return")
-                    }
-                }
-            }
-            Statement::FunctionReturn { expressions, .. } => {
-                Self::generate_function_return(module, builder, block_vars, expressions)
-            }
-        }
-    }
-
-    fn generate_function_return(
-        module: &mut M,
-        builder: &mut FunctionBuilder,
-        block_vars: &mut BlockVariables,
-        expressions: Vec<Expression>,
-    ) {
-        let mut return_values = Vec::new();
-
-        for expression in expressions {
-            // Generate IR for the return value expressions
-            let mut values;
-            {
-                let mut expression_generator =
-                    ExpressionGenerator::new(module, builder, block_vars);
-                values = expression_generator.generate(expression);
-            }
-
-            return_values.append(&mut values);
-        }
-
-        // Add the IR instruction to actually return from the function
-        builder.ins().return_(
-            &return_values
-                .iter()
-                .map(|value| Value::from(*value))
-                .collect::<Vec<Value>>(),
-        );
     }
 
     /// Check if a given module error is caused by an error in the IR code, or a bug in the code generation.

@@ -4,7 +4,7 @@ add(arg1 int, arg2 int) -> int:
 print(output):;
 
 main(early_out bool, calc_1_2 bool) -> int:
-    # Boolean pattern matching has special syntactic sugar for "if" statements:
+    # Boolean pattern matching has special syntactic sugar for "if" expressions:
     early_out?:
         -> 0;
     # With a full "if/else" denoted like this:

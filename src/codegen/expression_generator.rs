@@ -13,7 +13,7 @@ use crate::{
         types::DataType,
         variable::Variable,
     },
-    semantic::EXPECT_FUNC_SIG,
+    semantic::{EXPECT_FUNC_SIG, EXPECT_VAR_TYPE},
     semantic_assert,
 };
 
@@ -80,6 +80,64 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
     /// so no error needs to be returned.
     pub(super) fn generate(&mut self, expression: Expression) -> Vec<ExpressionValue> {
         match expression {
+            Expression::ExpressionList { expressions, .. } => {
+                let mut values = Vec::new();
+                for expression in expressions {
+                    values.append(&mut self.generate(expression));
+                }
+                values
+            }
+            Expression::Assignment {
+                variables,
+                expression,
+                ..
+            } => {
+                // Generate IR for the expression on the right-hand side of the equals sign
+                let values = self.generate(*expression);
+
+                // Declare and define the variables
+                for (i, variable) in variables.into_iter().enumerate() {
+                    // Only declare and define variables if they are not discarded
+                    if !variable.is_discarded() {
+                        let cranelift_variable = cranelift::frontend::Variable::from_u32(
+                            self.block_vars.var(variable.name().clone()),
+                        );
+
+                        // Intentionally ignore the error, since we don't care if the variable has already been declared
+                        let _ = self.builder.try_declare_var(
+                            cranelift_variable,
+                            variable.get_type().expect(EXPECT_VAR_TYPE).into(),
+                        );
+                        self.builder.def_var(cranelift_variable, values[i].into());
+                    }
+                }
+
+                vec![]
+            }
+            Expression::FunctionReturn { expression, .. } => {
+                // Generate IR for the return value expression
+                let return_values = self.generate(*expression);
+
+                // Add the IR instruction to actually return from the function
+                self.builder.ins().return_(
+                    &return_values
+                        .iter()
+                        .map(|value| Value::from(*value))
+                        .collect::<Vec<Value>>(),
+                );
+
+                return_values
+            }
+            Expression::FunctionCall {
+                name,
+                argument_expression,
+                function_signature,
+                ..
+            } => self.generate_function_call(
+                name,
+                *argument_expression,
+                function_signature.expect(EXPECT_FUNC_SIG),
+            ),
             Expression::BooleanComparison {
                 comparison_type,
                 lhs,
@@ -103,16 +161,6 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
             } => {
                 vec![self.generate_unary_operation(operation_type, *expression)]
             }
-            Expression::FunctionCall {
-                name,
-                arguments,
-                function_signature,
-                ..
-            } => self.generate_function_call(
-                name,
-                arguments,
-                function_signature.expect(EXPECT_FUNC_SIG),
-            ),
             Expression::Variable(variable) => vec![self.generate_variable(variable)],
             Expression::IntLiteral(value, _) => vec![self.generate_int_literal(value)],
             Expression::BoolLiteral(value, _) => {
@@ -235,7 +283,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
     fn generate_function_call(
         &mut self,
         name: Identifier,
-        arguments: Vec<Expression>,
+        argument_expression: Option<Expression>,
         func_sig: FunctionSignature,
     ) -> Vec<ExpressionValue> {
         // Because we've already done semantic analysis, we know that the function being called is defined,
@@ -262,19 +310,24 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
             .module
             .declare_func_in_func(func_id_to_call, self.builder.func);
 
-        // Generate IR for parameter expressions
-        let mut arg_values = Vec::with_capacity(arguments.len());
-        for arg in arguments {
-            let values = self.generate(arg);
+        // Generate IR for the argument expression
+        let mut values = Vec::new();
+        if let Some(argument_expression) = argument_expression {
+            values = self.generate(argument_expression);
             semantic_assert!(
-                values.len() == 1,
-                "function argument expression did not return a single value"
+                values.len() == sig.params.len(),
+                "function argument expression did not return the correct number of values"
             );
-            arg_values.push(Value::from(values[0]));
         }
 
         // Call function
-        let call = self.builder.ins().call(func_ref_to_call, &arg_values);
+        let call = self.builder.ins().call(
+            func_ref_to_call,
+            &values
+                .into_iter()
+                .map(|val| val.into())
+                .collect::<Vec<Value>>(),
+        );
 
         // Return function return values
         self.builder

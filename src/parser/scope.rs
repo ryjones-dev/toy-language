@@ -1,20 +1,28 @@
-use super::statement::Statement;
+use super::expression::Expression;
 
 #[derive(Debug)]
-pub(crate) struct Scope(Vec<Statement>);
+pub(crate) struct Scope(Vec<Expression>);
 
 impl Scope {
-    pub(super) fn new(statements: Vec<Statement>) -> Self {
-        Self(statements)
+    pub(super) fn new(expressions: Vec<Expression>) -> Self {
+        Self(expressions)
     }
 
-    pub(crate) fn num_statements(&self) -> usize {
-        self.0.len()
+    /// Split the scope's return expression from the rest of the scope's body.
+    ///
+    /// # Panics
+    /// Panics if the scope is empty.
+    pub(crate) fn split_return_mut(&mut self) -> (&mut [Expression], &mut Expression) {
+        let len = self.len();
+        let (body, returns) = self.split_at_mut(len - 1);
+        let returns = returns.first_mut().unwrap();
+
+        (body, returns)
     }
 }
 
 impl std::ops::Deref for Scope {
-    type Target = Vec<Statement>;
+    type Target = Vec<Expression>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -28,8 +36,8 @@ impl std::ops::DerefMut for Scope {
 }
 
 impl IntoIterator for Scope {
-    type Item = Statement;
-    type IntoIter = std::vec::IntoIter<Statement>;
+    type Item = Expression;
+    type IntoIter = std::vec::IntoIter<Expression>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()

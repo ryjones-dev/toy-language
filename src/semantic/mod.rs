@@ -17,7 +17,6 @@ mod expression;
 mod function;
 mod scope;
 mod scope_tracker;
-mod statement;
 
 pub(crate) const EXPECT_VAR_TYPE: &str = "variable should have a type by this point";
 pub(crate) const EXPECT_FUNC_SIG: &str = "function signature should be set by this point";

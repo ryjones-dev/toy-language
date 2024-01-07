@@ -10,7 +10,6 @@ use self::{
     function::{Function, FunctionSignature},
     identifier::Identifier,
     scope::Scope,
-    statement::Statement,
     types::Type,
     variable::Variable,
 };
@@ -21,7 +20,6 @@ pub(super) mod function;
 pub(super) mod identifier;
 pub(super) mod scope;
 pub(super) mod source_range;
-pub(super) mod statement;
 pub(super) mod types;
 pub(super) mod variable;
 
@@ -60,7 +58,7 @@ peg::parser!(pub(crate) grammar parser() for str {
         = _ s:position!() i:identifier() _ "(" _
         p:((_ i:identifier() _ t:_type() _ { (i, t) }) ** ",") _ ")"
         r:(_ "->" r:((_ t:_type() _ { t }) ++ ",") {r})? e:position!()
-        _ body:scope() _ {
+        _ sc:scope() _ {
             Function {
                 signature: FunctionSignature {
                     name: i,
@@ -68,58 +66,23 @@ peg::parser!(pub(crate) grammar parser() for str {
                     returns: r.unwrap_or(Vec::default()).into(),
                     source: (s..=e).into()
                 },
-                body
+                scope: sc
             }
         }
 
     rule scope() -> Scope
-        = ":" _ s:statement()* _ ";" { Scope::new(s) }
+        = ":" _ e:expression()* _ ";" { Scope::new(e) }
 
-    rule statement() -> Statement
-        = _ a:assignment() _  { a }
-        / _ r:function_return_statement() _ { r }
-        / _ r:return_statement() _ { r }
-
-    rule assignment() -> Statement
-        = s:position!() vars:((_ i:identifier() _ t:_type()? _ { (i, t) }) ++ ",") _ "=" _ expr:expression() e:position!() {
-            Statement::Assignment { variables: vars.into_iter().map(|var|Variable::new(var.0, var.1)).collect(), expression: expr, source: (s..=e).into() }
-        }
-
-    rule return_statement() -> Statement
-        = rs:((_ s:position!() expr:expression() e:position!() _ { (s, expr, e) }) ++ ",") {
-            let mut start = None;
-            let mut end = None;
-            let mut expressions = Vec::new();
-            for r in rs {
-                let (s, expr, e) = r;
-                if let None = start {
-                    start = Some(s);
-                }
-                end = Some(e);
-                expressions.push(expr);
-            }
-            Statement::ScopeReturn { expressions, source: (start.unwrap()..=end.unwrap()).into() }
-        }
-
-    rule function_return_statement() -> Statement
-        = rs:(s:position!() "->" _ r:((_ expr:expression() e:position!() _ { (expr, e) }) ++ ",") { (s, r) }) {
-            let (start, rs) = rs;
-            let mut end = None;
-            let mut expressions = Vec::new();
-            for r in rs {
-                let (expr, e) = r;
-                end = Some(e);
-                expressions.push(expr);
-            }
-            Statement::FunctionReturn { expressions, source: (start..=end.unwrap()).into() }
-        }
-
-    // Each level of precedence is notated by a "--" line. Precedence is in ascending order.
+    // Each level of precedence is notated by a "--" line. Each level binds more tightly than the last.
     // Expressions between the same "--" lines have the same level of precedence.
+    #[cache_left_rec]
     rule expression() -> Expression = s:position!() expr:precedence! {
-        // We can't add the start and end positions to each expression type due to the precedence!() macro,
-        // so we have to grossly create each expression twice, first with all of the parsed expression info,
-        // then again with the source range.
+        l:expression_list() { l }
+        --
+        a:assignment() { a }
+        r:function_return() { r }
+        c:function_call() { c }
+        --
         a:(@) _ "==" _ b:@ { Expression::BooleanComparison { comparison_type: BooleanComparisonType::Equal, lhs: Box::new(a), rhs: Box::new(b), source: (0..=0).into() }}
         a:(@) _ "!=" _ b:@ { Expression::BooleanComparison { comparison_type: BooleanComparisonType::NotEqual, lhs: Box::new(a), rhs: Box::new(b), source: (0..=0).into() }}
         a:(@) _ "<" _ b:@ { Expression::BooleanComparison { comparison_type: BooleanComparisonType::LessThan, lhs: Box::new(a), rhs: Box::new(b), source: (0..=0).into() }}
@@ -135,25 +98,45 @@ peg::parser!(pub(crate) grammar parser() for str {
         --
         "-" e:@ { Expression::UnaryMathOperation { operation_type: UnaryMathOperationType::Negate, expression: Box::new(e), source: (0..=0).into() }}
         --
-        i:identifier() _ "(" _ args:((_ e:expression() _ {e}) ** ",") _ ")" {
-            Expression::FunctionCall { name: i, arguments: args, source: (0..=0).into(), function_signature: None }
-        }
-        --
         "(" _ e:expression() _ ")" { e }
         i:int_literal() { i }
         b:bool_literal() { b }
         i:identifier() { Expression::Variable(Variable::new(i, None)) }
     } e:position!() {
+        // We can't add the start and end positions to each expression type due to the precedence!() macro,
+        // so we have to grossly create these expression twice, first with all of the parsed expression info,
+        // then again with the source range.
+        // Expressions where we can call to a separately rule don't need to do this, since that rule will parse the source range.
         match expr {
             Expression::BooleanComparison { comparison_type, lhs, rhs, .. } => Expression::BooleanComparison { comparison_type, lhs, rhs, source: (s..=e).into() },
             Expression::BinaryMathOperation { operation_type, lhs, rhs, .. } => Expression::BinaryMathOperation { operation_type, lhs, rhs, source: (s..=e).into() },
             Expression::UnaryMathOperation { operation_type, expression, .. } => Expression::UnaryMathOperation { operation_type, expression, source: (s..=e).into() },
-            Expression::FunctionCall { name, arguments, source, function_signature } => Expression::FunctionCall { name, arguments, source: (s..=e).into(), function_signature },
-            Expression::Variable(variable) => Expression::Variable(variable),
-            Expression::IntLiteral(int_literal, source) => Expression::IntLiteral(int_literal, source),
-            Expression::BoolLiteral(bool_literal, source) => Expression::BoolLiteral(bool_literal, source),
+            expression => expression,
         }
     }
+
+    #[cache_left_rec]
+    rule expression_list() -> Expression
+        = s:position!() exprs:((_ expr:expression() e:position!() _ { (expr, e) }) ++ ",") {
+            let (_, end) = *exprs.last().unwrap();
+            let expressions = exprs.into_iter().map(|(expr, _)| expr).collect();
+            Expression::ExpressionList { expressions, source: (s..=end).into() }
+        }
+
+    rule assignment() -> Expression
+        = s:position!() vars:((_ i:identifier() _ t:_type()? _ { (i, t) }) ++ ",") _ "=" _ expr:expression() e:position!() {
+            Expression::Assignment { variables: vars.into_iter().map(|var|Variable::new(var.0, var.1)).collect(), expression: Box::new(expr), source: (s..=e).into() }
+        }
+
+    rule function_return() -> Expression
+        = s:position!() "->" _ expr:expression() e:position!() _ { Expression::FunctionReturn { expression: Box::new(expr), source: (s..=e).into() } }
+
+    rule function_call() -> Expression
+        // Need to explicitly use an optional expression list for the arguments,
+        // otherwise relying on the left recursion in expression() will cause issues.
+        = s:position!() i:identifier() _ "(" _ l:expression_list()? _ ")" e:position!() {
+            Expression::FunctionCall { name: i, argument_expression: Box::new(l), source: (s..=e).into(), function_signature: None }
+        }
 
     rule _type() -> Type
         = s:position!() t:$("int" / "bool") e:position!()  { Type::new(t.parse().expect("unknown type"), (s..=e).into()) }

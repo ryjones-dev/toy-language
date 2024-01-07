@@ -1,6 +1,8 @@
 use super::{
-    function::FunctionSignature, identifier::Identifier, source_range::SourceRange,
-    variable::Variable,
+    function::FunctionSignature,
+    identifier::Identifier,
+    source_range::SourceRange,
+    variable::{Variable, Variables},
 };
 
 /// Each type of boolean comparison that can be used in an expression.
@@ -39,26 +41,58 @@ pub(crate) enum UnaryMathOperationType {
 
 /// A TODO_LANG_NAME expression that, when evaluated, can return zero or more values.
 ///
-/// An [`Expression`] can be thought of in terms of rvalues in C++ semantics -
-/// it represents any source code that doesn't necessarily have any storage associated with it after evaluation.
-/// This is commonly paired with a [`Statement::Assignment`], so that the result of the expression
-/// can be stored in a variable for later use in a function.
-/// In fact, in most cases a freestanding expression will not compile without an assignment to a variable.
-/// An exception to this is [`Expression::FunctionCall`], which may not return any value and makes sense to
-/// write without an assignment.
+/// Everything is an expression in TODO_LANG_NAME. This is different compared to other languages like C++ that have rvalue semantics.
+/// Even assignment "statements" are expressions, they just return no values. See [`Expression::Assignment`].
+///
+/// In TODO_LANG_NAME, if an expression returns a value, that value must be assigned to a variable using an assignment expression,
+/// otherwise the program won't compile.
+/// If an expression such as a [`Expression::FunctionCall`] returns no values, then it does not need to be assigned to a variable
+/// as there is nothing to assign.
 ///
 /// It is worth noting that variables and literals are expressions as well.
 /// [`Expression::IntLiteral`] is a more obvious example as it literally represents a value, but a [`Expression::Variable`]
 /// is also an expression, since evaluating the variable means to return its currently stored value.
 ///
-/// The [`Expression`] type itself does not contain any information on what the expression returns.
+/// The [`Expression`] type itself does not contain any information on what value the expression returns.
 /// Its value can only be determined when the expression is evaluated at runtime.
-/// Instead, the type stores the information needed to generate the Cranelift IR to represent the expression.
+/// Instead, the type stores the information needed to perform semantic analysis and to
+/// generate the Cranelift IR representing the expression.
 ///
-/// Expressions support recursive generation, and in those cases the inner expression must be wrapped
+/// Expressions support recursive evaluation, and in those cases the inner expression must be wrapped
 /// in a container type such as [`Box`] or [`Vec`].
 #[derive(Debug, Clone)]
 pub(crate) enum Expression {
+    /// A wrapped list of inner expressions.
+    ///
+    /// Having an [`Expression`] be recursive like this allows for simpler parsing of scope return values,
+    /// and can be used in other places like function call arguments or assignments.
+    ExpressionList {
+        expressions: Vec<Expression>,
+        source: SourceRange,
+    },
+    /// Assignments must have an equal number of variables compared with the expression's return values.
+    ///
+    /// If the results of an expression are not needed, they still must be assigned to a variable.
+    /// A discarded variable can be used to signify that the results are intentionally being ignored.
+    Assignment {
+        variables: Variables,
+        expression: Box<Expression>,
+        source: SourceRange,
+    },
+    /// Represents returning from a function. This is useful for early returning from an outer function scope.
+    FunctionReturn {
+        expression: Box<Expression>,
+        source: SourceRange,
+    },
+    /// The called function signature can't be parsed from the function call expression itself,
+    /// but can be deduced during semantic analysis.
+    /// Until then, the function signature will have a value of [`None`].
+    FunctionCall {
+        name: Identifier,
+        argument_expression: Box<Option<Expression>>,
+        source: SourceRange,
+        function_signature: Option<FunctionSignature>,
+    },
     BooleanComparison {
         comparison_type: BooleanComparisonType,
         lhs: Box<Expression>,
@@ -76,17 +110,6 @@ pub(crate) enum Expression {
         expression: Box<Expression>,
         source: SourceRange,
     },
-
-    /// The called function signature can't be parsed from the function call expression itself,
-    /// but can be deduced during semantic analysis.
-    /// Until then, the function signature will have a value of [`None`].
-    FunctionCall {
-        name: Identifier,
-        arguments: Vec<Expression>,
-        source: SourceRange,
-        function_signature: Option<FunctionSignature>,
-    },
-
     Variable(Variable),
     IntLiteral(i64, SourceRange),
     BoolLiteral(bool, SourceRange),
@@ -96,6 +119,9 @@ impl Expression {
     /// Returns a [`SourceRange`] that captures the expression.
     pub(crate) fn source(&self) -> SourceRange {
         match self {
+            Expression::ExpressionList { source, .. } => *source,
+            Expression::Assignment { source, .. } => *source,
+            Expression::FunctionReturn { source, .. } => *source,
             Expression::BooleanComparison { source, .. } => *source,
             Expression::BinaryMathOperation { source, .. } => *source,
             Expression::UnaryMathOperation { source, .. } => *source,

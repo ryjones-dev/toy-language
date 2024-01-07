@@ -20,12 +20,12 @@ impl FunctionSignature {
     }
 }
 
-/// A TODO_LANG_NAME function is a set of parameterized statements that can be executed from other parts of the program.
+/// A TODO_LANG_NAME function is a set of parameterized expressions that can be executed from other parts of the program.
 ///
 /// This struct contains all of the information that can be parsed from the source code directly.
-/// This includes the function's signature as well as all of the statements in the function's body.
+/// This includes the function's signature as well as all of the expressions in the function's scope.
 #[derive(Debug)]
 pub(crate) struct Function {
     pub(crate) signature: FunctionSignature,
-    pub(crate) body: Scope,
+    pub(crate) scope: Scope,
 }
