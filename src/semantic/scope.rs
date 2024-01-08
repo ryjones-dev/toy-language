@@ -6,6 +6,7 @@ use crate::{
         expression::Expression, function::FunctionSignature, scope::Scope,
         source_range::SourceRange, types::Types, variable::Variable,
     },
+    semantic::diagnostic::diag_return_types_label,
 };
 
 use super::{
@@ -19,6 +20,12 @@ pub(super) enum ScopeError {
     EarlyReturnError {
         return_expression: Expression,
         remaining_code_source: SourceRange,
+    },
+    #[error("unassigned return value{}", if .types.len() == 1 { "" } else { "s" })]
+    NonZeroReturnError {
+        expression: Expression,
+        types: Types,
+        func_sig: Option<FunctionSignature>,
     },
     #[error("unused variable")]
     UnusedVariableError { variable: Variable },
@@ -46,6 +53,45 @@ impl From<ScopeError> for Diagnostic {
                     remaining_code_source,
                 )]),
             ),
+            ScopeError::NonZeroReturnError {
+                ref expression,
+                ref types,
+                ref func_sig,
+            } => Self::new(&err, DiagnosticLevel::Error)
+                .with_context(
+                    DiagnosticContext::new(DiagnosticMessage::new(
+                        if types.len() == 1 {
+                            "result of expression has not been assigned"
+                        } else {
+                            "results of expression have not been assigned"
+                        },
+                        expression.source(),
+                    ))
+                    .with_labels(if let Some(func_sig) = func_sig {
+                        if let Some(msg) = diag_return_types_label(func_sig) {
+                            vec![msg]
+                        } else {
+                            vec![]
+                        }
+                    } else {
+                        vec![]
+                    }),
+                )
+                .with_suggestions({
+                    let mut msg = if types.len() == 1 {
+                        "If the result of the expression is not needed, \
+                    assign it to discarded variable."
+                    } else {
+                        "If the results of the expression are not needed, \
+                    assign them to discarded variables."
+                    }
+                    .to_string();
+                    let mut discards = "_, ".repeat(types.len());
+                    discards.truncate(discards.len() - 2);
+                    discards.push_str(" = ...");
+                    msg.push_str(&format!(" `{discards}`"));
+                    vec![msg]
+                }),
             ScopeError::UnusedVariableError { ref variable } => {
                 Self::new(&err, DiagnosticLevel::Warning)
                     .with_context(DiagnosticContext::new(DiagnosticMessage::new(
@@ -100,7 +146,16 @@ pub(super) fn analyze_scope(
             ExpressionResult::Return(types) => {
                 if types.len() > 0 {
                     // It is an error if any expression in the scope body returned types
-                    todo!("Non-zero return error")
+                    errors.push(ScopeError::NonZeroReturnError {
+                        expression: expression.clone(),
+                        types,
+                        func_sig: match expression {
+                            Expression::FunctionCall {
+                                function_signature, ..
+                            } => function_signature.clone(),
+                            _ => None,
+                        },
+                    })
                 }
             }
             ExpressionResult::DivergentReturn(_) => {

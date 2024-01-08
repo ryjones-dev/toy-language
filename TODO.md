@@ -45,7 +45,7 @@
 - [x]  Rename `Scope` -> `ScopeTracker`
 - [x]  Change `Vec<Statement>` into `Scope`
 - [x]  Remove statements as a concept, only allow expressions
-- [ ]  Add back a non zero return error
+- [x]  Add back a non zero return error
 - [ ]  Add necessary codegen for a scope return
 - [ ]  Add a scope as an `Expression` variant
 - [ ]  Add range types that represent a continuous range of values
