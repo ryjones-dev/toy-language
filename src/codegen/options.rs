@@ -12,6 +12,7 @@ pub enum OptimizationLevel {
 /// Code generation options to be passed to [`compile`] or [`compile_jit`].
 #[derive(Default)]
 pub struct CodeGenOptions {
+    pub(crate) disabled: bool,
     pub(super) optimization_level: OptimizationLevel,
     pub(super) request_ir: bool,
     pub(super) request_disassembly: bool,
@@ -20,6 +21,11 @@ pub struct CodeGenOptions {
 impl CodeGenOptions {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn enable(mut self, enable: bool) -> Self {
+        self.disabled = !enable;
+        self
     }
 
     pub fn with_optimization_level(mut self, optimization_level: OptimizationLevel) -> Self {

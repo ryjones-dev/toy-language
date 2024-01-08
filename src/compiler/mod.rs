@@ -73,12 +73,16 @@ pub fn compile_jit(
             errs,
         } => {
             let diagnostics: Vec<Diagnostic> = errs.into_iter().map(|err| err.into()).collect();
-            let should_codegen = !diagnostics
+            let mut should_codegen = !diagnostics
                 .iter()
                 .any(|diag| diag.level() == DiagnosticLevel::Error);
 
             for diag in diagnostics {
                 report_diagnostic(&writer, &config, &files, file_id, diag)?;
+            }
+
+            if options.codegen_options.disabled {
+                should_codegen = false;
             }
 
             if should_codegen {

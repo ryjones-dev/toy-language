@@ -19,6 +19,31 @@ impl Scope {
 
         (body, returns)
     }
+
+    /// Wrap the last expression in the scope in a [`Expression::FunctionReturn`].
+    ///
+    /// This is helpful when dealing with function scopes to make codegen more consistent.
+    ///
+    /// If the scope is empty, an empty function return is inserted.
+    pub(crate) fn wrap_divergent_return(&mut self) {
+        // Early out if the scope is empty
+        if self.len() == 0 {
+            self.0.push(Expression::FunctionReturn {
+                expression: Box::new(Expression::ExpressionList {
+                    expressions: Vec::new(),
+                    source: (0..=0).into(),
+                }),
+                source: (0..=0).into(),
+            });
+            return;
+        }
+
+        let (_, returns) = self.split_return_mut();
+        *returns = Expression::FunctionReturn {
+            expression: Box::new(returns.clone()),
+            source: returns.source(),
+        };
+    }
 }
 
 impl std::ops::Deref for Scope {

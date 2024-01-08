@@ -16,6 +16,7 @@ use super::{
         diag_expected, diag_expected_types, diag_func_name_label, diag_newly_defined,
         diag_originally_defined, diag_return_types_label,
     },
+    expression::ExpressionResult,
     scope::ScopeError,
     scope_tracker::ScopeTracker,
 };
@@ -125,6 +126,12 @@ pub(super) fn analyze_function(
                 None
             },
         });
+    }
+
+    // Ensure the function scope has a divergent return to simplify codegen
+    match result {
+        ExpressionResult::Return(_) => function.scope.wrap_divergent_return(),
+        ExpressionResult::DivergentReturn(_) => {}
     }
 
     errors

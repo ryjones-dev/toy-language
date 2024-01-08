@@ -27,7 +27,10 @@ macro_rules! execute_jit {
 fn main() -> Result<(), RenderErrorFailure> {
     let source_code = include_str!("lang/test.txt");
 
-    let codegen_options = CodeGenOptions::new().with_ir(false).with_disassembly(false);
+    let codegen_options = CodeGenOptions::new()
+        .enable(true)
+        .with_ir(false)
+        .with_disassembly(false);
     let compile_options = CompileOptions::new()
         .with_ast(false)
         .with_codegen_options(codegen_options);
