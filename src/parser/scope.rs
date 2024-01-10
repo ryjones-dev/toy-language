@@ -1,6 +1,6 @@
 use super::expression::Expression;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Scope(Vec<Expression>);
 
 impl Scope {

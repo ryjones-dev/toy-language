@@ -19,6 +19,7 @@ use super::{
         diag_expected, diag_func_name_label, diag_func_param_label, diag_newly_defined,
         diag_originally_defined, diag_return_types_label,
     },
+    scope::{analyze_scope, ScopeError},
     scope_tracker::ScopeTracker,
     EXPECT_FUNC_SIG, EXPECT_VAR_TYPE,
 };
@@ -74,6 +75,8 @@ pub(super) enum ExpressionError {
         actual: Type,
         expression: Expression,
     },
+    #[error(transparent)]
+    ScopeError(#[from] Box<ScopeError>),
 }
 
 impl From<ExpressionError> for Diagnostic {
@@ -304,6 +307,7 @@ impl From<ExpressionError> for Diagnostic {
                     labels
                 }),
             ),
+            ExpressionError::ScopeError(err) => (*err).into(),
         }
     }
 }
@@ -342,10 +346,18 @@ pub(super) fn analyze_expression(
     scope_tracker: &mut ScopeTracker,
 ) -> (ExpressionResult, Vec<ExpressionError>) {
     match expression {
-        Expression::ExpressionList {
-            expressions,
-            source,
-        } => {
+        Expression::Scope { scope, .. } => {
+            // Create a new scope tracker to wrap the inner scope
+            let new_scope_tracker = ScopeTracker::new(Some(scope_tracker));
+
+            let (result, errors) = analyze_scope(scope, new_scope_tracker);
+            let errors = errors
+                .into_iter()
+                .map(|err| ExpressionError::ScopeError(Box::new(err)))
+                .collect();
+            (result, errors)
+        }
+        Expression::ExpressionList { expressions, .. } => {
             let mut types = Types::new();
             let mut errors = Vec::new();
 

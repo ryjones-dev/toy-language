@@ -46,8 +46,8 @@
 - [x]  Change `Vec<Statement>` into `Scope`
 - [x]  Remove statements as a concept, only allow expressions
 - [x]  Add back a non zero return error
-- [ ]  Add necessary codegen for a scope return
-- [ ]  Add a scope as an `Expression` variant
+- [x]  Add necessary codegen for a scope return
+- [x]  Add a scope as an `Expression` variant
 - [ ]  Add range types that represent a continuous range of values
 - [ ]  Pattern matching
 - [ ]  Check that all blocks in a function return the same number and type of values

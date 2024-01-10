@@ -1,6 +1,7 @@
 use super::{
     function::FunctionSignature,
     identifier::Identifier,
+    scope::Scope,
     source_range::SourceRange,
     variable::{Variable, Variables},
 };
@@ -62,6 +63,14 @@ pub(crate) enum UnaryMathOperationType {
 /// in a container type such as [`Box`] or [`Vec`].
 #[derive(Debug, Clone)]
 pub(crate) enum Expression {
+    /// The result of a TODO_LANG_NAME [`Scope`] can be used as an expression result.
+    ///
+    /// This conveniently allows for in-line processing where a function would otherwise be needed
+    /// to achieve the same effect.
+    Scope {
+        scope: Scope,
+        source: SourceRange,
+    },
     /// A wrapped list of inner expressions.
     ///
     /// Having an [`Expression`] be recursive like this allows for simpler parsing of scope return values,
@@ -119,7 +128,23 @@ impl Expression {
     /// Returns a [`SourceRange`] that captures the expression.
     pub(crate) fn source(&self) -> SourceRange {
         match self {
-            Expression::ExpressionList { source, .. } => *source,
+            Expression::Scope { source, .. } => *source,
+            Expression::ExpressionList {
+                expressions,
+                source,
+            } => {
+                // Prefer combining the first and last expression source ranges,
+                // as that gives a better looking source range for diagnostic messages
+                if expressions.len() > 0 {
+                    expressions
+                        .first()
+                        .unwrap()
+                        .source()
+                        .combine(expressions.last().unwrap().source())
+                } else {
+                    *source
+                }
+            }
             Expression::Assignment { source, .. } => *source,
             Expression::FunctionReturn { source, .. } => *source,
             Expression::BooleanComparison { source, .. } => *source,

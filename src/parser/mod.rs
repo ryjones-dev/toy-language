@@ -77,6 +77,8 @@ peg::parser!(pub(crate) grammar parser() for str {
     // Expressions between the same "--" lines have the same level of precedence.
     #[cache_left_rec]
     rule expression() -> Expression = s:position!() expr:precedence! {
+        s:scope() { Expression::Scope { scope: s, source: (0..=0).into() } }
+        --
         l:expression_list() { l }
         --
         a:assignment() { a }
@@ -108,6 +110,7 @@ peg::parser!(pub(crate) grammar parser() for str {
         // then again with the source range.
         // Expressions where we can call to a separately rule don't need to do this, since that rule will parse the source range.
         match expr {
+            Expression::Scope { scope, source } => Expression::Scope { scope, source: (s..=e).into() },
             Expression::BooleanComparison { comparison_type, lhs, rhs, .. } => Expression::BooleanComparison { comparison_type, lhs, rhs, source: (s..=e).into() },
             Expression::BinaryMathOperation { operation_type, lhs, rhs, .. } => Expression::BinaryMathOperation { operation_type, lhs, rhs, source: (s..=e).into() },
             Expression::UnaryMathOperation { operation_type, expression, .. } => Expression::UnaryMathOperation { operation_type, expression, source: (s..=e).into() },

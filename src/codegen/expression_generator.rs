@@ -80,6 +80,25 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
     /// so no error needs to be returned.
     pub(super) fn generate(&mut self, expression: Expression) -> Vec<ExpressionValue> {
         match expression {
+            Expression::Scope { scope, .. } => {
+                let scope_block = self.builder.create_block();
+
+                // Jump and switch to the new scope block
+                self.builder.ins().jump(scope_block, &[]);
+                self.builder.switch_to_block(scope_block);
+
+                let mut value = Vec::new();
+                for expression in scope {
+                    // Because we already went through semantic analysis, we know that
+                    // only the last expression in the scope will actually return a value
+                    value = self.generate(expression);
+                }
+
+                self.builder.seal_block(scope_block);
+
+                // Pass the scope's return value back as the result of the expression
+                value
+            }
             Expression::ExpressionList { expressions, .. } => {
                 let mut values = Vec::new();
                 for expression in expressions {
