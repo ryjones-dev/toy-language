@@ -383,15 +383,16 @@ pub(super) fn analyze_expression(
             let (result, mut errors) = analyze_expression(expression, scope_tracker);
             let types = result.types();
 
-            // Only continue if the expression did not have errors
-            if errors.len() == 0 {
-                if types.len() != variables.len() {
-                    errors.push(ExpressionError::AssignmentWrongNumberOfVariablesError {
-                        expression: *expression.clone(),
-                        expected: types,
-                        actual: variables.clone(),
-                    });
-                } else {
+            if types.len() != variables.len() {
+                errors.push(ExpressionError::AssignmentWrongNumberOfVariablesError {
+                    expression: *expression.clone(),
+                    expected: types,
+                    actual: variables.clone(),
+                });
+            } else {
+                // Only continue if the expression did not have errors,
+                // otherwise adding type errors will add noise
+                if errors.len() == 0 {
                     for (i, variable) in variables.iter_mut().enumerate() {
                         if let Some(var_type) = variable.get_type() {
                             // Check if the expression result matches the variable's annotated type
