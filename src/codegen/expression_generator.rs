@@ -13,7 +13,7 @@ use crate::{
         types::DataType,
         variable::Variable,
     },
-    semantic::{EXPECT_FUNC_SIG, EXPECT_VAR_TYPE},
+    semantic::EXPECT_VAR_TYPE,
     semantic_assert,
 };
 
@@ -152,11 +152,13 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                 argument_expression,
                 function_signature,
                 ..
-            } => self.generate_function_call(
-                name,
-                *argument_expression,
-                function_signature.expect(EXPECT_FUNC_SIG),
-            ),
+            } => {
+                semantic_assert!(
+                    function_signature.is_some(),
+                    "function signature should be set by this point"
+                );
+                self.generate_function_call(name, *argument_expression, function_signature.unwrap())
+            }
             Expression::BooleanComparison {
                 comparison_type,
                 lhs,

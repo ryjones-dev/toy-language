@@ -21,7 +21,7 @@ use super::{
     },
     scope::{analyze_scope, ScopeError},
     scope_tracker::ScopeTracker,
-    EXPECT_FUNC_SIG, EXPECT_VAR_TYPE,
+    EXPECT_VAR_TYPE,
 };
 
 #[derive(Debug, Error)]
@@ -106,10 +106,10 @@ impl From<ExpressionError> for Diagnostic {
                         function_signature, ..
                     } = expression
                     {
-                        if let Some(label) = diag_return_types_label(
-                            function_signature.as_ref().expect(EXPECT_FUNC_SIG),
-                        ) {
-                            labels.push(label);
+                        if let Some(func_sig) = function_signature {
+                            if let Some(label) = diag_return_types_label(func_sig) {
+                                labels.push(label);
+                            }
                         }
                     }
 
@@ -139,10 +139,10 @@ impl From<ExpressionError> for Diagnostic {
                         function_signature, ..
                     } = expression
                     {
-                        if let Some(label) = diag_return_types_label(
-                            function_signature.as_ref().expect(EXPECT_FUNC_SIG),
-                        ) {
-                            labels.push(label);
+                        if let Some(func_sig) = function_signature {
+                            if let Some(label) = diag_return_types_label(func_sig) {
+                                labels.push(label);
+                            }
                         }
                     }
                     labels
@@ -221,10 +221,10 @@ impl From<ExpressionError> for Diagnostic {
                             function_signature, ..
                         } = expression
                         {
-                            if let Some(label) = diag_return_types_label(
-                                function_signature.as_ref().expect(EXPECT_FUNC_SIG),
-                            ) {
-                                labels.push(label);
+                            if let Some(func_sig) = function_signature {
+                                if let Some(label) = diag_return_types_label(func_sig) {
+                                    labels.push(label);
+                                }
                             }
                         }
                     }
@@ -273,10 +273,10 @@ impl From<ExpressionError> for Diagnostic {
                         function_signature, ..
                     } = expression
                     {
-                        if let Some(label) = diag_return_types_label(
-                            function_signature.as_ref().expect(EXPECT_FUNC_SIG),
-                        ) {
-                            labels.push(label);
+                        if let Some(func_sig) = function_signature {
+                            if let Some(label) = diag_return_types_label(func_sig) {
+                                labels.push(label);
+                            }
                         }
                     }
                     labels
@@ -298,10 +298,10 @@ impl From<ExpressionError> for Diagnostic {
                         function_signature, ..
                     } = expression
                     {
-                        if let Some(label) = diag_return_types_label(
-                            function_signature.as_ref().expect(EXPECT_FUNC_SIG),
-                        ) {
-                            labels.push(label);
+                        if let Some(func_sig) = function_signature {
+                            if let Some(label) = diag_return_types_label(func_sig) {
+                                labels.push(label);
+                            }
                         }
                     }
                     labels
