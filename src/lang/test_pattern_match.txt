@@ -1,55 +1,55 @@
-add(arg1 int, arg2 int) -> int:
-    -> arg1 + arg2;
+add(arg1 int, arg2 int) -> int {
+    arg1 + arg2
+}
 
-print(output):;
+print(output) {}
 
-main(early_out bool, calc_1_2 bool) -> int:
+main(early_out bool, calc_1_2 bool) -> int {
     # Boolean pattern matching has special syntactic sugar for "if" expressions:
-    early_out?:
-        -> 0;
+    early_out? {
+        -> 0
+    }
     # With a full "if/else" denoted like this:
-    # early_out?:
+    # early_out? {
     #   -> 0
-    # /
-    #   -> false;
+    # } / {
+    #   -> 1
+    # }
         
     # Which is equivalent to a boolean pattern match:
-    # early_out?:
-    #     true: -> true;
-    #     false: -> false;
-    # ;
-
-    # Note that the semicolon is only used at the very end of the "if" syntax,
-    # not on each branch like in a typical match
+    # early_out? {
+    #     true { -> 0 }
+    #     false { -> 1 }
+    # }
 
     # A pattern match is an expression, returning the selected value as the result
-    sum = calc_1_2?:
-        true: add(1, 2);
-        false: add(3, 4);
-    ;
+    sum = calc_1_2? {
+        true { add(1, 2) }
+        false { add(3, 4) }
+    }
 
     # Note: need to check that all match arms return the same type.
     # A.K.A. the last expression in a scope needs to be what the scope returns,
     # and all return types must match.
 
-    sum?:
-        3: print(sum);
-        7: print(sum);
-        4 || 5 || 6: print(sum);  # if sum == 3 || sum == 300
-        sum: print(sum);
+    sum? {
+        3 { print(sum) }
+        7 { print(sum) }
+        4 || 5 || 6 { print(sum) }  # if sum == 3 || sum == 300
+        sum { print(sum) }
 
         # Need to implement a range type for these:
-        # 100..<200: print(sum);    # if sum >= 100 && sum < 200
-        # 200..=300: print(sum);    # if sum >= 200 && sum <= 300
-        # >300..=400: print(sum);   # if sum > 300 && sum <= 400
-        # >400..<500: print(sum);   # if sum > 400 && sum < 500
-        # 500..: print(sum);        # if sum >= 500
-        # >0..: print(sum);         # if sum > 0
-        # ..=0: print(sum);         # if sum <= 0
-        # ..<3: print(sum);         # if sum < 300
+        # 100..<200 { print(sum) }    # if sum >= 100 && sum < 200
+        # 200..=300 { print(sum) }    # if sum >= 200 && sum <= 300
+        # >300..=400 { print(sum) }   # if sum > 300 && sum <= 400
+        # >400..<500 { print(sum) }   # if sum > 400 && sum < 500
+        # 500.. { print(sum) }        # if sum >= 500
+        # >0.. { print(sum) }         # if sum > 0
+        # ..=0 { print(sum) }         # if sum <= 0
+        # ..<3 { print(sum) }         # if sum < 300
 
         # Need to have logic that prevents overlapping match arms
-    ;
+    }
 
     # Match arms cannot compare against any expression, they must be:
         # Literals (only int or bool for now)
@@ -57,7 +57,8 @@ main(early_out bool, calc_1_2 bool) -> int:
         # Constructor (struct decomposition, don't have structs yet)
         # Enum variant (don't have enums yet)
     
-    # An int can be check if it is in a range with the following syntax:
+    # An int can be checked if it is in a range with the following syntax:
     valid_sum = sum @ 3..=7
 
-    -> sum;
+    -> sum
+}

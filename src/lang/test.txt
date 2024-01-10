@@ -1,21 +1,26 @@
-is_equal(left int, right int) -> bool:
-    left == right;
+is_equal(left int, right int) -> bool {
+    left == right
+}
 
-is_less(left int, right int) -> bool:
-    left < right;
+is_less(left int, right int) -> bool {
+    left < right
+}
 
-is_greater(left int, right int) -> bool:
-    left > right;
+is_greater(left int, right int) -> bool {
+    left > right
+}
 
-main(arg1 int, arg2 int) -> int:
+main(arg1 int, arg2 int) -> int {
     sum = add(arg1, arg2)
-    sum;
+    sum
+}
 
-add(left int, right int) -> int:
+add(left int, right int) -> int {
     _equal bool = is_equal(left, right)
     _less = is_less(left, right)
     _greater = is_greater(left, right)
-    left + right;
+    left + right
+}
 
 # TODO: Support empty function body
-# noop():;
+# noop() {}

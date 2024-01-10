@@ -71,7 +71,7 @@ peg::parser!(pub(crate) grammar parser() for str {
         }
 
     rule scope() -> Scope
-        = ":" _ e:expression()* _ ";" { Scope::new(e) }
+        = "{" _ e:expression()* _ "}" { Scope::new(e) }
 
     // Each level of precedence is notated by a "--" line. Each level binds more tightly than the last.
     // Expressions between the same "--" lines have the same level of precedence.
