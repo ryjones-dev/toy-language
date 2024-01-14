@@ -1,0 +1,9 @@
+main(early_out bool) -> int {
+    val = if early_out {
+        -> 0
+    } else {
+        1
+    }
+
+    val
+}

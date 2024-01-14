@@ -1,0 +1,27 @@
+main(arg1 int, arg2 int) {
+    sum = arg1 + arg2
+
+    # Ranges have a lower and upper integer bound.
+    # The lower bound is implicitly inclusive, but can be explicitly exclusive by prefixing with '>'.
+    # The upper bound is always explicit, and is inclusive with '=' and exclusive with '<'.
+    # This allows a range to cover all four cases, which most other languages don't provide.
+
+    match sum {
+        100..<200: print(sum),    # if sum >= 100 && sum < 200
+        200..=300: print(sum),    # if sum >= 200 && sum <= 300
+        >300..=400: print(sum),   # if sum > 300 && sum <= 400
+        >400..<500: print(sum),   # if sum > 400 && sum < 500
+        500..: print(sum),        # if sum >= 500
+        >0..: print(sum),         # if sum > 0
+        ..=0: print(sum),         # if sum <= 0
+        ..<3: print(sum),         # if sum < 300
+    }
+
+    # Separate from a match, an int can be checked if it is in a range with the following syntax:
+    valid_sum = sum @ 3..=7
+    if valid_sum {
+        sum
+    } else {
+        -1
+    }
+}

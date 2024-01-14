@@ -48,10 +48,12 @@
 - [x]  Add back a non zero return error
 - [x]  Add necessary codegen for a scope return
 - [x]  Add a scope as an `Expression` variant
-- [ ]  Add range types that represent a continuous range of values
+- [ ]  Add if expressions
+- [ ]  Check that both scopes in an if expression return the same number and type of values, except for divergent returns
+- [ ]  Check that all scopes in a function return the same number and type of values
 - [ ]  Pattern matching
-- [ ]  Check that all blocks in a function return the same number and type of values
-- [ ]  Add syntactic sugar for pattern matching on a bool, akin to an if expression
+- [ ]  Add range types that represent a continuous range of values
+- [ ]  Add operator to check if int is in a range
 - [ ]  Make a function an expression
 - [ ]  Support tuples
 - [ ]  Bool condition loop (while loop)
