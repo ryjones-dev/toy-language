@@ -141,7 +141,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                 self.builder.ins().return_(
                     &return_values
                         .iter()
-                        .map(|value| Value::from(*value))
+                        .map(|value| (*value).into())
                         .collect::<Vec<Value>>(),
                 );
 
@@ -280,33 +280,33 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         match comparison_type {
             BooleanComparisonType::Equal => ExpressionValue(self.builder.ins().icmp(
                 IntCC::Equal,
-                Value::from(left_value),
-                Value::from(right_value),
+                left_value.into(),
+                right_value.into(),
             )),
             BooleanComparisonType::NotEqual => ExpressionValue(self.builder.ins().icmp(
                 IntCC::NotEqual,
-                Value::from(left_value),
-                Value::from(right_value),
+                left_value.into(),
+                right_value.into(),
             )),
             BooleanComparisonType::LessThan => ExpressionValue(self.builder.ins().icmp(
                 IntCC::SignedLessThan,
-                Value::from(left_value),
-                Value::from(right_value),
+                left_value.into(),
+                right_value.into(),
             )),
             BooleanComparisonType::LessThanEqual => ExpressionValue(self.builder.ins().icmp(
                 IntCC::SignedLessThanOrEqual,
-                Value::from(left_value),
-                Value::from(right_value),
+                left_value.into(),
+                right_value.into(),
             )),
             BooleanComparisonType::GreaterThan => ExpressionValue(self.builder.ins().icmp(
                 IntCC::SignedGreaterThan,
-                Value::from(left_value),
-                Value::from(right_value),
+                left_value.into(),
+                right_value.into(),
             )),
             BooleanComparisonType::GreaterThanEqual => ExpressionValue(self.builder.ins().icmp(
                 IntCC::SignedGreaterThanOrEqual,
-                Value::from(left_value),
-                Value::from(right_value),
+                left_value.into(),
+                right_value.into(),
             )),
         }
     }
@@ -333,22 +333,22 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
             BinaryMathOperationType::Add => ExpressionValue(
                 self.builder
                     .ins()
-                    .iadd(Value::from(left_value), Value::from(right_value)),
+                    .iadd(left_value.into(), right_value.into()),
             ),
             BinaryMathOperationType::Subtract => ExpressionValue(
                 self.builder
                     .ins()
-                    .isub(Value::from(left_value), Value::from(right_value)),
+                    .isub(left_value.into(), right_value.into()),
             ),
             BinaryMathOperationType::Multiply => ExpressionValue(
                 self.builder
                     .ins()
-                    .imul(Value::from(left_value), Value::from(right_value)),
+                    .imul(left_value.into(), right_value.into()),
             ),
             BinaryMathOperationType::Divide => ExpressionValue(
                 self.builder
                     .ins()
-                    .udiv(Value::from(left_value), Value::from(right_value)),
+                    .udiv(left_value.into(), right_value.into()),
             ),
         }
     }
@@ -365,7 +365,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         );
         match operation_type {
             UnaryMathOperationType::Negate => {
-                ExpressionValue(self.builder.ins().ineg(Value::from(values[0])))
+                ExpressionValue(self.builder.ins().ineg(values[0].into()))
             }
         }
     }
@@ -423,17 +423,16 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         self.builder
             .inst_results(call)
             .iter()
-            .map(|value| ExpressionValue::from(*value))
-            .collect::<Vec<ExpressionValue>>()
+            .map(|value| (*value).into())
+            .collect()
     }
 
     fn generate_variable(&mut self, variable: Variable) -> ExpressionValue {
-        ExpressionValue::from(
-            self.builder
-                .use_var(cranelift::frontend::Variable::from_u32(
-                    self.block_vars.var(variable.into_name()),
-                )),
-        )
+        self.builder
+            .use_var(cranelift::frontend::Variable::from_u32(
+                self.block_vars.var(variable.into_name()),
+            ))
+            .into()
     }
 
     fn generate_int_literal(&mut self, value: i64) -> ExpressionValue {
