@@ -1,6 +1,6 @@
-main(early_out bool) -> int {
-    val = if early_out {
-        -> 0
+main(arg1 int, arg2 int) -> int {
+    val = if arg1 < arg2 {
+        0
     } else {
         1
     }

@@ -70,9 +70,6 @@ peg::parser!(pub(crate) grammar parser() for str {
             }
         }
 
-    rule scope() -> Scope
-        = "{" _ e:expression()* _ "}" { Scope::new(e) }
-
     // Each level of precedence is notated by a "--" line. Each level binds more tightly than the last.
     // Expressions between the same "--" lines have the same level of precedence.
     #[cache_left_rec]
@@ -84,6 +81,7 @@ peg::parser!(pub(crate) grammar parser() for str {
         a:assignment() { a }
         r:function_return() { r }
         c:function_call() { c }
+        i:if_else() { i }
         --
         a:(@) _ "==" _ b:@ { Expression::BooleanComparison { comparison_type: BooleanComparisonType::Equal, lhs: Box::new(a), rhs: Box::new(b), source: (0..=0).into() }}
         a:(@) _ "!=" _ b:@ { Expression::BooleanComparison { comparison_type: BooleanComparisonType::NotEqual, lhs: Box::new(a), rhs: Box::new(b), source: (0..=0).into() }}
@@ -118,6 +116,9 @@ peg::parser!(pub(crate) grammar parser() for str {
         }
     }
 
+    rule scope() -> Scope
+        = "{" _ e:expression()* _ "}" { Scope::new(e) }
+
     #[cache_left_rec]
     rule expression_list() -> Expression
         = s:position!() exprs:((_ expr:expression() e:position!() _ { (expr, e) }) ++ ",") {
@@ -139,6 +140,11 @@ peg::parser!(pub(crate) grammar parser() for str {
         // otherwise relying on the left recursion in expression() will cause issues.
         = s:position!() i:identifier() _ "(" _ l:expression_list()? _ ")" e:position!() {
             Expression::FunctionCall { name: i, argument_expression: Box::new(l), source: (s..=e).into(), function_signature: None }
+        }
+
+    rule if_else() -> Expression
+        = s:position!() "if" _ c:expression() _ t:expression() _ "else"? _ el:expression()? e:position!() {
+            Expression::IfElse { cond_expression: Box::new(c), then_expression: Box::new(t), else_expression: Box::new(el), source: (s..=e).into() }
         }
 
     rule _type() -> Type

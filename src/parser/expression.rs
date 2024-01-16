@@ -102,6 +102,12 @@ pub(crate) enum Expression {
         source: SourceRange,
         function_signature: Option<FunctionSignature>,
     },
+    IfElse {
+        cond_expression: Box<Expression>,
+        then_expression: Box<Expression>,
+        else_expression: Box<Option<Expression>>,
+        source: SourceRange,
+    },
     BooleanComparison {
         comparison_type: BooleanComparisonType,
         lhs: Box<Expression>,
@@ -147,10 +153,11 @@ impl Expression {
             }
             Expression::Assignment { source, .. } => *source,
             Expression::FunctionReturn { source, .. } => *source,
+            Expression::FunctionCall { source, .. } => *source,
+            Expression::IfElse { source, .. } => *source,
             Expression::BooleanComparison { source, .. } => *source,
             Expression::BinaryMathOperation { source, .. } => *source,
             Expression::UnaryMathOperation { source, .. } => *source,
-            Expression::FunctionCall { source, .. } => *source,
             Expression::Variable(variable) => variable.source(),
             Expression::IntLiteral(_, source) => *source,
             Expression::BoolLiteral(_, source) => *source,

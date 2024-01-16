@@ -159,6 +159,75 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                 );
                 self.generate_function_call(name, *argument_expression, function_signature.unwrap())
             }
+            Expression::IfElse {
+                cond_expression,
+                then_expression,
+                else_expression,
+                ..
+            } => {
+                let cond_values = self.generate(*cond_expression);
+                semantic_assert!(
+                    cond_values.len() == 1,
+                    "if condition returns multiple values"
+                );
+                let cond_value = cond_values[0];
+
+                let then_block = self.builder.create_block();
+                let else_block = self.builder.create_block();
+                let merge_block = self.builder.create_block();
+
+                self.builder
+                    .ins()
+                    .brif(cond_value.into(), then_block, &[], else_block, &[]);
+
+                self.builder.switch_to_block(then_block);
+                self.builder.seal_block(then_block);
+
+                let then_values = self.generate(*then_expression);
+                self.builder.ins().jump(
+                    merge_block,
+                    &then_values
+                        .iter()
+                        .map(|val| (*val).into())
+                        .collect::<Vec<Value>>(),
+                );
+
+                for _ in &then_values {
+                    self.builder
+                        .append_block_param(merge_block, DataType::Int.into());
+                }
+
+                self.builder.switch_to_block(else_block);
+                self.builder.seal_block(else_block);
+
+                if let Some(else_expression) = *else_expression {
+                    let else_values = self.generate(else_expression);
+                    self.builder.ins().jump(
+                        merge_block,
+                        &else_values
+                            .iter()
+                            .map(|val| (*val).into())
+                            .collect::<Vec<Value>>(),
+                    );
+
+                    // Only add the merge block params if the then block divergently returned
+                    if self.builder.block_params(merge_block).len() == 0 {
+                        for _ in &else_values {
+                            self.builder
+                                .append_block_param(merge_block, DataType::Int.into());
+                        }
+                    }
+                }
+
+                self.builder.switch_to_block(merge_block);
+                self.builder.seal_block(merge_block);
+
+                self.builder
+                    .block_params(merge_block)
+                    .into_iter()
+                    .map(|val| (*val).into())
+                    .collect()
+            }
             Expression::BooleanComparison {
                 comparison_type,
                 lhs,

@@ -16,8 +16,8 @@ use crate::{
 
 use super::{
     diagnostic::{
-        diag_expected, diag_func_name_label, diag_func_param_label, diag_newly_defined,
-        diag_originally_defined, diag_return_types_label,
+        diag_expected, diag_expected_types, diag_func_name_label, diag_func_param_label,
+        diag_newly_defined, diag_originally_defined, diag_return_types_label,
     },
     scope::{analyze_scope, ScopeError},
     scope_tracker::ScopeTracker,
@@ -56,6 +56,12 @@ pub(super) enum ExpressionError {
         source_range: SourceRange,
         function_signature: FunctionSignature,
         argument_types: Types,
+    },
+    #[error("mismatched return types for if expression")]
+    IfElseReturnTypeMismatchError {
+        source_range: SourceRange,
+        then_types: Types,
+        else_types: Types,
     },
     #[error("unknown variable")]
     VariableUnknownError(Variable),
@@ -232,6 +238,18 @@ impl From<ExpressionError> for Diagnostic {
                     labels
                 }),
             ),
+            ExpressionError::IfElseReturnTypeMismatchError {
+                source_range,
+                ref then_types,
+                ref else_types,
+            } => Self::new(&err, DiagnosticLevel::Error).with_context(
+                DiagnosticContext::new(DiagnosticMessage::new(
+                    "branches of if expression return different types",
+                    source_range,
+                ))
+                .with_labels(vec![diag_expected_types(then_types, else_types)]),
+            ),
+
             ExpressionError::VariableUnknownError(ref variable) => {
                 Self::new(&err, DiagnosticLevel::Error).with_context(DiagnosticContext::new(
                     DiagnosticMessage::new(
@@ -475,6 +493,61 @@ pub(super) fn analyze_expression(
             } else {
                 (ExpressionResult::Return(types_to_return), errors)
             }
+        }
+        Expression::IfElse {
+            cond_expression,
+            then_expression,
+            else_expression,
+            source,
+        } => {
+            let mut errors = Vec::new();
+
+            // Analyze condition expression
+            let (cond_result, mut errs) = analyze_expression(cond_expression, scope_tracker);
+            errors.append(&mut errs);
+
+            let cond_types = match cond_result {
+                ExpressionResult::Return(types) => types,
+                ExpressionResult::DivergentReturn(types) => {
+                    return (ExpressionResult::DivergentReturn(types), errors)
+                }
+            };
+
+            expect_single_type(cond_expression, &cond_types, DataType::Bool, &mut errors);
+
+            // Analyze then expression
+            let (then_result, mut errs) = analyze_expression(then_expression, scope_tracker);
+            errors.append(&mut errs);
+
+            let then_types = match then_result {
+                ExpressionResult::Return(types) => types,
+                ExpressionResult::DivergentReturn(types) => {
+                    return (ExpressionResult::DivergentReturn(types), errors)
+                }
+            };
+
+            // Analyze else expression
+            if let Some(else_expression) = else_expression.as_mut() {
+                let (else_result, mut errs) = analyze_expression(else_expression, scope_tracker);
+                errors.append(&mut errs);
+
+                let else_types = match else_result {
+                    ExpressionResult::Return(types) => types,
+                    ExpressionResult::DivergentReturn(types) => {
+                        return (ExpressionResult::DivergentReturn(types), errors)
+                    }
+                };
+
+                if then_types != else_types {
+                    errors.push(ExpressionError::IfElseReturnTypeMismatchError {
+                        source_range: *source,
+                        then_types: then_types.clone(),
+                        else_types,
+                    })
+                }
+            }
+
+            (ExpressionResult::Return(then_types), errors)
         }
         Expression::BooleanComparison {
             comparison_type,
