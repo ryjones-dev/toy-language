@@ -3,20 +3,16 @@ use thiserror::Error;
 use crate::{
     diagnostic::{Diagnostic, DiagnosticContext, DiagnosticLevel, DiagnosticMessage},
     parser::{
+        expression::Expression,
         function::{Function, FunctionSignature},
-        source_range::SourceRange,
-        types::Types,
         variable::Variable,
     },
     semantic::scope::analyze_scope,
 };
 
 use super::{
-    diagnostic::{
-        diag_expected, diag_expected_types, diag_func_name_label, diag_newly_defined,
-        diag_originally_defined, diag_return_types_label,
-    },
-    expression::ExpressionResult,
+    diagnostic::{diag_func_name_label, diag_newly_defined, diag_originally_defined},
+    expression::ExpressionError,
     scope::ScopeError,
     scope_tracker::ScopeTracker,
 };
@@ -28,12 +24,6 @@ pub(super) enum FunctionError {
         func_sig: FunctionSignature,
         original: Variable,
         new: Variable,
-    },
-    #[error("return value mismatch")]
-    ReturnValueMismatchError {
-        func_sig: FunctionSignature,
-        return_types: Types,
-        source_range: Option<SourceRange>,
     },
     #[error(transparent)]
     ScopeError(#[from] ScopeError),
@@ -61,26 +51,6 @@ impl From<FunctionError> for Diagnostic {
                     diag_newly_defined(new.source(), None),
                 ]),
             ),
-            FunctionError::ReturnValueMismatchError {
-                ref func_sig,
-                ref return_types,
-                ref source_range,
-            } => Self::new(&err, DiagnosticLevel::Error).with_context(
-                DiagnosticContext::new({
-                    if let Some(source_range) = source_range {
-                        diag_expected(&func_sig.returns, return_types, *source_range)
-                    } else {
-                        diag_expected_types(&func_sig.returns, &Types::new())
-                    }
-                })
-                .with_labels({
-                    let mut labels = vec![diag_func_name_label(func_sig)];
-                    if let Some(label) = diag_return_types_label(&func_sig) {
-                        labels.push(label);
-                    }
-                    labels
-                }),
-            ),
             FunctionError::ScopeError(err) => err.into(),
         }
     }
@@ -94,7 +64,7 @@ pub(super) fn analyze_function(
 
     let mut scope_tracker = ScopeTracker::new(Some(outer_scope_tracker));
 
-    // Add the scope parameters to the scope
+    // Add the function parameters to the scope
     for param in &function.signature.params {
         if let Some(variable) = scope_tracker.insert_var(param.clone().into()) {
             errors.push(FunctionError::DuplicateParameterError {
@@ -105,7 +75,7 @@ pub(super) fn analyze_function(
         }
     }
 
-    let (result, errs) = analyze_scope(&mut function.scope, scope_tracker);
+    let (types, errs) = analyze_scope(&mut function.scope, scope_tracker, &function.signature);
     errors.append(
         &mut errs
             .into_iter()
@@ -113,25 +83,50 @@ pub(super) fn analyze_function(
             .collect(),
     );
 
-    let types = result.types();
-
     // Ensure that the function returns the correct types
     if function.signature.returns != types {
-        errors.push(FunctionError::ReturnValueMismatchError {
-            func_sig: function.signature.clone(),
-            return_types: types,
-            source_range: if function.scope.len() > 0 {
-                Some(function.scope.split_return_mut().1.source())
-            } else {
-                None
-            },
-        });
+        // Handle an empty scope separately so we don't panic later
+        if function.scope.len() == 0 {
+            errors.push(FunctionError::ScopeError(ScopeError::ExpressionError(
+                ExpressionError::FunctionReturnValueMismatchError {
+                    func_sig: function.signature.clone(),
+                    return_types: types,
+                    source_range: None,
+                },
+            )));
+        } else {
+            // Special case: if a function return is explicitly used at the end of a scope,
+            // it won't be returned from the scope analysis.
+            // In that case, we don't need to do anything, because the error was already checked for.
+            let (_, returns) = function.scope.split_return();
+            let returns = returns.unwrap_transparent();
+            match returns {
+                Expression::FunctionReturn { .. } => {}
+                _ => {
+                    errors.push(FunctionError::ScopeError(ScopeError::ExpressionError(
+                        ExpressionError::FunctionReturnValueMismatchError {
+                            func_sig: function.signature.clone(),
+                            return_types: types,
+                            source_range: Some(returns.source()),
+                        },
+                    )));
+                }
+            }
+        }
     }
 
-    // Ensure the function scope has a divergent return to simplify codegen
-    match result {
-        ExpressionResult::Return(_) => function.scope.wrap_divergent_return(),
-        ExpressionResult::DivergentReturn(_) => {}
+    // Ensure the function scope has a function return at the end to simplify codegen
+    if function.scope.len() == 0 {
+        function.scope.wrap_function_return();
+    } else {
+        let (_, returns) = function.scope.split_return();
+        let returns = returns.unwrap_transparent();
+        match returns {
+            Expression::FunctionReturn { .. } => {}
+            _ => {
+                function.scope.wrap_function_return();
+            }
+        }
     }
 
     errors

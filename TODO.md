@@ -49,9 +49,9 @@
 - [x]  Add necessary codegen for a scope return
 - [x]  Add a scope as an `Expression` variant
 - [x]  Add if expressions
-- [ ]  Refactor divergent returns, just call then function returns, no need to have function returns return their types to the outer expression/scope
+- [x]  Refactor divergent returns, just call them function returns, no need to have function returns return their types to the outer expression/scope
 - [ ]  Support function returns within if expressions in codegen
-- [ ]  Check that both scopes in an if expression return the same number and type of values, except for divergent returns
+- [ ]  Check that both scopes in an if expression return the same number and type of values, except for function returns
 - [ ]  Check that all scopes in a function return the same number and type of values
 - [ ]  Pattern matching
 - [ ]  Add range types that represent a continuous range of values

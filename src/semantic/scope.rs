@@ -10,7 +10,7 @@ use crate::{
 };
 
 use super::{
-    expression::{analyze_expression, ExpressionError, ExpressionResult},
+    expression::{analyze_expression, ExpressionError},
     scope_tracker::ScopeTracker,
 };
 
@@ -120,13 +120,14 @@ impl From<ScopeError> for Diagnostic {
 pub(super) fn analyze_scope(
     scope: &mut Scope,
     mut scope_tracker: ScopeTracker,
-) -> (ExpressionResult, Vec<ScopeError>) {
+    outer_func_sig: &FunctionSignature,
+) -> (Types, Vec<ScopeError>) {
     let mut early_return_index = None;
     let mut errors = Vec::new();
 
     // if this is an empty scope, don't bother trying to analyze anything
     if scope.len() == 0 {
-        return (ExpressionResult::Return(Types::new()), errors);
+        return (Types::new(), errors);
     }
 
     // Throw out the scope's return expression from the rest of the body.
@@ -134,7 +135,7 @@ pub(super) fn analyze_scope(
     let (body, _) = scope.split_return_mut();
 
     for (i, expression) in body.iter_mut().enumerate() {
-        let (result, errs) = analyze_expression(expression, &mut scope_tracker);
+        let (types, errs) = analyze_expression(expression, &mut scope_tracker, outer_func_sig);
         errors.append(
             &mut errs
                 .into_iter()
@@ -142,34 +143,34 @@ pub(super) fn analyze_scope(
                 .collect(),
         );
 
-        match result {
-            ExpressionResult::Return(types) => {
-                if types.len() > 0 {
-                    // It is an error if any expression in the scope body returned types
-                    errors.push(ScopeError::NonZeroReturnError {
-                        expression: expression.clone(),
-                        types,
-                        func_sig: match expression {
-                            Expression::FunctionCall {
-                                function_signature, ..
-                            } => function_signature.clone(),
-                            _ => None,
-                        },
-                    })
-                }
-            }
-            ExpressionResult::DivergentReturn(_) => {
-                // Scope has more expressions after the divergent return.
+        if types.len() > 0 {
+            // It is an error if any expression in the scope body returned types
+            errors.push(ScopeError::NonZeroReturnError {
+                expression: expression.clone(),
+                types,
+                func_sig: match expression {
+                    Expression::FunctionCall {
+                        function_signature, ..
+                    } => function_signature.clone(),
+                    _ => None,
+                },
+            })
+        }
+
+        match expression {
+            Expression::FunctionReturn { .. } => {
+                // Scope has more expressions after the function return.
                 // We can't generate an error here because the scope body is mutably borrowed during this loop.
                 // Instead, cache the index and generate the error for the first occurrence after iteration is done.
                 if let None = early_return_index {
                     early_return_index = Some(i)
                 }
             }
+            _ => {}
         }
     }
 
-    // If we detected an early divergent return, generate that error now
+    // If we detected an early function return, generate that error now
     if let Some(i) = early_return_index {
         let expression = scope[i].clone();
         let remaining = &scope[i + 1..];
@@ -189,7 +190,7 @@ pub(super) fn analyze_scope(
     let (_, returns) = scope.split_return_mut();
 
     // Analyze the scope's return expressions
-    let (result, errs) = analyze_expression(returns, &mut scope_tracker);
+    let (types, errs) = analyze_expression(returns, &mut scope_tracker, outer_func_sig);
     errors.append(
         &mut errs
             .into_iter()
@@ -208,5 +209,5 @@ pub(super) fn analyze_scope(
         })
     }
 
-    (result, errors)
+    (types, errors)
 }

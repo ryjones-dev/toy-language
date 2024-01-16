@@ -12,7 +12,7 @@ main(early_out bool, calc_1_2 bool) -> int {
     }
 
     # Note: need to check that all match arm expressions return the same type.
-    # Divergent returns are exempt from this rule.
+    # Function returns are exempt from this rule.
 
     match sum {
         3: print(sum),

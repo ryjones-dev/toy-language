@@ -12,6 +12,18 @@ impl Scope {
     ///
     /// # Panics
     /// Panics if the scope is empty.
+    pub(crate) fn split_return(&self) -> (&[Expression], &Expression) {
+        let len = self.len();
+        let (body, returns) = self.split_at(len - 1);
+        let returns = returns.first().unwrap();
+
+        (body, returns)
+    }
+
+    /// Split the scope's return expression from the rest of the scope's body.
+    ///
+    /// # Panics
+    /// Panics if the scope is empty.
     pub(crate) fn split_return_mut(&mut self) -> (&mut [Expression], &mut Expression) {
         let len = self.len();
         let (body, returns) = self.split_at_mut(len - 1);
@@ -25,7 +37,7 @@ impl Scope {
     /// This is helpful when dealing with function scopes to make codegen more consistent.
     ///
     /// If the scope is empty, an empty function return is inserted.
-    pub(crate) fn wrap_divergent_return(&mut self) {
+    pub(crate) fn wrap_function_return(&mut self) {
         // Early out if the scope is empty
         if self.len() == 0 {
             self.0.push(Expression::FunctionReturn {

@@ -163,4 +163,26 @@ impl Expression {
             Expression::BoolLiteral(_, source) => *source,
         }
     }
+
+    /// Returns the innermost expression if this expression wraps an expression transparently,
+    /// otherwise return self.
+    ///
+    /// Wrapping an expression transparently means that the wrapping expression does not change
+    /// the semantics of the expression it wraps.
+    /// An example of this is an [`Expression::ExpressionList`] with only one inner expression.
+    pub(crate) fn unwrap_transparent(&self) -> &Expression {
+        match self {
+            Expression::ExpressionList {
+                expressions,
+                source,
+            } => {
+                if expressions.len() != 1 {
+                    &self
+                } else {
+                    expressions[0].unwrap_transparent()
+                }
+            }
+            _ => &self,
+        }
+    }
 }

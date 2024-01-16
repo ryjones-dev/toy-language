@@ -41,6 +41,12 @@ pub(super) enum ExpressionError {
     },
     #[error("variable type redefinition")]
     AssignmentVariableTypeRedefinitionError { prev_var: Variable, var: Variable },
+    #[error("return value mismatch")]
+    FunctionReturnValueMismatchError {
+        func_sig: FunctionSignature,
+        return_types: Types,
+        source_range: Option<SourceRange>,
+    },
     #[error("unknown function")]
     FunctionCallUnknownError(Identifier, SourceRange),
     #[error("call to discarded function")]
@@ -170,6 +176,26 @@ impl From<ExpressionError> for Diagnostic {
                     ),
                     diag_newly_defined(var.source(), var.get_type().map(|ty| ty.into())),
                 ]),
+            ),
+            ExpressionError::FunctionReturnValueMismatchError {
+                ref func_sig,
+                ref return_types,
+                ref source_range,
+            } => Self::new(&err, DiagnosticLevel::Error).with_context(
+                DiagnosticContext::new({
+                    if let Some(source_range) = source_range {
+                        diag_expected(&func_sig.returns, return_types, *source_range)
+                    } else {
+                        diag_expected_types(&func_sig.returns, &Types::new())
+                    }
+                })
+                .with_labels({
+                    let mut labels = vec![diag_func_name_label(func_sig)];
+                    if let Some(label) = diag_return_types_label(&func_sig) {
+                        labels.push(label);
+                    }
+                    labels
+                }),
             ),
             ExpressionError::FunctionCallUnknownError(ref name, source) => {
                 Self::new(&err, DiagnosticLevel::Error).with_context(DiagnosticContext::new(
@@ -330,76 +356,49 @@ impl From<ExpressionError> for Diagnostic {
     }
 }
 
-/// The result of calling [`analyze_expression`].
-///
-/// Because TODO_LANG_NAME supports early returning from a function, an expression
-/// could either return values intended for the outer expression, or return values
-/// intended for the outer function. Returning values for the outer function is called a divergent return.
-///
-/// A scope can return values normally or divergently, but never both.
-pub(super) enum ExpressionResult {
-    Return(Types),
-    DivergentReturn(Types),
-}
-
-impl ExpressionResult {
-    /// Returns the types that the expression returns, regardless of if it returned normally or divergently.
-    pub(super) fn types(&self) -> Types {
-        match self {
-            ExpressionResult::Return(types) => types.clone(),
-            ExpressionResult::DivergentReturn(types) => types.clone(),
-        }
-    }
-}
-
 /// Check if the given expression is semantically correct.
 ///
-/// Recursively validate that inner expressions have the correct number and types of values that the outer expression expects.
+/// Recursively validate that inner expressions have the correct number and types of values
+/// that the outer expression expects.
 ///
-/// Returns an [`ExpressionResult`] and a list of errors if any inner expression was not compatible with its outer expression.
-/// The [`ExpressionResult`] will contain information about whether the expression caused a normal return of values
-/// to the calling expression, or a divergent return of values to the outer function scope.
+/// Returns the [`Types`] of values that the expression will return,
+/// and a list of errors if any inner expression was not compatible with its outer expression.
 pub(super) fn analyze_expression(
     expression: &mut Expression,
     scope_tracker: &mut ScopeTracker,
-) -> (ExpressionResult, Vec<ExpressionError>) {
+    outer_func_sig: &FunctionSignature,
+) -> (Types, Vec<ExpressionError>) {
     match expression {
         Expression::Scope { scope, .. } => {
             // Create a new scope tracker to wrap the inner scope
-            let new_scope_tracker = ScopeTracker::new(Some(scope_tracker));
+            let inner_scope_tracker = ScopeTracker::new(Some(scope_tracker));
 
-            let (result, errors) = analyze_scope(scope, new_scope_tracker);
+            let (types, errors) = analyze_scope(scope, inner_scope_tracker, outer_func_sig);
             let errors = errors
                 .into_iter()
                 .map(|err| ExpressionError::ScopeError(Box::new(err)))
                 .collect();
-            (result, errors)
+            (types, errors)
         }
         Expression::ExpressionList { expressions, .. } => {
             let mut types = Types::new();
             let mut errors = Vec::new();
 
             for expression in expressions {
-                let (result, mut errs) = analyze_expression(expression, scope_tracker);
+                let (mut tys, mut errs) =
+                    analyze_expression(expression, scope_tracker, outer_func_sig);
+                types.append(&mut tys);
                 errors.append(&mut errs);
-
-                match result {
-                    ExpressionResult::Return(mut tys) => types.append(&mut tys),
-                    ExpressionResult::DivergentReturn(tys) => {
-                        return (ExpressionResult::DivergentReturn(tys), errors)
-                    }
-                }
             }
 
-            (ExpressionResult::Return(types), errors)
+            (types, errors)
         }
         Expression::Assignment {
             variables,
             expression,
             source,
         } => {
-            let (result, mut errors) = analyze_expression(expression, scope_tracker);
-            let types = result.types();
+            let (types, mut errors) = analyze_expression(expression, scope_tracker, outer_func_sig);
 
             if types.len() != variables.len() {
                 errors.push(ExpressionError::AssignmentWrongNumberOfVariablesError {
@@ -413,7 +412,7 @@ pub(super) fn analyze_expression(
                 if errors.len() == 0 {
                     for (i, variable) in variables.iter_mut().enumerate() {
                         if let Some(var_type) = variable.get_type() {
-                            // Check if the expression result matches the variable's annotated type
+                            // Check if the expression's corresponding type matches the variable's annotated type
                             if *var_type != types[i] {
                                 errors.push(ExpressionError::AssignmentTypeMismatchError {
                                     expected_type: types[i],
@@ -424,7 +423,7 @@ pub(super) fn analyze_expression(
                             }
                         } else {
                             // Variable has not been explicitly assigned a type,
-                            // so give it the same type as the expression result
+                            // so give it the same type as the expression's corresponding type
                             variable.set_type(&types[i]);
                         }
 
@@ -444,29 +443,24 @@ pub(super) fn analyze_expression(
                 }
             }
 
-            // Assignment expressions should return no types (unless the expression is divergent)
-            (
-                match result {
-                    ExpressionResult::Return(_) => ExpressionResult::Return(Types::new()),
-                    ExpressionResult::DivergentReturn(types) => {
-                        ExpressionResult::DivergentReturn(types)
-                    }
-                },
-                errors,
-            )
+            // Assignment expressions should return no types
+            (Types::new(), errors)
         }
         Expression::FunctionReturn { expression, .. } => {
-            let (result, errors) = analyze_expression(expression, scope_tracker);
+            let (types, mut errors) = analyze_expression(expression, scope_tracker, outer_func_sig);
 
-            let types_to_return = match result {
-                ExpressionResult::Return(types) => types,
-                ExpressionResult::DivergentReturn(types) => {
-                    return (ExpressionResult::DivergentReturn(types), errors)
-                }
-            };
+            if types != outer_func_sig.returns {
+                errors.push(ExpressionError::FunctionReturnValueMismatchError {
+                    func_sig: outer_func_sig.clone(),
+                    return_types: types,
+                    source_range: Some(expression.source()),
+                })
+            }
 
-            // Function return expressions always cause a divergent return
-            (ExpressionResult::DivergentReturn(types_to_return), errors)
+            // Function returns do not return any types here.
+            // Keep in mind that we are returning the expression's resulting types,
+            // which is not the same as the function's return types.
+            (Types::new(), errors)
         }
         Expression::FunctionCall {
             name,
@@ -474,13 +468,18 @@ pub(super) fn analyze_expression(
             source,
             function_signature,
         } => {
-            let mut types_to_return = Types::new();
+            let mut types = Types::new();
 
-            let (func_sig, divergent_types, errors) =
-                analyze_function_call(name, argument_expression, &source, scope_tracker);
+            let (func_sig, errors) = analyze_function_call(
+                name,
+                argument_expression,
+                &source,
+                scope_tracker,
+                outer_func_sig,
+            );
             match func_sig {
                 Some(func_sig) => {
-                    types_to_return = func_sig.returns.clone();
+                    types = func_sig.returns.clone();
 
                     // Update the function call's cached signature in the AST
                     *function_signature = Some(func_sig);
@@ -488,11 +487,7 @@ pub(super) fn analyze_expression(
                 None => {}
             }
 
-            if let Some(divergent_types) = divergent_types {
-                (ExpressionResult::DivergentReturn(divergent_types), errors)
-            } else {
-                (ExpressionResult::Return(types_to_return), errors)
-            }
+            (types, errors)
         }
         Expression::IfElse {
             cond_expression,
@@ -503,40 +498,22 @@ pub(super) fn analyze_expression(
             let mut errors = Vec::new();
 
             // Analyze condition expression
-            let (cond_result, mut errs) = analyze_expression(cond_expression, scope_tracker);
+            let (cond_types, mut errs) =
+                analyze_expression(cond_expression, scope_tracker, outer_func_sig);
             errors.append(&mut errs);
-
-            let cond_types = match cond_result {
-                ExpressionResult::Return(types) => types,
-                ExpressionResult::DivergentReturn(types) => {
-                    return (ExpressionResult::DivergentReturn(types), errors)
-                }
-            };
 
             expect_single_type(cond_expression, &cond_types, DataType::Bool, &mut errors);
 
             // Analyze then expression
-            let (then_result, mut errs) = analyze_expression(then_expression, scope_tracker);
+            let (then_types, mut errs) =
+                analyze_expression(then_expression, scope_tracker, outer_func_sig);
             errors.append(&mut errs);
-
-            let then_types = match then_result {
-                ExpressionResult::Return(types) => types,
-                ExpressionResult::DivergentReturn(types) => {
-                    return (ExpressionResult::DivergentReturn(types), errors)
-                }
-            };
 
             // Analyze else expression
             if let Some(else_expression) = else_expression.as_mut() {
-                let (else_result, mut errs) = analyze_expression(else_expression, scope_tracker);
+                let (else_types, mut errs) =
+                    analyze_expression(else_expression, scope_tracker, outer_func_sig);
                 errors.append(&mut errs);
-
-                let else_types = match else_result {
-                    ExpressionResult::Return(types) => types,
-                    ExpressionResult::DivergentReturn(types) => {
-                        return (ExpressionResult::DivergentReturn(types), errors)
-                    }
-                };
 
                 if then_types != else_types {
                     errors.push(ExpressionError::IfElseReturnTypeMismatchError {
@@ -547,7 +524,7 @@ pub(super) fn analyze_expression(
                 }
             }
 
-            (ExpressionResult::Return(then_types), errors)
+            (then_types, errors)
         }
         Expression::BooleanComparison {
             comparison_type,
@@ -557,24 +534,10 @@ pub(super) fn analyze_expression(
         } => {
             let mut errors = Vec::new();
 
-            let (lhs_result, mut errs) = analyze_expression(lhs, scope_tracker);
+            let (lhs_types, mut errs) = analyze_expression(lhs, scope_tracker, outer_func_sig);
             errors.append(&mut errs);
-            let (rhs_result, mut errs) = analyze_expression(rhs, scope_tracker);
+            let (rhs_types, mut errs) = analyze_expression(rhs, scope_tracker, outer_func_sig);
             errors.append(&mut errs);
-
-            let lhs_types = match lhs_result {
-                ExpressionResult::Return(types) => types,
-                ExpressionResult::DivergentReturn(types) => {
-                    return (ExpressionResult::DivergentReturn(types), errors)
-                }
-            };
-
-            let rhs_types = match rhs_result {
-                ExpressionResult::Return(types) => types,
-                ExpressionResult::DivergentReturn(types) => {
-                    return (ExpressionResult::DivergentReturn(types), errors)
-                }
-            };
 
             let mut types_to_return = Types::new();
 
@@ -588,11 +551,11 @@ pub(super) fn analyze_expression(
                             }
                         }
                     }
-                    // TODO: Handle floats later
                     BooleanComparisonType::LessThan
                     | BooleanComparisonType::LessThanEqual
                     | BooleanComparisonType::GreaterThan
                     | BooleanComparisonType::GreaterThanEqual => {
+                        // TODO: Handle floats later
                         if expect_single_type(lhs, &lhs_types, DataType::Int, &mut errors) {
                             if expect_single_type(rhs, &rhs_types, DataType::Int, &mut errors) {
                                 types_to_return.push(Type::new(DataType::Bool, *source));
@@ -602,7 +565,7 @@ pub(super) fn analyze_expression(
                 }
             }
 
-            (ExpressionResult::Return(types_to_return), errors)
+            (types_to_return, errors)
         }
         Expression::BinaryMathOperation {
             operation_type,
@@ -612,25 +575,10 @@ pub(super) fn analyze_expression(
         } => {
             let mut errors = Vec::new();
 
-            // TODO: Handle floats later
-            let (lhs_result, mut errs) = analyze_expression(lhs, scope_tracker);
+            let (lhs_types, mut errs) = analyze_expression(lhs, scope_tracker, outer_func_sig);
             errors.append(&mut errs);
-            let (rhs_result, mut errs) = analyze_expression(rhs, scope_tracker);
+            let (rhs_types, mut errs) = analyze_expression(rhs, scope_tracker, outer_func_sig);
             errors.append(&mut errs);
-
-            let lhs_types = match lhs_result {
-                ExpressionResult::Return(types) => types,
-                ExpressionResult::DivergentReturn(types) => {
-                    return (ExpressionResult::DivergentReturn(types), errors)
-                }
-            };
-
-            let rhs_types = match rhs_result {
-                ExpressionResult::Return(types) => types,
-                ExpressionResult::DivergentReturn(types) => {
-                    return (ExpressionResult::DivergentReturn(types), errors)
-                }
-            };
 
             let mut types_to_return = Types::new();
 
@@ -641,6 +589,7 @@ pub(super) fn analyze_expression(
                     | BinaryMathOperationType::Subtract
                     | BinaryMathOperationType::Multiply
                     | BinaryMathOperationType::Divide => {
+                        // TODO: Handle floats later
                         if expect_single_type(lhs, &lhs_types, DataType::Int, &mut errors) {
                             if expect_single_type(rhs, &rhs_types, DataType::Int, &mut errors) {
                                 types_to_return.push(Type::new(DataType::Int, *source));
@@ -650,7 +599,7 @@ pub(super) fn analyze_expression(
                 }
             }
 
-            (ExpressionResult::Return(types_to_return), errors)
+            (types_to_return, errors)
         }
         Expression::UnaryMathOperation {
             operation_type,
@@ -659,15 +608,8 @@ pub(super) fn analyze_expression(
         } => {
             let mut errors = Vec::new();
 
-            let (result, mut errs) = analyze_expression(expression, scope_tracker);
+            let (types, mut errs) = analyze_expression(expression, scope_tracker, outer_func_sig);
             errors.append(&mut errs);
-
-            let expression_types = match result {
-                ExpressionResult::Return(types) => types,
-                ExpressionResult::DivergentReturn(types) => {
-                    return (ExpressionResult::DivergentReturn(types), errors)
-                }
-            };
 
             let mut types_to_return = Types::new();
 
@@ -675,22 +617,18 @@ pub(super) fn analyze_expression(
             if errors.len() == 0 {
                 match operation_type {
                     UnaryMathOperationType::Negate => {
-                        if expect_single_type(
-                            expression,
-                            &expression_types,
-                            DataType::Int,
-                            &mut errors,
-                        ) {
+                        // TODO: Handle floats later
+                        if expect_single_type(expression, &types, DataType::Int, &mut errors) {
                             types_to_return.push(Type::new(DataType::Int, *source))
                         }
                     }
                 }
             }
 
-            (ExpressionResult::Return(types_to_return), errors)
+            (types_to_return, errors)
         }
         Expression::Variable(variable) => {
-            let mut types_to_return = Types::new();
+            let mut types = Types::new();
             let mut errors = Vec::new();
 
             match scope_tracker.get_var(variable.name()) {
@@ -706,7 +644,7 @@ pub(super) fn analyze_expression(
                         // the Variable won't have its type set. Since the variable has already been added to the scope,
                         // we can update the variable's type here so as to not leave any undefined types in the AST.
                         variable.set_type(&scope_var.get_type().expect(EXPECT_VAR_TYPE));
-                        types_to_return.push(variable.get_type().unwrap());
+                        types.push(variable.get_type().unwrap());
                     }
                 }
                 None => {
@@ -714,17 +652,17 @@ pub(super) fn analyze_expression(
                 }
             }
 
-            (ExpressionResult::Return(types_to_return), errors)
+            (types, errors)
         }
         Expression::IntLiteral(_, source) => {
-            let mut types_to_return = Types::new();
-            types_to_return.push(Type::new(DataType::Int, *source));
-            (ExpressionResult::Return(types_to_return), Vec::new())
+            let mut types = Types::new();
+            types.push(Type::new(DataType::Int, *source));
+            (types, Vec::new())
         }
         Expression::BoolLiteral(_, source) => {
-            let mut types_to_return = Types::new();
-            types_to_return.push(Type::new(DataType::Bool, *source));
-            (ExpressionResult::Return(types_to_return), Vec::new())
+            let mut types = Types::new();
+            types.push(Type::new(DataType::Bool, *source));
+            (types, Vec::new())
         }
     }
 }
@@ -734,34 +672,17 @@ pub(super) fn analyze_function_call(
     argument_expression: &mut Option<Expression>,
     source: &SourceRange,
     scope_tracker: &mut ScopeTracker,
-) -> (
-    Option<FunctionSignature>,
-    Option<Types>,
-    Vec<ExpressionError>,
-) {
+    func_sig: &FunctionSignature,
+) -> (Option<FunctionSignature>, Vec<ExpressionError>) {
     let mut errors = Vec::new();
 
     // Analyze each argument expression to determine their types
     let mut argument_types = Types::new();
 
     if let Some(argument_expression) = argument_expression {
-        let (result, mut errs) = analyze_expression(argument_expression, scope_tracker);
+        let (types, mut errs) = analyze_expression(argument_expression, scope_tracker, func_sig);
+        argument_types = types;
         errors.append(&mut errs);
-
-        argument_types = match result {
-            ExpressionResult::Return(types) => types,
-            ExpressionResult::DivergentReturn(types) => {
-                // If the function call has a divergently returning argument,
-                // quickly grab the function signature (if there is one) and early out
-                return (
-                    scope_tracker
-                        .get_func_sig(name)
-                        .map(|func_sig| func_sig.clone()),
-                    Some(types),
-                    errors,
-                );
-            }
-        };
     }
 
     match scope_tracker.get_func_sig(name) {
@@ -790,14 +711,14 @@ pub(super) fn analyze_function_call(
                 });
             }
 
-            (Some(func_sig.clone()), None, errors)
+            (Some(func_sig.clone()), errors)
         }
         None => {
             errors.push(ExpressionError::FunctionCallUnknownError(
                 name.clone(),
                 source.clone(),
             ));
-            (None, None, errors)
+            (None, errors)
         }
     }
 }
