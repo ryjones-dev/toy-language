@@ -73,12 +73,18 @@ impl<'module, 'ctx: 'builder, 'builder, 'block, M: cranelift_module::Module>
 impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'module>
     ExpressionGenerator<'module, 'ctx, 'builder, 'var, M>
 {
-    /// Generate IR for a given expression and return the expression's resulting values.
+    /// Generate IR for a given expression.
+    ///
+    /// Returns the expression's resulting values, as well as
+    /// whether or not a function return was triggered.
+    ///
+    /// Knowing if an inner expression triggered a function return
+    /// is needed for branching expressions such as if expressions.
     ///
     /// An expression can return multiple values depending on the context.
     /// This function assumes that the context has already been checked by the [`crate::semantic`] module,
     /// so no error needs to be returned.
-    pub(super) fn generate(&mut self, expression: Expression) -> Vec<ExpressionValue> {
+    pub(super) fn generate(&mut self, expression: Expression) -> (Vec<ExpressionValue>, bool) {
         match expression {
             Expression::Scope { scope, .. } => {
                 let scope_block = self.builder.create_block();
@@ -87,24 +93,39 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                 self.builder.ins().jump(scope_block, &[]);
                 self.builder.switch_to_block(scope_block);
 
-                let mut value = Vec::new();
-                for expression in scope {
+                let (body, returns) = scope.split_into_return();
+
+                for expression in body {
                     // Because we already went through semantic analysis, we know that
-                    // only the last expression in the scope will actually return a value
-                    value = self.generate(expression);
+                    // only the last expression in the scope will actually return a value.
+                    // Therefore, we don't need to care about the return values here.
+                    self.generate(expression);
+                }
+
+                let mut values = Vec::new();
+                let mut function_return = false;
+                if let Some(returns) = returns {
+                    // Get the results from the last expression in the scope if there is one
+                    (values, function_return) = self.generate(returns);
                 }
 
                 self.builder.seal_block(scope_block);
 
                 // Pass the scope's return value back as the result of the expression
-                value
+                (values, function_return)
             }
             Expression::ExpressionList { expressions, .. } => {
                 let mut values = Vec::new();
+                let mut function_return = false;
                 for expression in expressions {
-                    values.append(&mut self.generate(expression));
+                    let (mut vals, func_return) = self.generate(expression);
+                    values.append(&mut vals);
+
+                    if func_return {
+                        function_return = true;
+                    }
                 }
-                values
+                (values, function_return)
             }
             Expression::Assignment {
                 variables,
@@ -112,7 +133,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                 ..
             } => {
                 // Generate IR for the expression on the right-hand side of the equals sign
-                let values = self.generate(*expression);
+                let (values, _) = self.generate(*expression);
 
                 // Declare and define the variables
                 for (i, variable) in variables.into_iter().enumerate() {
@@ -131,11 +152,11 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                     }
                 }
 
-                vec![]
+                (vec![], false)
             }
             Expression::FunctionReturn { expression, .. } => {
                 // Generate IR for the return value expression
-                let return_values = self.generate(*expression);
+                let (return_values, _) = self.generate(*expression);
 
                 // Add the IR instruction to actually return from the function
                 self.builder.ins().return_(
@@ -145,7 +166,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                         .collect::<Vec<Value>>(),
                 );
 
-                return_values
+                (vec![], true)
             }
             Expression::FunctionCall {
                 name,
@@ -165,7 +186,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                 else_expression,
                 ..
             } => {
-                let cond_values = self.generate(*cond_expression);
+                let (cond_values, _) = self.generate(*cond_expression);
                 semantic_assert!(
                     cond_values.len() == 1,
                     "if condition returns multiple values"
@@ -183,14 +204,16 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                 self.builder.switch_to_block(then_block);
                 self.builder.seal_block(then_block);
 
-                let then_values = self.generate(*then_expression);
-                self.builder.ins().jump(
-                    merge_block,
-                    &then_values
-                        .iter()
-                        .map(|val| (*val).into())
-                        .collect::<Vec<Value>>(),
-                );
+                let (then_values, func_return) = self.generate(*then_expression);
+                if !func_return {
+                    self.builder.ins().jump(
+                        merge_block,
+                        &then_values
+                            .iter()
+                            .map(|val| (*val).into())
+                            .collect::<Vec<Value>>(),
+                    );
+                }
 
                 for _ in &then_values {
                     self.builder
@@ -201,14 +224,16 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                 self.builder.seal_block(else_block);
 
                 if let Some(else_expression) = *else_expression {
-                    let else_values = self.generate(else_expression);
-                    self.builder.ins().jump(
-                        merge_block,
-                        &else_values
-                            .iter()
-                            .map(|val| (*val).into())
-                            .collect::<Vec<Value>>(),
-                    );
+                    let (else_values, func_return) = self.generate(else_expression);
+                    if !func_return {
+                        self.builder.ins().jump(
+                            merge_block,
+                            &else_values
+                                .iter()
+                                .map(|val| (*val).into())
+                                .collect::<Vec<Value>>(),
+                        );
+                    }
 
                     // Only add the merge block params if the then block divergently returned
                     if self.builder.block_params(merge_block).len() == 0 {
@@ -222,40 +247,44 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                 self.builder.switch_to_block(merge_block);
                 self.builder.seal_block(merge_block);
 
-                self.builder
-                    .block_params(merge_block)
-                    .into_iter()
-                    .map(|val| (*val).into())
-                    .collect()
+                (
+                    self.builder
+                        .block_params(merge_block)
+                        .into_iter()
+                        .map(|val| (*val).into())
+                        .collect(),
+                    false,
+                )
             }
             Expression::BooleanComparison {
                 comparison_type,
                 lhs,
                 rhs,
                 ..
-            } => {
-                vec![self.generate_boolean_comparison(comparison_type, *lhs, *rhs)]
-            }
+            } => (
+                vec![self.generate_boolean_comparison(comparison_type, *lhs, *rhs)],
+                false,
+            ),
             Expression::BinaryMathOperation {
                 operation_type,
                 lhs,
                 rhs,
                 ..
-            } => {
-                vec![self.generate_binary_operation(operation_type, *lhs, *rhs)]
-            }
+            } => (
+                vec![self.generate_binary_operation(operation_type, *lhs, *rhs)],
+                false,
+            ),
             Expression::UnaryMathOperation {
                 operation_type,
                 expression,
                 ..
-            } => {
-                vec![self.generate_unary_operation(operation_type, *expression)]
-            }
-            Expression::Variable(variable) => vec![self.generate_variable(variable)],
-            Expression::IntLiteral(value, _) => vec![self.generate_int_literal(value)],
-            Expression::BoolLiteral(value, _) => {
-                vec![self.generate_bool_literal(value)]
-            }
+            } => (
+                vec![self.generate_unary_operation(operation_type, *expression)],
+                false,
+            ),
+            Expression::Variable(variable) => (vec![self.generate_variable(variable)], false),
+            Expression::IntLiteral(value, _) => (vec![self.generate_int_literal(value)], false),
+            Expression::BoolLiteral(value, _) => (vec![self.generate_bool_literal(value)], false),
         }
     }
 
@@ -265,8 +294,8 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         lhs: Expression,
         rhs: Expression,
     ) -> ExpressionValue {
-        let left_values = self.generate(lhs);
-        let right_values = self.generate(rhs);
+        let (left_values, _) = self.generate(lhs);
+        let (right_values, _) = self.generate(rhs);
         semantic_assert!(
             left_values.len() == 1,
             "left boolean operand expression did not return a single value"
@@ -317,8 +346,8 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         lhs: Expression,
         rhs: Expression,
     ) -> ExpressionValue {
-        let left_values = self.generate(lhs);
-        let right_values = self.generate(rhs);
+        let (left_values, _) = self.generate(lhs);
+        let (right_values, _) = self.generate(rhs);
         semantic_assert!(
             left_values.len() == 1,
             "left binary operand expression did not return a single value"
@@ -358,7 +387,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         operation_type: UnaryMathOperationType,
         expression: Expression,
     ) -> ExpressionValue {
-        let values = self.generate(expression);
+        let (values, _) = self.generate(expression);
         semantic_assert!(
             values.len() == 1,
             "unary operand expression did not return a single value"
@@ -375,7 +404,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         name: Identifier,
         argument_expression: Option<Expression>,
         func_sig: FunctionSignature,
-    ) -> Vec<ExpressionValue> {
+    ) -> (Vec<ExpressionValue>, bool) {
         // Because we've already done semantic analysis, we know that the function being called is defined,
         // and this call to that function is correct.
         // Therefore, we can build the function signature from the function call information.
@@ -403,7 +432,8 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         // Generate IR for the argument expression
         let mut values = Vec::new();
         if let Some(argument_expression) = argument_expression {
-            values = self.generate(argument_expression);
+            let (vals, _) = self.generate(argument_expression);
+            values = vals;
             semantic_assert!(
                 values.len() == sig.params.len(),
                 "function argument expression did not return the correct number of values"
@@ -420,11 +450,14 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         );
 
         // Return function return values
-        self.builder
-            .inst_results(call)
-            .iter()
-            .map(|value| (*value).into())
-            .collect()
+        (
+            self.builder
+                .inst_results(call)
+                .iter()
+                .map(|value| (*value).into())
+                .collect(),
+            false,
+        )
     }
 
     fn generate_variable(&mut self, variable: Variable) -> ExpressionValue {

@@ -8,6 +8,11 @@ impl Scope {
         Self(expressions)
     }
 
+    pub(crate) fn split_into_return(mut self) -> (Vec<Expression>, Option<Expression>) {
+        let returns = self.pop();
+        (self.0, returns)
+    }
+
     /// Split the scope's return expression from the rest of the scope's body.
     ///
     /// # Panics

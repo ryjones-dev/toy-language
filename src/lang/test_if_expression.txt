@@ -1,9 +1,14 @@
 main(arg1 int, arg2 int) -> int {
     val = if arg1 < arg2 {
-        0
+        -> 0
     } else {
-        1
+        if false {
+            -> 1
+        } else {
+            2
+        }
     }
 
+    val = val + 1
     val
 }

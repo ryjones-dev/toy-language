@@ -50,9 +50,9 @@
 - [x]  Add a scope as an `Expression` variant
 - [x]  Add if expressions
 - [x]  Refactor divergent returns, just call them function returns, no need to have function returns return their types to the outer expression/scope
-- [ ]  Support function returns within if expressions in codegen
-- [ ]  Check that both scopes in an if expression return the same number and type of values, except for function returns
-- [ ]  Check that all scopes in a function return the same number and type of values
+- [x]  Support function returns within if expressions in codegen
+- [x]  Check that both scopes in an if expression return the same number and type of values, except for function returns
+- [ ]  Change `split_return()` to use `split_last()` instead of `split_at()`, have `split_return()` return an Option
 - [ ]  Pattern matching
 - [ ]  Add range types that represent a continuous range of values
 - [ ]  Add operator to check if int is in a range

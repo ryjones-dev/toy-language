@@ -509,22 +509,65 @@ pub(super) fn analyze_expression(
                 analyze_expression(then_expression, scope_tracker, outer_func_sig);
             errors.append(&mut errs);
 
+            let mut types_to_return = then_types;
+
             // Analyze else expression
             if let Some(else_expression) = else_expression.as_mut() {
                 let (else_types, mut errs) =
                     analyze_expression(else_expression, scope_tracker, outer_func_sig);
                 errors.append(&mut errs);
 
-                if then_types != else_types {
-                    errors.push(ExpressionError::IfElseReturnTypeMismatchError {
-                        source_range: *source,
-                        then_types: then_types.clone(),
-                        else_types,
-                    })
+                // Check for mismatched branch types
+                if types_to_return != else_types {
+                    if let None = else_expression.last_function_return() {
+                        if let Some(_) = then_expression.last_function_return() {
+                            // Only consider the branches mismatched if neither of them
+                            // end with a function return
+                            types_to_return = else_types;
+                        } else {
+                            errors.push(ExpressionError::IfElseReturnTypeMismatchError {
+                                source_range: *source,
+                                then_types: types_to_return.clone(),
+                                else_types,
+                            })
+                        }
+                    }
+                } else {
+                    // Special case: If both branches of the if expression have function returns,
+                    // extract the function return out of each branch.
+                    // This is needed so that when an if expression is the last expression in a function,
+                    // the special case for checking function returns will apply to the if expression.
+                    // For more on this special case for function returns, see `semantic::function::analyze_function`.
+                    if let Some(Expression::FunctionReturn {
+                        expression: then_inner_expression,
+                        ..
+                    }) = then_expression.last_function_return()
+                    {
+                        if let Some(Expression::FunctionReturn {
+                            expression: else_inner_expression,
+                            ..
+                        }) = else_expression.last_function_return()
+                        {
+                            // Convert function return to normal expression return on each branch
+                            **then_expression = (**then_inner_expression).clone();
+                            *else_expression = (**else_inner_expression).clone();
+
+                            // Wrap entire if expression in function return
+                            *expression = Expression::FunctionReturn {
+                                expression: Box::new(Expression::IfElse {
+                                    cond_expression: cond_expression.clone(),
+                                    then_expression: then_expression.clone(),
+                                    else_expression: Box::new(Some(else_expression.clone())),
+                                    source: *source,
+                                }),
+                                source: *source,
+                            };
+                        }
+                    }
                 }
             }
 
-            (then_types, errors)
+            (types_to_return, errors)
         }
         Expression::BooleanComparison {
             comparison_type,

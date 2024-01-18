@@ -172,17 +172,43 @@ impl Expression {
     /// An example of this is an [`Expression::ExpressionList`] with only one inner expression.
     pub(crate) fn unwrap_transparent(&self) -> &Expression {
         match self {
-            Expression::ExpressionList {
-                expressions,
-                source,
-            } => {
-                if expressions.len() != 1 {
-                    &self
+            Expression::Scope { scope, .. } => {
+                if scope.len() != 1 {
+                    self
                 } else {
-                    expressions[0].unwrap_transparent()
+                    scope.first().unwrap().unwrap_transparent()
                 }
             }
-            _ => &self,
+            Expression::ExpressionList { expressions, .. } => {
+                if expressions.len() != 1 {
+                    self
+                } else {
+                    expressions.first().unwrap().unwrap_transparent()
+                }
+            }
+            _ => self,
+        }
+    }
+
+    /// Returns the last [`Expression::FunctionReturn`] contained in this expression,
+    /// or [`None`] if this expression is not and does not contain an [`Expression::FunctionReturn`].
+    pub(crate) fn last_function_return(&self) -> Option<&Self> {
+        let expression = self.unwrap_transparent();
+        match expression {
+            Expression::Scope { scope, .. } => {
+                if scope.len() == 0 {
+                    None
+                } else {
+                    let (_, returns) = scope.split_return();
+                    let returns = returns.unwrap_transparent();
+                    match returns {
+                        Expression::FunctionReturn { .. } => Some(returns),
+                        _ => None,
+                    }
+                }
+            }
+            Expression::FunctionReturn { .. } => Some(expression),
+            _ => None,
         }
     }
 }
