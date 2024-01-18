@@ -85,22 +85,12 @@ pub(super) fn analyze_function(
 
     // Ensure that the function returns the correct types
     if function.signature.returns != types {
-        // Handle an empty scope separately so we don't panic later
-        if function.scope.len() == 0 {
-            errors.push(FunctionError::ScopeError(ScopeError::ExpressionError(
-                ExpressionError::FunctionReturnValueMismatchError {
-                    func_sig: function.signature.clone(),
-                    return_types: types,
-                    source_range: None,
-                },
-            )));
-        } else {
-            // Special case: if a function return is explicitly used at the end of a scope,
-            // it won't be returned from the scope analysis.
-            // In that case, we don't need to do anything, because the error was already checked for.
-            let (_, returns) = function.scope.split_return();
+        if let Some((returns, _)) = function.scope.split_return() {
             let returns = returns.unwrap_transparent();
             match returns {
+                // Special case: if a function return is explicitly used at the end of a scope,
+                // it won't be returned from the scope analysis.
+                // In that case, we don't need to do anything, because the error was already checked for.
                 Expression::FunctionReturn { .. } => {}
                 _ => {
                     errors.push(FunctionError::ScopeError(ScopeError::ExpressionError(
@@ -112,22 +102,19 @@ pub(super) fn analyze_function(
                     )));
                 }
             }
+        } else {
+            errors.push(FunctionError::ScopeError(ScopeError::ExpressionError(
+                ExpressionError::FunctionReturnValueMismatchError {
+                    func_sig: function.signature.clone(),
+                    return_types: types,
+                    source_range: None,
+                },
+            )));
         }
     }
 
     // Ensure the function scope has a function return at the end to simplify codegen
-    if function.scope.len() == 0 {
-        function.scope.wrap_function_return();
-    } else {
-        let (_, returns) = function.scope.split_return();
-        let returns = returns.unwrap_transparent();
-        match returns {
-            Expression::FunctionReturn { .. } => {}
-            _ => {
-                function.scope.wrap_function_return();
-            }
-        }
-    }
+    function.scope.wrap_function_return();
 
     errors
 }

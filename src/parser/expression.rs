@@ -196,15 +196,14 @@ impl Expression {
         let expression = self.unwrap_transparent();
         match expression {
             Expression::Scope { scope, .. } => {
-                if scope.len() == 0 {
-                    None
-                } else {
-                    let (_, returns) = scope.split_return();
+                if let Some((returns, _)) = scope.split_return() {
                     let returns = returns.unwrap_transparent();
                     match returns {
                         Expression::FunctionReturn { .. } => Some(returns),
                         _ => None,
                     }
+                } else {
+                    None
                 }
             }
             Expression::FunctionReturn { .. } => Some(expression),

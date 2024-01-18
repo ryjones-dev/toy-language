@@ -123,54 +123,61 @@ pub(super) fn analyze_scope(
     outer_func_sig: &FunctionSignature,
 ) -> (Types, Vec<ScopeError>) {
     let mut early_return_index = None;
+    let mut types = Types::new();
     let mut errors = Vec::new();
-
-    // if this is an empty scope, don't bother trying to analyze anything
-    if scope.len() == 0 {
-        return (Types::new(), errors);
-    }
 
     // Throw out the scope's return expression from the rest of the body.
     // This simplifies the logic for analysis.
-    let (body, _) = scope.split_return_mut();
+    if let Some((returns, body)) = scope.split_return_mut() {
+        for (i, expression) in body.iter_mut().enumerate() {
+            let (types, errs) = analyze_expression(expression, &mut scope_tracker, outer_func_sig);
+            errors.append(
+                &mut errs
+                    .into_iter()
+                    .map(|err| ScopeError::ExpressionError(err))
+                    .collect(),
+            );
 
-    for (i, expression) in body.iter_mut().enumerate() {
-        let (types, errs) = analyze_expression(expression, &mut scope_tracker, outer_func_sig);
+            if types.len() > 0 {
+                // It is an error if any expression in the scope body returned types
+                errors.push(ScopeError::NonZeroReturnError {
+                    expression: expression.clone(),
+                    types,
+                    func_sig: match expression {
+                        Expression::FunctionCall {
+                            function_signature, ..
+                        } => function_signature.clone(),
+                        _ => None,
+                    },
+                })
+            }
+
+            match expression {
+                Expression::FunctionReturn { .. } => {
+                    // Scope has more expressions after the function return.
+                    // We can't generate an error here because the scope is mutably borrowed from splitting out
+                    // the return expression from the rest of the body.
+                    // Instead, cache the index and generate the error for the first occurrence after iteration is done.
+                    if let None = early_return_index {
+                        early_return_index = Some(i)
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Analyze the scope's return expressions
+        let (tys, errs) = analyze_expression(returns, &mut scope_tracker, outer_func_sig);
+        types = tys;
         errors.append(
             &mut errs
                 .into_iter()
                 .map(|err| ScopeError::ExpressionError(err))
                 .collect(),
         );
-
-        if types.len() > 0 {
-            // It is an error if any expression in the scope body returned types
-            errors.push(ScopeError::NonZeroReturnError {
-                expression: expression.clone(),
-                types,
-                func_sig: match expression {
-                    Expression::FunctionCall {
-                        function_signature, ..
-                    } => function_signature.clone(),
-                    _ => None,
-                },
-            })
-        }
-
-        match expression {
-            Expression::FunctionReturn { .. } => {
-                // Scope has more expressions after the function return.
-                // We can't generate an error here because the scope body is mutably borrowed during this loop.
-                // Instead, cache the index and generate the error for the first occurrence after iteration is done.
-                if let None = early_return_index {
-                    early_return_index = Some(i)
-                }
-            }
-            _ => {}
-        }
     }
 
-    // If we detected an early function return, generate that error now
+    // If we detected an early function return in the scope body, generate that error now
     if let Some(i) = early_return_index {
         let expression = scope[i].clone();
         let remaining = &scope[i + 1..];
@@ -183,20 +190,6 @@ pub(super) fn analyze_scope(
                 .combine(remaining.last().unwrap().source()),
         });
     }
-
-    // Now we can get the last return expression and handle that separately.
-    // We can't get both in the same call because we need to access the whole
-    // scope again when generating an early return error.
-    let (_, returns) = scope.split_return_mut();
-
-    // Analyze the scope's return expressions
-    let (types, errs) = analyze_expression(returns, &mut scope_tracker, outer_func_sig);
-    errors.append(
-        &mut errs
-            .into_iter()
-            .map(|err| ScopeError::ExpressionError(err))
-            .collect(),
-    );
 
     // Check for any variables or functions in the immediate scope that have not been used
     let (unused_variables, function_signatures) = scope_tracker.get_unused();

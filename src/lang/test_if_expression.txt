@@ -2,7 +2,7 @@ main(arg1 int, arg2 int) -> int {
     val = if arg1 < arg2 {
         -> 0
     } else {
-        if false {
+        if true {
             -> 1
         } else {
             2

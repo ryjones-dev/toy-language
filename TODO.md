@@ -52,7 +52,7 @@
 - [x]  Refactor divergent returns, just call them function returns, no need to have function returns return their types to the outer expression/scope
 - [x]  Support function returns within if expressions in codegen
 - [x]  Check that both scopes in an if expression return the same number and type of values, except for function returns
-- [ ]  Change `split_return()` to use `split_last()` instead of `split_at()`, have `split_return()` return an Option
+- [x]  Change `split_return()` to use `split_last()` instead of `split_at()`, have `split_return()` return an Option
 - [ ]  Pattern matching
 - [ ]  Add range types that represent a continuous range of values
 - [ ]  Add operator to check if int is in a range

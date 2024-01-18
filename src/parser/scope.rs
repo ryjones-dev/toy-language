@@ -15,26 +15,16 @@ impl Scope {
 
     /// Split the scope's return expression from the rest of the scope's body.
     ///
-    /// # Panics
-    /// Panics if the scope is empty.
-    pub(crate) fn split_return(&self) -> (&[Expression], &Expression) {
-        let len = self.len();
-        let (body, returns) = self.split_at(len - 1);
-        let returns = returns.first().unwrap();
-
-        (body, returns)
+    /// Returns [`None`] if the scope is empty.
+    pub(crate) fn split_return(&self) -> Option<(&Expression, &[Expression])> {
+        self.split_last()
     }
 
     /// Split the scope's return expression from the rest of the scope's body.
     ///
-    /// # Panics
-    /// Panics if the scope is empty.
-    pub(crate) fn split_return_mut(&mut self) -> (&mut [Expression], &mut Expression) {
-        let len = self.len();
-        let (body, returns) = self.split_at_mut(len - 1);
-        let returns = returns.first_mut().unwrap();
-
-        (body, returns)
+    /// Returns [`None`] if the scope is empty.
+    pub(crate) fn split_return_mut(&mut self) -> Option<(&mut Expression, &mut [Expression])> {
+        self.split_last_mut()
     }
 
     /// Wrap the last expression in the scope in a [`Expression::FunctionReturn`].
@@ -43,8 +33,19 @@ impl Scope {
     ///
     /// If the scope is empty, an empty function return is inserted.
     pub(crate) fn wrap_function_return(&mut self) {
-        // Early out if the scope is empty
-        if self.len() == 0 {
+        if let Some((returns, _)) = self.split_return_mut() {
+            let inner = returns.unwrap_transparent();
+            match inner {
+                // Don't wrap the expression if it's already a function return
+                Expression::FunctionReturn { .. } => {}
+                _ => {
+                    *returns = Expression::FunctionReturn {
+                        expression: Box::new(returns.clone()),
+                        source: returns.source(),
+                    };
+                }
+            }
+        } else {
             self.0.push(Expression::FunctionReturn {
                 expression: Box::new(Expression::ExpressionList {
                     expressions: Vec::new(),
@@ -52,14 +53,7 @@ impl Scope {
                 }),
                 source: (0..=0).into(),
             });
-            return;
         }
-
-        let (_, returns) = self.split_return_mut();
-        *returns = Expression::FunctionReturn {
-            expression: Box::new(returns.clone()),
-            source: returns.source(),
-        };
     }
 }
 
