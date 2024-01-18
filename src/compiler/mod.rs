@@ -66,12 +66,13 @@ pub fn compile_jit(
     let writer = StandardStream::stderr(ColorChoice::Always);
     let config = codespan_reporting::term::Config::default();
 
-    match frontend(source_code, &options) {
-        FrontendResults::Parsed {
-            ast,
-            ast_string,
-            errs,
-        } => {
+    match frontend(source_code) {
+        FrontendResults::Parsed { ast, errs } => {
+            let mut ast_string = None;
+            if options.request_ast {
+                ast_string = Some(ast.to_string());
+            }
+
             let diagnostics: Vec<Diagnostic> = errs.into_iter().map(|err| err.into()).collect();
             let mut should_codegen = !diagnostics
                 .iter()
