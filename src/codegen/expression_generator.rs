@@ -283,8 +283,12 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                 false,
             ),
             Expression::Variable(variable) => (vec![self.generate_variable(variable)], false),
-            Expression::IntLiteral(value, _) => (vec![self.generate_int_literal(value)], false),
-            Expression::BoolLiteral(value, _) => (vec![self.generate_bool_literal(value)], false),
+            Expression::IntLiteral(literal) => {
+                (vec![self.generate_int_literal(literal.val())], false)
+            }
+            Expression::BoolLiteral(literal) => {
+                (vec![self.generate_bool_literal(literal.val())], false)
+            }
         }
     }
 

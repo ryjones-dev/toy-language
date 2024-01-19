@@ -9,6 +9,7 @@ use self::{
     },
     function::{Function, FunctionSignature},
     identifier::Identifier,
+    literal::Literal,
     scope::Scope,
     types::Type,
     variable::Variable,
@@ -18,6 +19,7 @@ pub(super) mod ast;
 pub(super) mod expression;
 pub(super) mod function;
 pub(super) mod identifier;
+pub(super) mod literal;
 pub(super) mod scope;
 pub(super) mod source_range;
 pub(super) mod types;
@@ -99,8 +101,8 @@ peg::parser!(pub(crate) grammar parser() for str {
         "-" e:@ { Expression::UnaryMathOperation { operation_type: UnaryMathOperationType::Negate, expression: Box::new(e), source: (0..=0).into() }}
         --
         "(" _ e:expression() _ ")" { e }
-        i:int_literal() { i }
-        b:bool_literal() { b }
+        i:int_literal() { Expression::IntLiteral(i) }
+        b:bool_literal() { Expression::BoolLiteral(b) }
         i:identifier() { Expression::Variable(Variable::new(i, None)) }
     } e:position!() {
         // We can't add the start and end positions to each expression type due to the precedence!() macro,
@@ -156,12 +158,12 @@ peg::parser!(pub(crate) grammar parser() for str {
             }}
             / expected!("identifier")
 
-    rule int_literal() -> Expression
-        = quiet!{ s:position!() n:$(['0'..='9']+) e:position!() { Expression::IntLiteral(n.parse().expect("unknown int literal"), (s..=e).into()) }}
+    rule int_literal() -> Literal<i64>
+        = quiet!{ s:position!() n:$(['0'..='9']+) e:position!() { Literal::new(n.parse().expect("unknown int literal"), (s..=e).into()) }}
         / expected!("integer")
 
-    rule bool_literal() -> Expression
-        = s:position!() b:$( "true" / "false" ) e:position!() { Expression::BoolLiteral(b.parse().expect("unknown bool literal"), (s..=e).into()) }
+    rule bool_literal() -> Literal<bool>
+        = s:position!() b:$( "true" / "false" ) e:position!() { Literal::new(b.parse().expect("unknown bool literal"), (s..=e).into()) }
 
     rule comment() = "#" (!"\n" [_])* ("\n" / ![_])
 

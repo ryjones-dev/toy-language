@@ -697,14 +697,14 @@ pub(super) fn analyze_expression(
 
             (types, errors)
         }
-        Expression::IntLiteral(_, source) => {
+        Expression::IntLiteral(literal) => {
             let mut types = Types::new();
-            types.push(Type::new(DataType::Int, *source));
+            types.push(Type::new(DataType::Int, literal.source()));
             (types, Vec::new())
         }
-        Expression::BoolLiteral(_, source) => {
+        Expression::BoolLiteral(literal) => {
             let mut types = Types::new();
-            types.push(Type::new(DataType::Bool, *source));
+            types.push(Type::new(DataType::Bool, literal.source()));
             (types, Vec::new())
         }
     }

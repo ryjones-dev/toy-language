@@ -1,6 +1,7 @@
 use super::{
     function::FunctionSignature,
     identifier::Identifier,
+    literal::Literal,
     scope::Scope,
     source_range::SourceRange,
     variable::{Variable, Variables},
@@ -126,8 +127,8 @@ pub(crate) enum Expression {
         source: SourceRange,
     },
     Variable(Variable),
-    IntLiteral(i64, SourceRange),
-    BoolLiteral(bool, SourceRange),
+    IntLiteral(Literal<i64>),
+    BoolLiteral(Literal<bool>),
 }
 
 impl Expression {
@@ -159,8 +160,8 @@ impl Expression {
             Expression::BinaryMathOperation { source, .. } => *source,
             Expression::UnaryMathOperation { source, .. } => *source,
             Expression::Variable(variable) => variable.source(),
-            Expression::IntLiteral(_, source) => *source,
-            Expression::BoolLiteral(_, source) => *source,
+            Expression::IntLiteral(literal) => literal.source(),
+            Expression::BoolLiteral(literal) => literal.source(),
         }
     }
 
