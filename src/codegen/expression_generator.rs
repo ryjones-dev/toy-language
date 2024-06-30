@@ -256,6 +256,23 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                     false,
                 )
             }
+            Expression::PatternMatch {
+                match_expression,
+                arms,
+                ..
+            } => {
+                let (match_values, _) = self.generate(*match_expression);
+                semantic_assert!(
+                    match_values.len() == 1,
+                    "match expression returns multiple values"
+                );
+                let match_value = match_values[0];
+
+                let merge_block = self.builder.create_block();
+                for (arm, expression) in arms {
+                    let arm_block = self.builder.create_block();
+                }
+            }
             Expression::BooleanComparison {
                 comparison_type,
                 lhs,

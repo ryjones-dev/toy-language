@@ -2,6 +2,7 @@ use super::{
     function::FunctionSignature,
     identifier::Identifier,
     literal::Literal,
+    pattern_match::Pattern,
     scope::Scope,
     source_range::SourceRange,
     variable::{Variable, Variables},
@@ -109,6 +110,11 @@ pub(crate) enum Expression {
         else_expression: Box<Option<Expression>>,
         source: SourceRange,
     },
+    PatternMatch {
+        match_expression: Box<Expression>,
+        arms: Vec<(Pattern, Expression)>,
+        source: SourceRange,
+    },
     BooleanComparison {
         comparison_type: BooleanComparisonType,
         lhs: Box<Expression>,
@@ -156,6 +162,7 @@ impl Expression {
             Expression::FunctionReturn { source, .. } => *source,
             Expression::FunctionCall { source, .. } => *source,
             Expression::IfElse { source, .. } => *source,
+            Expression::PatternMatch { source, .. } => *source,
             Expression::BooleanComparison { source, .. } => *source,
             Expression::BinaryMathOperation { source, .. } => *source,
             Expression::UnaryMathOperation { source, .. } => *source,

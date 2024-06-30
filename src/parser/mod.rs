@@ -10,6 +10,7 @@ use self::{
     function::{Function, FunctionSignature},
     identifier::Identifier,
     literal::Literal,
+    pattern_match::Pattern,
     scope::Scope,
     types::Type,
     variable::Variable,
@@ -20,6 +21,7 @@ pub(super) mod expression;
 pub(super) mod function;
 pub(super) mod identifier;
 pub(super) mod literal;
+pub(super) mod pattern_match;
 pub(super) mod scope;
 pub(super) mod source_range;
 pub(super) mod types;
@@ -58,8 +60,8 @@ peg::parser!(pub(crate) grammar parser() for str {
 
     rule function() -> Function
         = _ s:position!() i:identifier() _ "(" _
-        p:((_ i:identifier() _ t:_type() _ { (i, t) }) ** ",") _ ")"
-        r:(_ "->" r:((_ t:_type() _ { t }) ++ ",") {r})? e:position!()
+        p:((_ i:identifier() _ t:_type() _ { (i, t) }) ** ",") _ ","? _ ")"
+        r:(_ "->" r:((_ t:_type() _ { t }) ++ ",") _ ","? {r})? e:position!()
         _ sc:scope() _ {
             Function {
                 signature: FunctionSignature {
@@ -84,6 +86,7 @@ peg::parser!(pub(crate) grammar parser() for str {
         r:function_return() { r }
         c:function_call() { c }
         i:if_else() { i }
+        p:pattern_match() { p }
         --
         a:(@) _ "==" _ b:@ { Expression::BooleanComparison { comparison_type: BooleanComparisonType::Equal, lhs: Box::new(a), rhs: Box::new(b), source: (0..=0).into() }}
         a:(@) _ "!=" _ b:@ { Expression::BooleanComparison { comparison_type: BooleanComparisonType::NotEqual, lhs: Box::new(a), rhs: Box::new(b), source: (0..=0).into() }}
@@ -123,19 +126,19 @@ peg::parser!(pub(crate) grammar parser() for str {
 
     #[cache_left_rec]
     rule expression_list() -> Expression
-        = s:position!() exprs:((_ expr:expression() e:position!() _ { (expr, e) }) ++ ",") {
+        = s:position!() exprs:((_ expr:expression() e:position!() { (expr, e) }) ++ ",") {
             let (_, end) = *exprs.last().unwrap();
             let expressions = exprs.into_iter().map(|(expr, _)| expr).collect();
             Expression::ExpressionList { expressions, source: (s..=end).into() }
         }
 
     rule assignment() -> Expression
-        = s:position!() vars:((_ i:identifier() _ t:_type()? _ { (i, t) }) ++ ",") _ "=" _ expr:expression() e:position!() {
+        = s:position!() vars:((_ i:identifier() _ t:_type()? _ { (i, t) }) ++ ",") _ ","? _ "=" _ expr:expression() e:position!() {
             Expression::Assignment { variables: vars.into_iter().map(|var|Variable::new(var.0, var.1)).collect(), expression: Box::new(expr), source: (s..=e).into() }
         }
 
     rule function_return() -> Expression
-        = s:position!() "->" _ expr:expression() e:position!() _ { Expression::FunctionReturn { expression: Box::new(expr), source: (s..=e).into() } }
+        = s:position!() "->" _ expr:expression() e:position!() { Expression::FunctionReturn { expression: Box::new(expr), source: (s..=e).into() } }
 
     rule function_call() -> Expression
         // Need to explicitly use an optional expression list for the arguments,
@@ -148,6 +151,18 @@ peg::parser!(pub(crate) grammar parser() for str {
         = s:position!() "if" _ c:expression() _ t:expression() _ "else"? _ el:expression()? e:position!() {
             Expression::IfElse { cond_expression: Box::new(c), then_expression: Box::new(t), else_expression: Box::new(el), source: (s..=e).into() }
         }
+
+    rule pattern_match() -> Expression
+        = s:position!() "match" _ m:expression() _ "{" _ a:((_ a:pattern() _ ":" _ expr:expression() { (a, expr) }) ++ ",") _ ","? _ "}" e:position!() {
+            Expression::PatternMatch { match_expression: Box::new(m), arms: a, source: (s..=e).into() }
+        }
+
+    rule pattern() -> Pattern
+        = s:position!() a:(
+            i:int_literal() { Pattern::IntLiteral(i) }
+            / b:bool_literal() { Pattern::BoolLiteral(b) }
+            / i:identifier() { Pattern::Variable(Variable::new(i, None)) }
+        ) e:position!() { a }
 
     rule _type() -> Type
         = s:position!() t:$("int" / "bool") e:position!()  { Type::new(t.parse().expect("unknown type"), (s..=e).into()) }

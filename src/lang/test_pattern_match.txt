@@ -2,13 +2,13 @@ add(arg1 int, arg2 int) -> int {
     arg1 + arg2
 }
 
-print(output int) {}
+print(_output int) {}
 
-main(early_out bool, calc_1_2 bool) -> int {
+main(arg1 int, arg2 int) -> int {
     # A pattern match is an expression, returning the selected value as the result
-    sum = match calc_1_2 {
+    sum = match arg1 < arg2 {
         true: add(1, 2),
-        false add(3, 4),
+        false: add(3, 4),
     }
 
     # Note: need to check that all match arm expressions return the same type.
@@ -17,7 +17,7 @@ main(early_out bool, calc_1_2 bool) -> int {
     match sum {
         3: print(sum),
         7: print(sum),
-        4 || 5 || 6: print(sum),    # if sum == 4 || sum == 5 || sum == 6
+        # 4 || 5 || 6: print(sum),    # if sum == 4 || sum == 5 || sum == 6
         sum: -> sum,
 
         # Need to have logic that prevents overlapping match arms

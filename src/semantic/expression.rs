@@ -8,6 +8,7 @@ use crate::{
         },
         function::FunctionSignature,
         identifier::Identifier,
+        pattern_match::Pattern,
         source_range::SourceRange,
         types::{DataType, Type, Types},
         variable::{Variable, Variables},
@@ -68,6 +69,13 @@ pub(super) enum ExpressionError {
         source_range: SourceRange,
         then_types: Types,
         else_types: Types,
+    },
+    #[error("mismatched return types for match expression")]
+    PatternMatchReturnTypeMismatchError {
+        source_range: SourceRange,
+        branch_source: SourceRange,
+        expected: Types,
+        actual: Types,
     },
     #[error("unknown variable")]
     VariableUnknownError(Variable),
@@ -275,7 +283,18 @@ impl From<ExpressionError> for Diagnostic {
                 ))
                 .with_labels(vec![diag_expected_types(then_types, else_types)]),
             ),
-
+            ExpressionError::PatternMatchReturnTypeMismatchError {
+                source_range,
+                branch_source,
+                ref expected,
+                ref actual,
+            } => Self::new(&err, DiagnosticLevel::Error).with_context(
+                DiagnosticContext::new(DiagnosticMessage::new(
+                    "branches of match expression return different types",
+                    source_range,
+                ))
+                .with_labels(vec![diag_expected(expected, actual, branch_source)]),
+            ),
             ExpressionError::VariableUnknownError(ref variable) => {
                 Self::new(&err, DiagnosticLevel::Error).with_context(DiagnosticContext::new(
                     DiagnosticMessage::new(
@@ -568,6 +587,63 @@ pub(super) fn analyze_expression(
             }
 
             (types_to_return, errors)
+        }
+        Expression::PatternMatch {
+            match_expression,
+            arms,
+            source,
+        } => {
+            let mut types_to_return: Option<Types> = None;
+            let mut errors = Vec::new();
+
+            // Analyze match expression
+            let (match_types, mut errs) =
+                analyze_expression(match_expression, scope_tracker, outer_func_sig);
+            errors.append(&mut errs);
+
+            // TODO: make sure these are only types that support being matched
+            if expect_any_single_type(match_expression, &match_types, &mut errors) {
+                // Analyze each match arm expression
+                for (arm, expression) in arms {
+                    let mut inner_scope_tracker = ScopeTracker::new(Some(&scope_tracker));
+
+                    // TODO: check if arm is the same type as the match expression
+                    // TODO: error checking for overlapping arms
+                    // TODO: error if there is more than one variable arm
+                    // TODO: arms after a variable arm can never be matched
+                    match arm {
+                        Pattern::IntLiteral(_) => {}
+                        Pattern::BoolLiteral(_) => {}
+                        Pattern::Variable(variable) => {
+                            // Any variable type will have the same type as the expression being matched
+                            variable.set_type(&match_types[0]);
+                            inner_scope_tracker.insert_var(variable.clone());
+                        }
+                    }
+
+                    let (types, mut errs) =
+                        analyze_expression(expression, &mut inner_scope_tracker, outer_func_sig);
+                    errors.append(&mut errs);
+
+                    // Check that this arm has the same types as the others
+                    // TODO: Function returns are exempt, similar to if expressions
+                    if let Some(ref types_to_return) = types_to_return {
+                        if *types_to_return != types {
+                            errors.push(ExpressionError::PatternMatchReturnTypeMismatchError {
+                                source_range: *source,
+                                branch_source: expression.source(),
+                                expected: types_to_return.clone(),
+                                actual: types,
+                            })
+                        }
+                    } else {
+                        // For the first iteration, just accept the types
+                        types_to_return = Some(types);
+                    }
+                }
+            }
+
+            (types_to_return.unwrap_or_default(), errors)
         }
         Expression::BooleanComparison {
             comparison_type,

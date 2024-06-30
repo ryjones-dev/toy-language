@@ -25,7 +25,7 @@ macro_rules! execute_jit {
 }
 
 fn main() -> Result<(), RenderErrorFailure> {
-    let source_code = include_str!("lang/test_if_expression.txt");
+    let source_code = include_str!("lang/test_pattern_match.txt");
 
     let codegen_options = CodeGenOptions::new()
         .enable(true)
