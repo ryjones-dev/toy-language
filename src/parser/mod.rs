@@ -78,8 +78,6 @@ peg::parser!(pub(crate) grammar parser() for str {
     rule expression() -> Expression = s:position!() expr:precedence! {
         s:scope() { Expression::Scope { scope: s, source: (0..=0).into() } }
         --
-        l:expression_list() { l }
-        --
         a:assignment() { a }
         r:function_return() { r }
         c:function_call() { c }
@@ -104,6 +102,8 @@ peg::parser!(pub(crate) grammar parser() for str {
         i:int_literal() { Expression::IntLiteral(i) }
         b:bool_literal() { Expression::BoolLiteral(b) }
         i:identifier() { Expression::Variable(Variable::new(i, None)) }
+        --
+        l:expression_list() { l }
     } e:position!() {
         // We can't add the start and end positions to each expression type due to the precedence!() macro,
         // so we have to grossly create these expression twice, first with all of the parsed expression info,
@@ -135,7 +135,7 @@ peg::parser!(pub(crate) grammar parser() for str {
         }
 
     rule function_return() -> Expression
-        = s:position!() "->" _ expr:expression() e:position!() _ { Expression::FunctionReturn { expression: Box::new(expr), source: (s..=e).into() } }
+        = s:position!() "->" _ expr:expression_list() e:position!() _ { Expression::FunctionReturn { expression: Box::new(expr), source: (s..=e).into() } }
 
     rule function_call() -> Expression
         // Need to explicitly use an optional expression list for the arguments,

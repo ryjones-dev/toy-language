@@ -11,7 +11,8 @@ is_greater(left int, right int) -> bool {
 }
 
 main(arg1 int, arg2 int) -> int {
-    sum = add(arg1, arg2)
+    sum1, sum2 = add_vector(arg1, arg2, arg1, arg2)
+    sum = add(sum1, sum2)
     sum
 }
 
@@ -20,6 +21,10 @@ add(left int, right int) -> int {
     _less = is_less(left, right)
     _greater = is_greater(left, right)
     left + right
+}
+
+add_vector(x1 int, x2 int, y1 int, y2 int) -> int, int {
+    -> x1 + y1, x2 + y2
 }
 
 # TODO: Support empty function body
