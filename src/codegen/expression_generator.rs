@@ -1,5 +1,8 @@
 use cranelift::{
-    codegen::ir::{condcodes::IntCC, AbiParam, InstBuilder, Value},
+    codegen::ir::{
+        condcodes::{FloatCC, IntCC},
+        AbiParam, InstBuilder, Value,
+    },
     frontend::FunctionBuilder,
 };
 
@@ -19,25 +22,21 @@ use crate::{
 
 use super::block::BlockVariables;
 
-/// A distinct type that is used to represent name the value of an evaluated [`Expression`].
+/// A distinct type that is used to represent the value of an evaluated [`Expression`].
 ///
-/// In the current implementation, this is just a wrapper around Cranelift's [`Value`]
-/// and is completely convertable to and from [`Value`].
+/// This type capture's Cranelift's [`Value`] type and wraps it with a [`DataType`]
+/// to keep track of the type when emitting type-specific codegen.
 /// It is intended to be used in places where it semantically makes sense to represent
-/// an expression resulting value after evaluation.
-/// [`Value`] also conveys that meaning, but it is a library-specific type that shouldn't be exposed to users.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub(super) struct ExpressionValue(Value);
+/// an expression's resulting value after evaluation.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub(super) struct ExpressionValue {
+    val: Value,
+    ty: DataType,
+}
 
 impl From<ExpressionValue> for Value {
     fn from(value: ExpressionValue) -> Self {
-        value.0
-    }
-}
-
-impl From<Value> for ExpressionValue {
-    fn from(value: Value) -> Self {
-        Self { 0: value }
+        value.val
     }
 }
 
@@ -204,8 +203,8 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                 self.builder.switch_to_block(then_block);
                 self.builder.seal_block(then_block);
 
-                let (then_values, func_return) = self.generate(*then_expression);
-                if !func_return {
+                let (then_values, then_func_return) = self.generate(*then_expression);
+                if !then_func_return {
                     self.builder.ins().jump(
                         merge_block,
                         &then_values
@@ -215,17 +214,14 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                     );
                 }
 
-                for _ in &then_values {
-                    self.builder
-                        .append_block_param(merge_block, DataType::Int.into());
-                }
-
-                self.builder.switch_to_block(else_block);
-                self.builder.seal_block(else_block);
-
+                let mut else_values = Vec::new();
+                let mut else_func_return = false;
                 if let Some(else_expression) = *else_expression {
-                    let (else_values, func_return) = self.generate(else_expression);
-                    if !func_return {
+                    self.builder.switch_to_block(else_block);
+                    self.builder.seal_block(else_block);
+
+                    (else_values, else_func_return) = self.generate(else_expression);
+                    if !else_func_return {
                         self.builder.ins().jump(
                             merge_block,
                             &else_values
@@ -234,27 +230,28 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                                 .collect::<Vec<Value>>(),
                         );
                     }
+                }
 
-                    // Only add the merge block params if the then block divergently returned
-                    if self.builder.block_params(merge_block).len() == 0 {
-                        for _ in &else_values {
-                            self.builder
-                                .append_block_param(merge_block, DataType::Int.into());
-                        }
+                let mut result_values = Vec::new();
+                if !then_func_return {
+                    result_values = then_values;
+                    for result_value in &result_values {
+                        self.builder
+                            .append_block_param(merge_block, result_value.ty.into());
+                    }
+                } else if !else_values.is_empty() && !else_func_return {
+                    result_values = else_values;
+                    // Only add the merge block params if the then block did a function return and the else block didn't
+                    for result_value in &result_values {
+                        self.builder
+                            .append_block_param(merge_block, result_value.ty.into());
                     }
                 }
 
                 self.builder.switch_to_block(merge_block);
                 self.builder.seal_block(merge_block);
 
-                (
-                    self.builder
-                        .block_params(merge_block)
-                        .into_iter()
-                        .map(|val| (*val).into())
-                        .collect(),
-                    false,
-                )
+                (result_values, false)
             }
             Expression::BooleanComparison {
                 comparison_type,
@@ -286,6 +283,9 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
             Expression::IntLiteral(literal) => {
                 (vec![self.generate_int_literal(literal.val())], false)
             }
+            Expression::FloatLiteral(literal) => {
+                (vec![self.generate_float_literal(literal.val())], false)
+            }
             Expression::BoolLiteral(literal) => {
                 (vec![self.generate_bool_literal(literal.val())], false)
             }
@@ -308,39 +308,123 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
             right_values.len() == 1,
             "right boolean operand expression did not return a single value"
         );
+
         let left_value = left_values[0];
         let right_value = right_values[0];
+        semantic_assert!(
+            left_value.ty == right_value.ty,
+            "lhs and rhs types of boolean operation are mismatched"
+        );
+
         match comparison_type {
-            BooleanComparisonType::Equal => ExpressionValue(self.builder.ins().icmp(
-                IntCC::Equal,
-                left_value.into(),
-                right_value.into(),
-            )),
-            BooleanComparisonType::NotEqual => ExpressionValue(self.builder.ins().icmp(
-                IntCC::NotEqual,
-                left_value.into(),
-                right_value.into(),
-            )),
-            BooleanComparisonType::LessThan => ExpressionValue(self.builder.ins().icmp(
-                IntCC::SignedLessThan,
-                left_value.into(),
-                right_value.into(),
-            )),
-            BooleanComparisonType::LessThanEqual => ExpressionValue(self.builder.ins().icmp(
-                IntCC::SignedLessThanOrEqual,
-                left_value.into(),
-                right_value.into(),
-            )),
-            BooleanComparisonType::GreaterThan => ExpressionValue(self.builder.ins().icmp(
-                IntCC::SignedGreaterThan,
-                left_value.into(),
-                right_value.into(),
-            )),
-            BooleanComparisonType::GreaterThanEqual => ExpressionValue(self.builder.ins().icmp(
-                IntCC::SignedGreaterThanOrEqual,
-                left_value.into(),
-                right_value.into(),
-            )),
+            BooleanComparisonType::Equal => match left_value.ty {
+                DataType::Int | DataType::Bool => ExpressionValue {
+                    val: self.builder.ins().icmp(
+                        IntCC::Equal,
+                        left_value.into(),
+                        right_value.into(),
+                    ),
+                    ty: DataType::Bool,
+                },
+                DataType::Float => ExpressionValue {
+                    val: self.builder.ins().fcmp(
+                        FloatCC::Equal,
+                        left_value.into(),
+                        right_value.into(),
+                    ),
+                    ty: DataType::Bool,
+                },
+            },
+            BooleanComparisonType::NotEqual => match left_value.ty {
+                DataType::Int | DataType::Bool => ExpressionValue {
+                    val: self.builder.ins().icmp(
+                        IntCC::NotEqual,
+                        left_value.into(),
+                        right_value.into(),
+                    ),
+                    ty: DataType::Bool,
+                },
+                DataType::Float => ExpressionValue {
+                    val: self.builder.ins().fcmp(
+                        FloatCC::NotEqual,
+                        left_value.into(),
+                        right_value.into(),
+                    ),
+                    ty: DataType::Bool,
+                },
+            },
+            BooleanComparisonType::LessThan => match left_value.ty {
+                DataType::Int | DataType::Bool => ExpressionValue {
+                    val: self.builder.ins().icmp(
+                        IntCC::SignedLessThan,
+                        left_value.into(),
+                        right_value.into(),
+                    ),
+                    ty: DataType::Bool,
+                },
+                DataType::Float => ExpressionValue {
+                    val: self.builder.ins().fcmp(
+                        FloatCC::LessThan,
+                        left_value.into(),
+                        right_value.into(),
+                    ),
+                    ty: DataType::Bool,
+                },
+            },
+            BooleanComparisonType::LessThanEqual => match left_value.ty {
+                DataType::Int | DataType::Bool => ExpressionValue {
+                    val: self.builder.ins().icmp(
+                        IntCC::SignedLessThanOrEqual,
+                        left_value.into(),
+                        right_value.into(),
+                    ),
+                    ty: DataType::Bool,
+                },
+                DataType::Float => ExpressionValue {
+                    val: self.builder.ins().fcmp(
+                        FloatCC::LessThanOrEqual,
+                        left_value.into(),
+                        right_value.into(),
+                    ),
+                    ty: DataType::Bool,
+                },
+            },
+            BooleanComparisonType::GreaterThan => match left_value.ty {
+                DataType::Int | DataType::Bool => ExpressionValue {
+                    val: self.builder.ins().icmp(
+                        IntCC::SignedGreaterThan,
+                        left_value.into(),
+                        right_value.into(),
+                    ),
+                    ty: DataType::Bool,
+                },
+                DataType::Float => ExpressionValue {
+                    val: self.builder.ins().fcmp(
+                        FloatCC::GreaterThan,
+                        left_value.into(),
+                        right_value.into(),
+                    ),
+                    ty: DataType::Bool,
+                },
+            },
+            BooleanComparisonType::GreaterThanEqual => match left_value.ty {
+                DataType::Int | DataType::Bool => ExpressionValue {
+                    val: self.builder.ins().icmp(
+                        IntCC::SignedGreaterThanOrEqual,
+                        left_value.into(),
+                        right_value.into(),
+                    ),
+                    ty: DataType::Bool,
+                },
+                DataType::Float => ExpressionValue {
+                    val: self.builder.ins().fcmp(
+                        FloatCC::GreaterThanOrEqual,
+                        left_value.into(),
+                        right_value.into(),
+                    ),
+                    ty: DataType::Bool,
+                },
+            },
         }
     }
 
@@ -360,29 +444,83 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
             right_values.len() == 1,
             "right binary operand expression did not return a single value"
         );
+
         let left_value = left_values[0];
         let right_value = right_values[0];
+        semantic_assert!(
+            left_value.ty == right_value.ty,
+            "lhs and rhs types of binary operation are mismatched"
+        );
+
         match operation_type {
-            BinaryMathOperationType::Add => ExpressionValue(
-                self.builder
-                    .ins()
-                    .iadd(left_value.into(), right_value.into()),
-            ),
-            BinaryMathOperationType::Subtract => ExpressionValue(
-                self.builder
-                    .ins()
-                    .isub(left_value.into(), right_value.into()),
-            ),
-            BinaryMathOperationType::Multiply => ExpressionValue(
-                self.builder
-                    .ins()
-                    .imul(left_value.into(), right_value.into()),
-            ),
-            BinaryMathOperationType::Divide => ExpressionValue(
-                self.builder
-                    .ins()
-                    .udiv(left_value.into(), right_value.into()),
-            ),
+            BinaryMathOperationType::Add => match left_value.ty {
+                DataType::Int => ExpressionValue {
+                    val: self
+                        .builder
+                        .ins()
+                        .iadd(left_value.into(), right_value.into()),
+                    ty: left_value.ty,
+                },
+                DataType::Float => ExpressionValue {
+                    val: self
+                        .builder
+                        .ins()
+                        .fadd(left_value.into(), right_value.into()),
+                    ty: left_value.ty,
+                },
+                DataType::Bool => unreachable!("attempted to add non-numeric values"),
+            },
+            BinaryMathOperationType::Subtract => match left_value.ty {
+                DataType::Int => ExpressionValue {
+                    val: self
+                        .builder
+                        .ins()
+                        .isub(left_value.into(), right_value.into()),
+                    ty: left_value.ty,
+                },
+                DataType::Float => ExpressionValue {
+                    val: self
+                        .builder
+                        .ins()
+                        .fsub(left_value.into(), right_value.into()),
+                    ty: left_value.ty,
+                },
+                DataType::Bool => unreachable!("attempted to subtract non-numeric values"),
+            },
+            BinaryMathOperationType::Multiply => match left_value.ty {
+                DataType::Int => ExpressionValue {
+                    val: self
+                        .builder
+                        .ins()
+                        .imul(left_value.into(), right_value.into()),
+                    ty: left_value.ty,
+                },
+                DataType::Float => ExpressionValue {
+                    val: self
+                        .builder
+                        .ins()
+                        .fmul(left_value.into(), right_value.into()),
+                    ty: left_value.ty,
+                },
+                DataType::Bool => unreachable!("attempted to multiply non-numeric values"),
+            },
+            BinaryMathOperationType::Divide => match left_value.ty {
+                DataType::Int => ExpressionValue {
+                    val: self
+                        .builder
+                        .ins()
+                        .udiv(left_value.into(), right_value.into()),
+                    ty: left_value.ty,
+                },
+                DataType::Float => ExpressionValue {
+                    val: self
+                        .builder
+                        .ins()
+                        .fdiv(left_value.into(), right_value.into()),
+                    ty: left_value.ty,
+                },
+                DataType::Bool => unreachable!("attempted to divide non-numeric values"),
+            },
         }
     }
 
@@ -398,7 +536,18 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         );
         match operation_type {
             UnaryMathOperationType::Negate => {
-                ExpressionValue(self.builder.ins().ineg(values[0].into()))
+                let value = values[0];
+                match value.ty {
+                    DataType::Int => ExpressionValue {
+                        val: self.builder.ins().ineg(value.into()),
+                        ty: value.ty,
+                    },
+                    DataType::Float => ExpressionValue {
+                        val: self.builder.ins().fneg(value.into()),
+                        ty: value.ty,
+                    },
+                    DataType::Bool => unreachable!("attempted to negate non-numeric value"),
+                }
             }
         }
     }
@@ -448,8 +597,8 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         let call = self.builder.ins().call(
             func_ref_to_call,
             &values
-                .into_iter()
-                .map(|val| val.into())
+                .iter()
+                .map(|val| (*val).into())
                 .collect::<Vec<Value>>(),
         );
 
@@ -457,30 +606,54 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         (
             self.builder
                 .inst_results(call)
-                .iter()
-                .map(|value| (*value).into())
+                .into_iter()
+                .zip(values.into_iter())
+                .map(|(value, arg_value)| ExpressionValue {
+                    val: *value,
+                    ty: arg_value.ty,
+                })
                 .collect(),
             false,
         )
     }
 
     fn generate_variable(&mut self, variable: Variable) -> ExpressionValue {
-        self.builder
-            .use_var(cranelift::frontend::Variable::from_u32(
-                self.block_vars.var(variable.into_name()),
-            ))
-            .into()
+        semantic_assert!(
+            variable.get_type().is_some(),
+            "variable does not have a type"
+        );
+
+        ExpressionValue {
+            ty: variable.get_type().unwrap().into(),
+            val: self
+                .builder
+                .use_var(cranelift::frontend::Variable::from_u32(
+                    self.block_vars.var(variable.into_name()),
+                )),
+        }
     }
 
     fn generate_int_literal(&mut self, value: i64) -> ExpressionValue {
-        ExpressionValue(self.builder.ins().iconst(DataType::Int.into(), value))
+        ExpressionValue {
+            val: self.builder.ins().iconst(DataType::Int.into(), value),
+            ty: DataType::Int,
+        }
+    }
+
+    fn generate_float_literal(&mut self, value: f64) -> ExpressionValue {
+        ExpressionValue {
+            val: self.builder.ins().f64const(value),
+            ty: DataType::Float,
+        }
     }
 
     fn generate_bool_literal(&mut self, value: bool) -> ExpressionValue {
-        ExpressionValue(
-            self.builder
+        ExpressionValue {
+            val: self
+                .builder
                 .ins()
                 .iconst(DataType::Bool.into(), if value { 1 } else { 0 }),
-        )
+            ty: DataType::Bool,
+        }
     }
 }

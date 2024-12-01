@@ -128,6 +128,7 @@ pub(crate) enum Expression {
     },
     Variable(Variable),
     IntLiteral(Literal<i64>),
+    FloatLiteral(Literal<f64>),
     BoolLiteral(Literal<bool>),
 }
 
@@ -161,6 +162,7 @@ impl Expression {
             Expression::UnaryMathOperation { source, .. } => *source,
             Expression::Variable(variable) => variable.source(),
             Expression::IntLiteral(literal) => literal.source(),
+            Expression::FloatLiteral(literal) => literal.source(),
             Expression::BoolLiteral(literal) => literal.source(),
         }
     }

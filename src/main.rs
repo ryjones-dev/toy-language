@@ -54,9 +54,9 @@ fn main() -> Result<(), RenderErrorFailure> {
                 println!("{}", disassembly);
             }
 
-            let arg1: i64 = 1;
-            let arg2: i64 = 2;
-            execute_jit!(code, i64, (arg1, i64), (arg2, i64));
+            let arg1: f64 = 1.1;
+            let arg2: f64 = 2.2;
+            execute_jit!(code, f64, (arg1, f64), (arg2, f64));
 
             Ok(())
         }

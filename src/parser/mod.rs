@@ -99,6 +99,7 @@ peg::parser!(pub(crate) grammar parser() for str {
         "-" e:@ { Expression::UnaryMathOperation { operation_type: UnaryMathOperationType::Negate, expression: Box::new(e), source: (0..=0).into() }}
         --
         "(" _ e:expression() _ ")" { e }
+        f:float_literal() { Expression::FloatLiteral(f) }
         i:int_literal() { Expression::IntLiteral(i) }
         b:bool_literal() { Expression::BoolLiteral(b) }
         i:identifier() { Expression::Variable(Variable::new(i, None)) }
@@ -119,7 +120,7 @@ peg::parser!(pub(crate) grammar parser() for str {
     }
 
     rule scope() -> Scope
-        = "{" _ e:expression()* _ "}" { Scope::new(e) }
+        = "{" _ e:expression_list()* _ "}" { Scope::new(e) }
 
     #[cache_left_rec]
     rule expression_list() -> Expression
@@ -150,7 +151,7 @@ peg::parser!(pub(crate) grammar parser() for str {
         }
 
     rule _type() -> Type
-        = s:position!() t:$("int" / "bool") e:position!()  { Type::new(t.parse().expect("unknown type"), (s..=e).into()) }
+        = s:position!() t:$("int" / "float" / "bool") e:position!()  { Type::new(t.parse().expect("unknown type"), (s..=e).into()) }
 
     rule identifier() -> Identifier
             = quiet!{ s:position!() n:$(['_' | 'a'..='z' | 'A'..='Z']['a'..='z' | 'A'..='Z' | '0'..='9' | '_']*) e:position!() {
@@ -162,8 +163,13 @@ peg::parser!(pub(crate) grammar parser() for str {
         = quiet!{ s:position!() n:$(['0'..='9']+) e:position!() { Literal::new(n.parse().expect("unknown int literal"), (s..=e).into()) }}
         / expected!("integer")
 
+    rule float_literal() -> Literal<f64>
+        = quiet!{ s:position!() n:$(['0'..='9']+ "." ['0'..='9']*) e:position!() { Literal::new(n.parse().expect("unknown float literal"), (s..=e).into()) }}
+        / expected!("floating point number")
+
     rule bool_literal() -> Literal<bool>
-        = s:position!() b:$( "true" / "false" ) e:position!() { Literal::new(b.parse().expect("unknown bool literal"), (s..=e).into()) }
+        = quiet!{ s:position!() b:$( "true" / "false" ) e:position!() { Literal::new(b.parse().expect("unknown bool literal"), (s..=e).into()) }}
+        / expected!("true or false")
 
     rule comment() = "#" (!"\n" [_])* ("\n" / ![_])
 

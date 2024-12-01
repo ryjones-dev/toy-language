@@ -1,14 +1,14 @@
-main(arg1 int, arg2 int) -> int {
-    val = if arg1 < arg2 {
-        -> 0
+main(arg1 float, arg2 float) -> float {
+    val, add = if arg1 > arg2 {
+        -> 0.
     } else {
-        if true {
-            -> 1
+        if false {
+            -> 1.
         } else {
-            2
+            2.1, 1.0
         }
     }
 
-    val = val + 1
+    val = val + add
     val
 }

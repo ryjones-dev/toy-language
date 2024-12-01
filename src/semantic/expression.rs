@@ -87,6 +87,8 @@ pub(super) enum ExpressionError {
         actual: Type,
         expression: Expression,
     },
+    #[error("unexpected type")]
+    UnexpectedTypeError { ty: Type, source_range: SourceRange },
     #[error(transparent)]
     ScopeError(#[from] Box<ScopeError>),
 }
@@ -351,6 +353,11 @@ impl From<ExpressionError> for Diagnostic {
                     labels
                 }),
             ),
+            ExpressionError::UnexpectedTypeError { ty, source_range } => {
+                Self::new(&err, DiagnosticLevel::Error).with_context(DiagnosticContext::new(
+                    DiagnosticMessage::new(format!("type {ty} cannot be used here"), source_range),
+                ))
+            }
             ExpressionError::ScopeError(err) => (*err).into(),
         }
     }
@@ -502,7 +509,9 @@ pub(super) fn analyze_expression(
                 analyze_expression(cond_expression, scope_tracker, outer_func_sig);
             errors.append(&mut errs);
 
-            expect_single_type(cond_expression, &cond_types, DataType::Bool, &mut errors);
+            if let Some(err) = expect_single_type(cond_expression, &cond_types, DataType::Bool) {
+                errors.push(err);
+            }
 
             // Analyze then expression
             let (then_types, mut errs) =
@@ -588,21 +597,31 @@ pub(super) fn analyze_expression(
             if errors.len() == 0 {
                 match comparison_type {
                     BooleanComparisonType::Equal | BooleanComparisonType::NotEqual => {
-                        if expect_any_single_type(lhs, &lhs_types, &mut errors) {
-                            if expect_single_type(rhs, &rhs_types, lhs_types[0], &mut errors) {
-                                types_to_return.push(Type::new(DataType::Bool, *source));
-                            }
+                        match expect_single_equal_types(lhs, rhs, &lhs_types, &rhs_types) {
+                            Ok(_) => types_to_return.push(Type::new(DataType::Bool, *source)),
+                            Err(err) => errors.push(err),
                         }
                     }
                     BooleanComparisonType::LessThan
                     | BooleanComparisonType::LessThanEqual
                     | BooleanComparisonType::GreaterThan
                     | BooleanComparisonType::GreaterThanEqual => {
-                        // TODO: Handle floats later
-                        if expect_single_type(lhs, &lhs_types, DataType::Int, &mut errors) {
-                            if expect_single_type(rhs, &rhs_types, DataType::Int, &mut errors) {
-                                types_to_return.push(Type::new(DataType::Bool, *source));
-                            }
+                        match expect_single_equal_types(lhs, rhs, &lhs_types, &rhs_types) {
+                            Ok(ty) => match ty.into() {
+                                DataType::Int => {
+                                    types_to_return.push(Type::new(DataType::Bool, *source))
+                                }
+                                DataType::Float => {
+                                    types_to_return.push(Type::new(DataType::Bool, *source))
+                                }
+                                DataType::Bool => {
+                                    errors.push(ExpressionError::UnexpectedTypeError {
+                                        ty: lhs_types[0],
+                                        source_range: *source,
+                                    })
+                                }
+                            },
+                            Err(err) => errors.push(err),
                         }
                     }
                 }
@@ -632,11 +651,22 @@ pub(super) fn analyze_expression(
                     | BinaryMathOperationType::Subtract
                     | BinaryMathOperationType::Multiply
                     | BinaryMathOperationType::Divide => {
-                        // TODO: Handle floats later
-                        if expect_single_type(lhs, &lhs_types, DataType::Int, &mut errors) {
-                            if expect_single_type(rhs, &rhs_types, DataType::Int, &mut errors) {
-                                types_to_return.push(Type::new(DataType::Int, *source));
-                            }
+                        match expect_single_equal_types(lhs, rhs, &lhs_types, &rhs_types) {
+                            Ok(ty) => match ty.into() {
+                                DataType::Int => {
+                                    types_to_return.push(Type::new(DataType::Int, *source))
+                                }
+                                DataType::Float => {
+                                    types_to_return.push(Type::new(DataType::Float, *source))
+                                }
+                                DataType::Bool => {
+                                    errors.push(ExpressionError::UnexpectedTypeError {
+                                        ty: lhs_types[0],
+                                        source_range: *source,
+                                    })
+                                }
+                            },
+                            Err(err) => errors.push(err),
                         }
                     }
                 }
@@ -647,7 +677,7 @@ pub(super) fn analyze_expression(
         Expression::UnaryMathOperation {
             operation_type,
             expression,
-            source,
+            ref source,
         } => {
             let mut errors = Vec::new();
 
@@ -660,9 +690,22 @@ pub(super) fn analyze_expression(
             if errors.len() == 0 {
                 match operation_type {
                     UnaryMathOperationType::Negate => {
-                        // TODO: Handle floats later
-                        if expect_single_type(expression, &types, DataType::Int, &mut errors) {
-                            types_to_return.push(Type::new(DataType::Int, *source))
+                        match expect_any_single_type(expression, &types) {
+                            Some(err) => errors.push(err),
+                            None => match types[0].into() {
+                                DataType::Int => {
+                                    types_to_return.push(Type::new(DataType::Int, *source))
+                                }
+                                DataType::Float => {
+                                    types_to_return.push(Type::new(DataType::Float, *source))
+                                }
+                                DataType::Bool => {
+                                    errors.push(ExpressionError::UnexpectedTypeError {
+                                        ty: types[0],
+                                        source_range: *source,
+                                    })
+                                }
+                            },
                         }
                     }
                 }
@@ -700,6 +743,11 @@ pub(super) fn analyze_expression(
         Expression::IntLiteral(literal) => {
             let mut types = Types::new();
             types.push(Type::new(DataType::Int, literal.source()));
+            (types, Vec::new())
+        }
+        Expression::FloatLiteral(literal) => {
+            let mut types = Types::new();
+            types.push(Type::new(DataType::Float, literal.source()));
             (types, Vec::new())
         }
         Expression::BoolLiteral(literal) => {
@@ -766,41 +814,51 @@ pub(super) fn analyze_function_call(
     }
 }
 
-fn expect_any_single_type(
-    expression: &Expression,
-    types: &Types,
-    errors: &mut Vec<ExpressionError>,
-) -> bool {
+fn expect_any_single_type(expression: &Expression, types: &Types) -> Option<ExpressionError> {
     if types.len() != 1 {
-        errors.push(ExpressionError::ExpectedSingleValueError {
+        return Some(ExpressionError::ExpectedSingleValueError {
             expression: expression.clone(),
             value_count: types.len(),
         });
-        return false;
     }
 
-    true
+    None
 }
 
 fn expect_single_type(
     expression: &Expression,
     types: &Types,
     expected_type: impl Into<DataType>,
-    errors: &mut Vec<ExpressionError>,
-) -> bool {
-    if !expect_any_single_type(expression, types, errors) {
-        return false;
+) -> Option<ExpressionError> {
+    if let Some(err) = expect_any_single_type(expression, types) {
+        return Some(err);
     }
 
     let expected_type = expected_type.into();
     if types[0] != expected_type {
-        errors.push(ExpressionError::TypeMismatchError {
+        return Some(ExpressionError::TypeMismatchError {
             expected: expected_type,
             actual: types[0],
             expression: expression.clone(),
         });
-        return false;
     }
 
-    true
+    None
+}
+
+fn expect_single_equal_types(
+    lhs_expression: &Expression,
+    rhs_expression: &Expression,
+    lhs_types: &Types,
+    rhs_types: &Types,
+) -> Result<Type, ExpressionError> {
+    if let Some(err) = expect_any_single_type(lhs_expression, lhs_types) {
+        return Err(err);
+    }
+
+    if let Some(err) = expect_single_type(rhs_expression, rhs_types, DataType::from(lhs_types[0])) {
+        return Err(err);
+    }
+
+    Ok(lhs_types[0])
 }

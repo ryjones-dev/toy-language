@@ -1,29 +1,29 @@
-is_equal(left int, right int) -> bool {
+is_equal(left float, right float) -> bool {
     left == right
 }
 
-is_less(left int, right int) -> bool {
+is_less(left float, right float) -> bool {
     left < right
 }
 
-is_greater(left int, right int) -> bool {
+is_greater(left float, right float) -> bool {
     left > right
 }
 
-main(arg1 int, arg2 int) -> int {
+main(arg1 float, arg2 float) -> float {
     sum1, sum2 = add_vector(arg1, arg2, arg1, arg2)
     sum = add(sum1, sum2)
     sum
 }
 
-add(left int, right int) -> int {
+add(left float, right float) -> float {
     _equal bool = is_equal(left, right)
     _less = is_less(left, right)
     _greater = is_greater(left, right)
     left + right
 }
 
-add_vector(x1 int, x2 int, y1 int, y2 int) -> int, int {
+add_vector(x1 float, x2 float, y1 float, y2 float) -> float, float {
     -> x1 + y1, x2 + y2
 }
 

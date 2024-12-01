@@ -11,8 +11,9 @@ use crate::{
 impl From<DataType> for cranelift::codegen::ir::Type {
     fn from(value: DataType) -> Self {
         match value {
-            DataType::Int => cranelift::codegen::ir::Type::int(64).unwrap(),
-            DataType::Bool => cranelift::codegen::ir::Type::int(8).unwrap(),
+            DataType::Int => cranelift::codegen::ir::types::I64,
+            DataType::Float => cranelift::codegen::ir::types::F64,
+            DataType::Bool => cranelift::codegen::ir::types::I8,
         }
     }
 }

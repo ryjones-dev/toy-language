@@ -10,6 +10,7 @@ pub(crate) struct ParseTypeError(String);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum DataType {
     Int,
+    Float,
     Bool,
 }
 
@@ -19,6 +20,7 @@ impl std::str::FromStr for DataType {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "int" => Ok(DataType::Int),
+            "float" => Ok(DataType::Float),
             "bool" => Ok(DataType::Bool),
             _ => Err(ParseTypeError(s.to_string())),
         }
@@ -29,6 +31,7 @@ impl std::fmt::Display for DataType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             DataType::Int => write!(f, "int"),
+            DataType::Float => write!(f, "float"),
             DataType::Bool => write!(f, "bool"),
         }
     }
