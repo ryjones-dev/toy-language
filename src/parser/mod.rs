@@ -1,3 +1,5 @@
+use definition::Definition;
+use r#struct::{Struct, StructMember};
 use thiserror::Error;
 
 use crate::diagnostic::{Diagnostic, DiagnosticLevel};
@@ -16,12 +18,14 @@ use self::{
 };
 
 pub(super) mod ast;
+pub(super) mod definition;
 pub(super) mod expression;
 pub(super) mod function;
 pub(super) mod identifier;
 pub(super) mod literal;
 pub(super) mod scope;
 pub(super) mod source_range;
+pub(super) mod r#struct;
 pub(super) mod types;
 pub(super) mod variable;
 
@@ -54,14 +58,21 @@ peg::parser!(pub(crate) grammar parser() for str {
     /// The resulting [`AbstractSyntaxTree`] contains all of the information that the compiler needs
     /// to perform semantic analysis and generate the IR code.
     pub rule parse() -> AbstractSyntaxTree
-        = f:function()* { AbstractSyntaxTree(f) }
+        = d:(struct() / function())* { AbstractSyntaxTree(d) }
 
-    rule function() -> Function
+    rule struct() -> Definition
+        = _ s:position!() i:identifier() _ "{" _ m:(_ mi:identifier() _ mt:_type() _ "," _ { (mi, mt) })* _ "}" e:position!() _ {
+            Definition::Struct(
+                Struct::new(i, m.into_iter().map(|(member_name, member_type)| StructMember::new(member_name, member_type)).collect(), (s..=e).into())
+            )
+        }
+
+    rule function() -> Definition
         = _ s:position!() i:identifier() _ "(" _
         p:((_ i:identifier() _ t:_type() _ { (i, t) }) ** ",") ","? _ ")"
         r:(_ "->" r:((_ t:_type() _ { t }) ++ ",") _ ","? {r})? e:position!()
         _ sc:scope() _ {
-            Function {
+            Definition::Function(Function {
                 signature: FunctionSignature {
                     name: i,
                     params: p.into_iter().map(|(param_name, param_type)| Variable::new(param_name, Some(param_type))).collect(),
@@ -69,7 +80,7 @@ peg::parser!(pub(crate) grammar parser() for str {
                     source: (s..=e).into()
                 },
                 scope: sc
-            }
+            })
         }
 
     // Each level of precedence is notated by a "--" line. Each level binds more tightly than the last.

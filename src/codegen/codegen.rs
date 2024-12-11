@@ -1,7 +1,7 @@
 use cranelift::prelude::*;
 use thiserror::Error;
 
-use crate::parser::{ast::AbstractSyntaxTree, function::Function};
+use crate::parser::{ast::AbstractSyntaxTree, definition::Definition, function::Function};
 
 use super::{
     block::BlockVariables,
@@ -130,22 +130,27 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
 
         // Generate each function individually, and build up the IR and/or disassembly if requested
         let mut function_context = FunctionBuilderContext::new();
-        for function in ast {
-            // Only generate functions if they are not discarded
-            if !function.signature.is_discarded() {
-                let (function_ir, function_disasm) =
-                    self.generate_function(&mut function_context, function)?;
+        for definition in ast {
+            match definition {
+                Definition::Struct(_struct) => {}
+                Definition::Function(function) => {
+                    // Only generate functions if they are not discarded
+                    if !function.signature.is_discarded() {
+                        let (function_ir, function_disasm) =
+                            self.generate_function(&mut function_context, function)?;
 
-                match function_ir {
-                    Some(function_ir) => ir.push_str(format!("{}\n", function_ir).as_str()),
-                    None => {}
-                }
+                        match function_ir {
+                            Some(function_ir) => ir.push_str(format!("{}\n", function_ir).as_str()),
+                            None => {}
+                        }
 
-                match function_disasm {
-                    Some(function_disasm) => {
-                        disassembly.push_str(format!("{}\n", function_disasm).as_str())
+                        match function_disasm {
+                            Some(function_disasm) => {
+                                disassembly.push_str(format!("{}\n", function_disasm).as_str())
+                            }
+                            None => {}
+                        }
                     }
-                    None => {}
                 }
             }
         }

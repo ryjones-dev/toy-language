@@ -3,6 +3,7 @@ use crate::{
     diagnostic::DiagnosticMessage,
     parser::{
         function::FunctionSignature,
+        r#struct::Struct,
         source_range::SourceRange,
         types::{DataType, Types},
         variable::Variables,
@@ -78,6 +79,14 @@ pub(super) fn diag_return_types_label(func_sig: &FunctionSignature) -> Option<Di
     }
 
     None
+}
+
+/// Creates a new [`DiagnosticMessage`] labeling the struct's name.
+pub(super) fn diag_struct_name_label(_struct: &Struct) -> DiagnosticMessage {
+    DiagnosticMessage::new(
+        format!("for struct `{}`", _struct.name()),
+        _struct.name().source(),
+    )
 }
 
 /// Creates a new [`DiagnosticMessage`] labeling where a subject is originally defined.

@@ -3,7 +3,7 @@ use std::{
     collections::HashMap,
 };
 
-use crate::parser::{function::FunctionSignature, variable::Variable};
+use crate::parser::{function::FunctionSignature, r#struct::Struct, variable::Variable};
 
 /// A wrapping struct to keep track of how many times a [`Variable`] is read.
 /// This is later used to determine unused variables.
@@ -21,13 +21,21 @@ struct FunctionMetadata {
     read_count: i32,
 }
 
-/// A [`ScopeTracker`] captures the variables and function signatures that the code within a scope has access to.
+/// A wrapping struct to keep track of how many times a [`Struct`] is read.
+/// This is later used to determine unused structs.
+#[derive(Debug)]
+struct StructMetadata {
+    _struct: Struct,
+    read_count: i32,
+}
+
+/// A [`ScopeTracker`] captures the definitions and variables that the code within a scope has access to.
 ///
 /// Every [`Scope`] will have a corresponding [`ScopeTracker`].
 ///
-/// [`ScopeTracker`] provides wrappers for [`Variable`] and [`FunctionSignature`] access that implement typical scoping rules.
-/// When trying to access a variable or function signature, the current scope will be checked first.
-/// If the variable or function signature is not found, the outer scope will be checked.
+/// [`ScopeTracker`] provides wrappers for [`Variable`], [`FunctionSignature`], and [`Struct`] access that implement typical scoping rules.
+/// When trying to access one of these code primitives, the current scope will be checked first.
+/// If the code primitive is not found, the outer scope will be checked.
 /// This will continue until there is no outer scope, in which case a compiler error can be thrown.
 #[derive(Debug)]
 pub(super) struct ScopeTracker<'a> {
@@ -36,6 +44,7 @@ pub(super) struct ScopeTracker<'a> {
     // RefCell is needed so we can update metadata during read access
     variable_metadata: HashMap<String, RefCell<VariableMetadata>>,
     function_metadata: HashMap<String, RefCell<FunctionMetadata>>,
+    struct_metadata: HashMap<String, RefCell<StructMetadata>>,
 }
 
 impl<'a> ScopeTracker<'a> {
@@ -44,6 +53,7 @@ impl<'a> ScopeTracker<'a> {
             outer_scope,
             variable_metadata: HashMap::new(),
             function_metadata: HashMap::new(),
+            struct_metadata: HashMap::new(),
         }
     }
 }
@@ -146,16 +156,59 @@ impl ScopeTracker<'_> {
         None
     }
 
-    /// Consumes the [`ScopeTracker`] and returns a list of [`Variable`]s and [`FunctionSignature`]s
+    /// Returns a [`Struct`] with the given name, or [`None`] if the struct is not in scope.
+    pub(super) fn get_struct<'a>(
+        &self,
+        name: impl Into<&'a str> + Eq + std::hash::Hash,
+    ) -> Option<Ref<Struct>> {
+        let name = name.into();
+        match self.struct_metadata.get(name) {
+            Some(struct_meta) => {
+                struct_meta.borrow_mut().read_count += 1;
+                Some(Ref::map(struct_meta.borrow(), |struct_meta| {
+                    &struct_meta._struct
+                }))
+            }
+            None => match &self.outer_scope {
+                Some(outer_scope) => outer_scope.get_struct(name),
+                None => None,
+            },
+        }
+    }
+
+    /// Adds the given [`Struct`] to the scope.
+    ///
+    /// Returns [`None`] if the variable was added successfully,
+    /// or the previously defined [`Struct`] if it has already been defined.
+    pub(super) fn insert_struct(&mut self, _struct: Struct) -> Option<Ref<Struct>> {
+        let struct_name: &str = _struct.name().into();
+        if self.struct_metadata.contains_key(struct_name) {
+            return self.struct_metadata.get(struct_name).map(|struct_meta| {
+                Ref::map(struct_meta.borrow(), |struct_meta| &struct_meta._struct)
+            });
+        }
+
+        self.struct_metadata.insert(
+            struct_name.to_string(),
+            RefCell::new(StructMetadata {
+                _struct,
+                read_count: 0,
+            }),
+        );
+        None
+    }
+
+    /// Consumes the [`ScopeTracker`] and returns a list of [`Variable`]s, [`FunctionSignature`]s, and [`Struct`]s
     /// that have not been read from in this scope.
     ///
     /// This intentionally does not check outer scopes, as those still have the potential to be used.
     ///
     /// This method does not use the [`Variables`] type because these variables are not related to each other,
     /// and don't have consistent source ranges.
-    pub(super) fn get_unused(self) -> (Vec<Variable>, Vec<FunctionSignature>) {
+    pub(super) fn get_unused(self) -> (Vec<Variable>, Vec<FunctionSignature>, Vec<Struct>) {
         let mut unused_variables = Vec::new();
         let mut unused_functions = Vec::new();
+        let mut unused_structs = Vec::new();
 
         for (_, mut var_meta) in self.variable_metadata {
             // Ignore discarded variables
@@ -173,6 +226,15 @@ impl ScopeTracker<'_> {
             }
         }
 
-        (unused_variables, unused_functions)
+        for (_, mut struct_meta) in self.struct_metadata {
+            // Ignore discarded structs
+            if !struct_meta.get_mut()._struct.is_discarded()
+                && struct_meta.get_mut().read_count == 0
+            {
+                unused_structs.push(struct_meta.get_mut()._struct.clone());
+            }
+        }
+
+        (unused_variables, unused_functions, unused_structs)
     }
 }

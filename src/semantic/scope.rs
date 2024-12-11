@@ -3,7 +3,7 @@ use thiserror::Error;
 use crate::{
     diagnostic::{Diagnostic, DiagnosticContext, DiagnosticLevel, DiagnosticMessage},
     parser::{
-        expression::Expression, function::FunctionSignature, scope::Scope,
+        expression::Expression, function::FunctionSignature, r#struct::Struct, scope::Scope,
         source_range::SourceRange, types::Types, variable::Variable,
     },
     semantic::diagnostic::diag_return_types_label,
@@ -33,6 +33,8 @@ pub(super) enum ScopeError {
     UnusedFunctionError {
         function_signature: FunctionSignature,
     },
+    #[error("unused struct")]
+    UnusedStructError { _struct: Struct },
     #[error(transparent)]
     ExpressionError(#[from] ExpressionError),
 }
@@ -112,6 +114,16 @@ impl From<ScopeError> for Diagnostic {
                 .with_suggestions(vec![
                     "Either remove the function, or prefix it with an underscore to discard it.",
                 ]),
+            ScopeError::UnusedStructError { ref _struct } => {
+                Self::new(&err, DiagnosticLevel::Warning)
+                    .with_context(DiagnosticContext::new(DiagnosticMessage::new(
+                        format!("struct `{}` is never instantiated", _struct),
+                        _struct.source(),
+                    )))
+                    .with_suggestions(vec![
+                        "Either remove the struct, or prefix it with an underscore to discard it.",
+                    ])
+            }
             ScopeError::ExpressionError(err) => err.into(),
         }
     }
@@ -126,7 +138,7 @@ pub(super) fn analyze_scope(
     let mut types = Types::new();
     let mut errors = Vec::new();
 
-    // Throw out the scope's return expression from the rest of the body.
+    // Split out the scope's return expression from the rest of the body.
     // This simplifies the logic for analysis.
     if let Some((returns, body)) = scope.split_return_mut() {
         for (i, expression) in body.iter_mut().enumerate() {
@@ -191,8 +203,8 @@ pub(super) fn analyze_scope(
         });
     }
 
-    // Check for any variables or functions in the immediate scope that have not been used
-    let (unused_variables, function_signatures) = scope_tracker.get_unused();
+    // Check for any variables, functions, or structs in the immediate scope that have not been used
+    let (unused_variables, function_signatures, structs) = scope_tracker.get_unused();
     for variable in unused_variables {
         errors.push(ScopeError::UnusedVariableError { variable })
     }
@@ -200,6 +212,9 @@ pub(super) fn analyze_scope(
         errors.push(ScopeError::UnusedFunctionError {
             function_signature: func_sig,
         })
+    }
+    for _struct in structs {
+        errors.push(ScopeError::UnusedStructError { _struct })
     }
 
     (types, errors)

@@ -1,6 +1,6 @@
 use super::source_range::SourceRange;
 
-/// A distinct type that is used to represent names of functions and variables.
+/// A distinct type that is used to represent names of particular code primitives, such as functions and variables.
 ///
 /// This is just a [`String`] with extra information about where in the source code it is located,
 /// which is needed for helpful error messages.
