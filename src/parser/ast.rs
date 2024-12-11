@@ -1,13 +1,13 @@
-use super::function::Function;
+use super::definition::Definition;
 
 /// Represents the complete abstract syntax tree parsed from source code.
 ///
 /// Having a type that represents the tree is more convenient and expressive than passing around a list of nodes.
-pub(crate) struct AbstractSyntaxTree(pub(super) Vec<Function>);
+pub(crate) struct AbstractSyntaxTree(pub(super) Vec<Definition>);
 
 impl IntoIterator for AbstractSyntaxTree {
-    type Item = Function;
-    type IntoIter = std::vec::IntoIter<Function>;
+    type Item = Definition;
+    type IntoIter = std::vec::IntoIter<Definition>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
@@ -15,7 +15,7 @@ impl IntoIterator for AbstractSyntaxTree {
 }
 
 impl std::ops::Deref for AbstractSyntaxTree {
-    type Target = Vec<Function>;
+    type Target = Vec<Definition>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -30,9 +30,15 @@ impl std::ops::DerefMut for AbstractSyntaxTree {
 
 impl std::fmt::Display for AbstractSyntaxTree {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for function in self.iter() {
-            writeln!(f, "Function: {}", function.signature.name)?;
-            writeln!(f, "{:?}\n", function)?;
+        for definition in self.iter() {
+            match definition {
+                Definition::Struct(_struct) => writeln!(f, "Struct: {}", _struct.name())?,
+                Definition::Function(function) => {
+                    writeln!(f, "Function: {}", function.signature.name)?
+                }
+            }
+
+            writeln!(f, "{:?}\n", definition)?;
         }
 
         Ok(())

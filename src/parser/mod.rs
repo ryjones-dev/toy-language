@@ -1,3 +1,5 @@
+use definition::Definition;
+use r#struct::{Struct, StructMember};
 use thiserror::Error;
 
 use crate::diagnostic::{Diagnostic, DiagnosticLevel};
@@ -16,12 +18,14 @@ use self::{
 };
 
 pub(super) mod ast;
+pub(super) mod definition;
 pub(super) mod expression;
 pub(super) mod function;
 pub(super) mod identifier;
 pub(super) mod literal;
 pub(super) mod scope;
 pub(super) mod source_range;
+pub(super) mod r#struct;
 pub(super) mod types;
 pub(super) mod variable;
 
@@ -54,14 +58,21 @@ peg::parser!(pub(crate) grammar parser() for str {
     /// The resulting [`AbstractSyntaxTree`] contains all of the information that the compiler needs
     /// to perform semantic analysis and generate the IR code.
     pub rule parse() -> AbstractSyntaxTree
-        = f:function()* { AbstractSyntaxTree(f) }
+        = d:(struct() / function())* { AbstractSyntaxTree(d) }
 
-    rule function() -> Function
+    rule struct() -> Definition
+        = _ s:position!() i:identifier() _ "{" _ m:((_ i:identifier() _ t:_type() _ { (i, t) }) ** ",") _ ","? _ "}" e:position!() _ {
+            Definition::Struct(
+                Struct::new(i, m.into_iter().map(|(member_name, member_type)| StructMember::new(member_name, member_type)).collect(), (s..=e).into())
+            )
+        }
+
+    rule function() -> Definition
         = _ s:position!() i:identifier() _ "(" _
         p:((_ i:identifier() _ t:_type() _ { (i, t) }) ** ",") ","? _ ")"
         r:(_ "->" r:((_ t:_type() _ { t }) ++ ",") _ ","? {r})? e:position!()
         _ sc:scope() _ {
-            Function {
+            Definition::Function(Function {
                 signature: FunctionSignature {
                     name: i,
                     params: p.into_iter().map(|(param_name, param_type)| Variable::new(param_name, Some(param_type))).collect(),
@@ -69,7 +80,7 @@ peg::parser!(pub(crate) grammar parser() for str {
                     source: (s..=e).into()
                 },
                 scope: sc
-            }
+            })
         }
 
     // Each level of precedence is notated by a "--" line. Each level binds more tightly than the last.
@@ -79,6 +90,7 @@ peg::parser!(pub(crate) grammar parser() for str {
         s:scope() { Expression::Scope { scope: s, source: (0..=0).into() } }
         --
         a:assignment() { a }
+        i:struct_instantiation() { i }
         r:function_return() { r }
         c:function_call() { c }
         i:if_else() { i }
@@ -132,7 +144,12 @@ peg::parser!(pub(crate) grammar parser() for str {
 
     rule assignment() -> Expression
         = s:position!() vars:((_ i:identifier() _ t:_type()? _ { (i, t) }) ++ ",") _ "=" _ expr:expression_list() e:position!() {
-            Expression::Assignment { variables: vars.into_iter().map(|var|Variable::new(var.0, var.1)).collect(), expression: Box::new(expr), source: (s..=e).into() }
+            Expression::Assignment { variables: vars.into_iter().map(|(var_name, var_type)|Variable::new(var_name, var_type)).collect(), expression: Box::new(expr), source: (s..=e).into() }
+        }
+
+    rule struct_instantiation() -> Expression
+        = s:position!() i:identifier() _ "{" _ m:((_ i:identifier() _ ":" _ e:expression() _ { (i, e) }) ** ",") _ ","? _ "}" e:position!() {
+            Expression::StructInstantiation { name: i, members: m, source: (s..=e).into(), _struct: None }
         }
 
     rule function_return() -> Expression
@@ -151,7 +168,7 @@ peg::parser!(pub(crate) grammar parser() for str {
         }
 
     rule _type() -> Type
-        = s:position!() t:$("int" / "float" / "bool") e:position!()  { Type::new(t.parse().expect("unknown type"), (s..=e).into()) }
+        = s:position!() t:$("int" / "float" / "bool" / identifier()) e:position!()  { Type::new(t.into(), (s..=e).into()) }
 
     rule identifier() -> Identifier
             = quiet!{ s:position!() n:$(['_' | 'a'..='z' | 'A'..='Z']['a'..='z' | 'A'..='Z' | '0'..='9' | '_']*) e:position!() {

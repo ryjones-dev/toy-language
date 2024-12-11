@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use thiserror::Error;
 
 use crate::{
@@ -8,6 +10,7 @@ use crate::{
         },
         function::FunctionSignature,
         identifier::Identifier,
+        r#struct::StructMember,
         source_range::SourceRange,
         types::{DataType, Type, Types},
         variable::{Variable, Variables},
@@ -18,10 +21,11 @@ use super::{
     diagnostic::{
         diag_expected, diag_expected_types, diag_func_name_label, diag_func_param_label,
         diag_newly_defined, diag_originally_defined, diag_return_types_label,
+        diag_struct_name_label,
     },
     scope::{analyze_scope, ScopeError},
     scope_tracker::ScopeTracker,
-    EXPECT_VAR_TYPE,
+    Struct, EXPECT_VAR_TYPE,
 };
 
 #[derive(Debug, Error)]
@@ -41,6 +45,24 @@ pub(super) enum ExpressionError {
     },
     #[error("variable type redefinition")]
     AssignmentVariableTypeRedefinitionError { prev_var: Variable, var: Variable },
+    #[error("duplicate struct member in instantiation")]
+    StructMemberAlreadyInitializedError {
+        original_member: Identifier,
+        new_member: Identifier,
+    },
+    #[error("unknown struct member")]
+    StructMemberUnknownError {
+        _struct: Struct,
+        member_name: Identifier,
+    },
+    #[error("struct member not initialized")]
+    StructMemberNotInitializedError {
+        _struct: Struct,
+        member_name: Identifier,
+        struct_instance_source: SourceRange,
+    },
+    #[error("unknown struct")]
+    StructUnknownError(Identifier, SourceRange),
     #[error("return value mismatch")]
     FunctionReturnValueMismatchError {
         func_sig: FunctionSignature,
@@ -140,7 +162,7 @@ impl From<ExpressionError> for Diagnostic {
                     format!(
                         "attempted to assign result of type `{}` to variable of type `{}`",
                         expected_type,
-                        var.get_type().expect(EXPECT_VAR_TYPE)
+                        var.get_type().as_ref().expect(EXPECT_VAR_TYPE)
                     ),
                     assignment_source,
                 ))
@@ -174,11 +196,60 @@ impl From<ExpressionError> for Diagnostic {
                 .with_labels(vec![
                     diag_originally_defined(
                         prev_var.source(),
-                        prev_var.get_type().map(|ty| ty.into()),
+                        prev_var.get_type().as_ref().map(|ty| ty.into()),
                     ),
-                    diag_newly_defined(var.source(), var.get_type().map(|ty| ty.into())),
+                    diag_newly_defined(var.source(), var.get_type().as_ref().map(|ty| ty.into())),
                 ]),
             ),
+            ExpressionError::StructMemberAlreadyInitializedError {
+                ref original_member,
+                ref new_member,
+            } => Self::new(&err, DiagnosticLevel::Error).with_context(
+                DiagnosticContext::new(DiagnosticMessage::new(
+                    format!(
+                        "struct member `{}` has already been initialized",
+                        new_member
+                    ),
+                    new_member.source(),
+                ))
+                .with_labels(vec![
+                    diag_originally_defined(original_member.source(), None),
+                    diag_newly_defined(new_member.source(), None),
+                ]),
+            ),
+            ExpressionError::StructMemberUnknownError {
+                ref _struct,
+                ref member_name,
+            } => Self::new(&err, DiagnosticLevel::Error).with_context(
+                DiagnosticContext::new(DiagnosticMessage::new(
+                    format!(
+                        "Member `{}` is not defined on struct `{}`",
+                        member_name,
+                        _struct.name()
+                    ),
+                    member_name.source(),
+                ))
+                .with_labels(vec![diag_struct_name_label(_struct)]),
+            ),
+            ExpressionError::StructMemberNotInitializedError {
+                ref _struct,
+                ref member_name,
+                struct_instance_source,
+            } => Self::new(&err, DiagnosticLevel::Error).with_context(
+                DiagnosticContext::new(DiagnosticMessage::new(
+                    format!("struct member `{}` has not been initialized", member_name),
+                    struct_instance_source,
+                ))
+                .with_labels(vec![diag_struct_name_label(_struct)]),
+            ),
+            ExpressionError::StructUnknownError(ref name, source) => {
+                Self::new(&err, DiagnosticLevel::Error).with_context(DiagnosticContext::new(
+                    DiagnosticMessage::new(
+                        format!("unknown struct `{}` in this scope", name),
+                        source,
+                    ),
+                ))
+            }
             ExpressionError::FunctionReturnValueMismatchError {
                 ref func_sig,
                 ref return_types,
@@ -329,35 +400,32 @@ impl From<ExpressionError> for Diagnostic {
                 }),
             ),
             ExpressionError::TypeMismatchError {
-                expected,
-                actual,
+                ref expected,
+                ref actual,
                 ref expression,
             } => Self::new(&err, DiagnosticLevel::Error).with_context(
-                DiagnosticContext::new(diag_expected(
-                    &expected,
-                    &actual.into(),
-                    expression.source(),
-                ))
-                .with_labels({
-                    let mut labels = Vec::new();
-                    if let Expression::FunctionCall {
-                        function_signature, ..
-                    } = expression
-                    {
-                        if let Some(func_sig) = function_signature {
-                            if let Some(label) = diag_return_types_label(func_sig) {
-                                labels.push(label);
+                DiagnosticContext::new(diag_expected(expected, actual.into(), expression.source()))
+                    .with_labels({
+                        let mut labels = Vec::new();
+                        if let Expression::FunctionCall {
+                            function_signature, ..
+                        } = expression
+                        {
+                            if let Some(func_sig) = function_signature {
+                                if let Some(label) = diag_return_types_label(func_sig) {
+                                    labels.push(label);
+                                }
                             }
                         }
-                    }
-                    labels
-                }),
+                        labels
+                    }),
             ),
-            ExpressionError::UnexpectedTypeError { ty, source_range } => {
-                Self::new(&err, DiagnosticLevel::Error).with_context(DiagnosticContext::new(
-                    DiagnosticMessage::new(format!("type {ty} cannot be used here"), source_range),
-                ))
-            }
+            ExpressionError::UnexpectedTypeError {
+                ref ty,
+                source_range,
+            } => Self::new(&err, DiagnosticLevel::Error).with_context(DiagnosticContext::new(
+                DiagnosticMessage::new(format!("type {ty} cannot be used here"), source_range),
+            )),
             ExpressionError::ScopeError(err) => (*err).into(),
         }
     }
@@ -422,7 +490,7 @@ pub(super) fn analyze_expression(
                             // Check if the expression's corresponding type matches the variable's annotated type
                             if *var_type != types[i] {
                                 errors.push(ExpressionError::AssignmentTypeMismatchError {
-                                    expected_type: types[i],
+                                    expected_type: types[i].clone(),
                                     var: variable.clone(),
                                     assignment_source: *source,
                                     expression: *expression.clone(),
@@ -452,6 +520,93 @@ pub(super) fn analyze_expression(
 
             // Assignment expressions should return no types
             (Types::new(), errors)
+        }
+        Expression::StructInstantiation {
+            name,
+            members,
+            source,
+            _struct,
+        } => {
+            const EXPECT_STRUCT: &str =
+                "struct instantiation should have been linked to a struct by this point";
+
+            let mut types = Types::new();
+            let mut errors = Vec::new();
+
+            let mut struct_data = HashMap::new();
+            match scope_tracker.get_struct(&*name) {
+                Some(existing_struct) => {
+                    *_struct = Some(existing_struct.clone());
+
+                    // Add the struct data to a hashmap for faster and easier lookups.
+                    // This also releases the reference to the scope tracker so it can be borrowed
+                    // again during member expression analysis.
+                    for member in existing_struct.members() {
+                        // This map tracks a tuple of the struct member and which instance member is used to initialize it.
+                        struct_data.insert(
+                            member.name().clone(),
+                            (member.clone(), None::<&mut Identifier>),
+                        );
+                    }
+                }
+                None => {
+                    errors.push(ExpressionError::StructUnknownError(name.clone(), *source));
+                    return (types, errors);
+                }
+            }
+
+            // Check if each member maps to the struct
+            for (member_name, expression) in members {
+                match struct_data.get_mut(member_name) {
+                    Some((member, initialized_member_name)) => {
+                        if let Some(initialized_member_name) = initialized_member_name {
+                            errors.push(ExpressionError::StructMemberAlreadyInitializedError {
+                                original_member: (*initialized_member_name).clone(),
+                                new_member: member_name.clone(),
+                            });
+                        } else {
+                            *initialized_member_name = Some(member_name);
+                        }
+
+                        let (tys, mut errs) =
+                            analyze_expression(expression, scope_tracker, outer_func_sig);
+                        errors.append(&mut errs);
+
+                        if let Some(err) =
+                            expect_single_type(expression, &tys, member.get_type().into())
+                        {
+                            errors.push(err);
+                        }
+                    }
+                    None => errors.push(ExpressionError::StructMemberUnknownError {
+                        _struct: _struct.as_ref().expect(EXPECT_STRUCT).clone(),
+                        member_name: member_name.clone(),
+                    }),
+                }
+            }
+
+            // Check if there are any members that have not been initialized
+            let uninitialized_members: Vec<StructMember> = struct_data
+                .into_values()
+                .filter_map(|(member, initialized_member_name)| {
+                    if let None = initialized_member_name {
+                        Some(member)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            for uninitialized_member in uninitialized_members {
+                errors.push(ExpressionError::StructMemberNotInitializedError {
+                    _struct: _struct.as_ref().expect(EXPECT_STRUCT).clone(),
+                    member_name: uninitialized_member.name().clone(),
+                    struct_instance_source: *source,
+                });
+            }
+
+            types.push(Type::new(DataType::Struct(name.to_string()), name.source()));
+
+            (types, errors)
         }
         Expression::FunctionReturn { expression, .. } => {
             let (types, mut errors) = analyze_expression(expression, scope_tracker, outer_func_sig);
@@ -509,7 +664,7 @@ pub(super) fn analyze_expression(
                 analyze_expression(cond_expression, scope_tracker, outer_func_sig);
             errors.append(&mut errs);
 
-            if let Some(err) = expect_single_type(cond_expression, &cond_types, DataType::Bool) {
+            if let Some(err) = expect_single_type(cond_expression, &cond_types, &DataType::Bool) {
                 errors.push(err);
             }
 
@@ -598,7 +753,14 @@ pub(super) fn analyze_expression(
                 match comparison_type {
                     BooleanComparisonType::Equal | BooleanComparisonType::NotEqual => {
                         match expect_single_equal_types(lhs, rhs, &lhs_types, &rhs_types) {
-                            Ok(_) => types_to_return.push(Type::new(DataType::Bool, *source)),
+                            Ok(ty) => match ty.into() {
+                                &DataType::Struct(ref _name) => {
+                                    unimplemented!(
+                                        "comparing equality for structs is not yet implemented"
+                                    )
+                                }
+                                _ => types_to_return.push(Type::new(DataType::Bool, *source)),
+                            },
                             Err(err) => errors.push(err),
                         }
                     }
@@ -608,17 +770,22 @@ pub(super) fn analyze_expression(
                     | BooleanComparisonType::GreaterThanEqual => {
                         match expect_single_equal_types(lhs, rhs, &lhs_types, &rhs_types) {
                             Ok(ty) => match ty.into() {
-                                DataType::Int => {
+                                &DataType::Int => {
                                     types_to_return.push(Type::new(DataType::Bool, *source))
                                 }
-                                DataType::Float => {
+                                &DataType::Float => {
                                     types_to_return.push(Type::new(DataType::Bool, *source))
                                 }
-                                DataType::Bool => {
+                                &DataType::Bool => {
                                     errors.push(ExpressionError::UnexpectedTypeError {
-                                        ty: lhs_types[0],
+                                        ty: lhs_types[0].clone(),
                                         source_range: *source,
                                     })
+                                }
+                                &DataType::Struct(ref _name) => {
+                                    unimplemented!(
+                                        "comparing ordering for structs is not yet implemented"
+                                    )
                                 }
                             },
                             Err(err) => errors.push(err),
@@ -653,17 +820,20 @@ pub(super) fn analyze_expression(
                     | BinaryMathOperationType::Divide => {
                         match expect_single_equal_types(lhs, rhs, &lhs_types, &rhs_types) {
                             Ok(ty) => match ty.into() {
-                                DataType::Int => {
+                                &DataType::Int => {
                                     types_to_return.push(Type::new(DataType::Int, *source))
                                 }
-                                DataType::Float => {
+                                &DataType::Float => {
                                     types_to_return.push(Type::new(DataType::Float, *source))
                                 }
-                                DataType::Bool => {
+                                &DataType::Bool => {
                                     errors.push(ExpressionError::UnexpectedTypeError {
-                                        ty: lhs_types[0],
+                                        ty: lhs_types[0].clone(),
                                         source_range: *source,
                                     })
+                                }
+                                &DataType::Struct(ref _name) => {
+                                    unimplemented!("binary math for structs is not yet implemented")
                                 }
                             },
                             Err(err) => errors.push(err),
@@ -692,18 +862,21 @@ pub(super) fn analyze_expression(
                     UnaryMathOperationType::Negate => {
                         match expect_any_single_type(expression, &types) {
                             Some(err) => errors.push(err),
-                            None => match types[0].into() {
-                                DataType::Int => {
+                            None => match (&types[0]).into() {
+                                &DataType::Int => {
                                     types_to_return.push(Type::new(DataType::Int, *source))
                                 }
-                                DataType::Float => {
+                                &DataType::Float => {
                                     types_to_return.push(Type::new(DataType::Float, *source))
                                 }
-                                DataType::Bool => {
+                                &DataType::Bool => {
                                     errors.push(ExpressionError::UnexpectedTypeError {
-                                        ty: types[0],
+                                        ty: types[0].clone(),
                                         source_range: *source,
                                     })
+                                }
+                                &DataType::Struct(ref _name) => {
+                                    unimplemented!("unary math for structs is not yet implemented")
                                 }
                             },
                         }
@@ -729,8 +902,8 @@ pub(super) fn analyze_expression(
                         // Because parsing a variable expression doesn't say anything about the variable's type,
                         // the Variable won't have its type set. Since the variable has already been added to the scope,
                         // we can update the variable's type here so as to not leave any undefined types in the AST.
-                        variable.set_type(&scope_var.get_type().expect(EXPECT_VAR_TYPE));
-                        types.push(variable.get_type().unwrap());
+                        variable.set_type(scope_var.get_type().as_ref().expect(EXPECT_VAR_TYPE));
+                        types.push(variable.get_type().clone().unwrap());
                     }
                 }
                 None => {
@@ -828,17 +1001,16 @@ fn expect_any_single_type(expression: &Expression, types: &Types) -> Option<Expr
 fn expect_single_type(
     expression: &Expression,
     types: &Types,
-    expected_type: impl Into<DataType>,
+    expected_type: &DataType,
 ) -> Option<ExpressionError> {
     if let Some(err) = expect_any_single_type(expression, types) {
         return Some(err);
     }
 
-    let expected_type = expected_type.into();
-    if types[0] != expected_type {
+    if types[0] != *expected_type {
         return Some(ExpressionError::TypeMismatchError {
-            expected: expected_type,
-            actual: types[0],
+            expected: expected_type.clone(),
+            actual: types[0].clone(),
             expression: expression.clone(),
         });
     }
@@ -846,19 +1018,19 @@ fn expect_single_type(
     None
 }
 
-fn expect_single_equal_types(
+fn expect_single_equal_types<'a>(
     lhs_expression: &Expression,
     rhs_expression: &Expression,
-    lhs_types: &Types,
+    lhs_types: &'a Types,
     rhs_types: &Types,
-) -> Result<Type, ExpressionError> {
+) -> Result<&'a Type, ExpressionError> {
     if let Some(err) = expect_any_single_type(lhs_expression, lhs_types) {
         return Err(err);
     }
 
-    if let Some(err) = expect_single_type(rhs_expression, rhs_types, DataType::from(lhs_types[0])) {
+    if let Some(err) = expect_single_type(rhs_expression, rhs_types, (&lhs_types[0]).into()) {
         return Err(err);
     }
 
-    Ok(lhs_types[0])
+    Ok(&lhs_types[0])
 }

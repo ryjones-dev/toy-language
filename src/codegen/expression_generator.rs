@@ -1,7 +1,7 @@
 use cranelift::{
     codegen::ir::{
         condcodes::{FloatCC, IntCC},
-        AbiParam, InstBuilder, Value,
+        AbiParam, InstBuilder, StackSlotData, StackSlotKind, Value,
     },
     frontend::FunctionBuilder,
 };
@@ -22,16 +22,27 @@ use crate::{
 
 use super::block::BlockVariables;
 
-/// A distinct type that is used to represent the value of an evaluated [`Expression`].
+/// Represents the value of an evaluated [`Expression`].
 ///
 /// This type capture's Cranelift's [`Value`] type and wraps it with a [`DataType`]
 /// to keep track of the type when emitting type-specific codegen.
 /// It is intended to be used in places where it semantically makes sense to represent
 /// an expression's resulting value after evaluation.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub(super) struct ExpressionValue {
-    val: Value,
-    ty: DataType,
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(super) enum ExpressionValue {
+    /// Captures data necessary to generate a variable.
+    ///
+    /// Variables in a codegen context refer to basic values such as
+    /// integers and floats. These are values that can be wholly loaded
+    /// into a single register.
+    VariableValue { val: Value, ty: DataType },
+
+    /// Captures data necessary to generate a stack frame.
+    ///
+    /// Stack frames are used to store composite types such as structs.
+    /// In other words, values that can't find in a single register but
+    /// must be kept together.
+    StackValue {},
 }
 
 impl From<ExpressionValue> for Value {
@@ -139,7 +150,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                     // Only declare and define variables if they are not discarded
                     if !variable.is_discarded() {
                         let cranelift_variable = cranelift::frontend::Variable::from_u32(
-                            self.block_vars.var(variable.name().clone()),
+                            self.block_vars.var(variable.name()),
                         );
 
                         // Intentionally ignore the error, since we don't care if the variable has already been declared
@@ -150,6 +161,37 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                         self.builder.def_var(cranelift_variable, values[i].into());
                     }
                 }
+
+                (vec![], false)
+            }
+            Expression::StructInstantiation {
+                name,
+                members,
+                source,
+                _struct,
+            } => {
+                for (member_name, member_expression) in members {
+                    let (member_values, _) = self.generate(member_expression);
+                    semantic_assert!(
+                        member_values.len() == 1,
+                        "member expression returns multiple values"
+                    );
+                }
+
+                let stack_slot = self.builder.create_sized_stack_slot(StackSlotData::new(
+                    StackSlotKind::ExplicitSlot,
+                    member_size,
+                ));
+
+                self.builder
+                    .ins()
+                    .stack_store(member_values[0], stack_slot, offset);
+
+                self.builder.ins().stack_addr(
+                    cranelift::codegen::ir::types::I64,
+                    stack_slot,
+                    offset,
+                );
 
                 (vec![], false)
             }
@@ -628,7 +670,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
             val: self
                 .builder
                 .use_var(cranelift::frontend::Variable::from_u32(
-                    self.block_vars.var(variable.into_name()),
+                    self.block_vars.var(variable.name()),
                 )),
         }
     }

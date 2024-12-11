@@ -3,6 +3,7 @@ use crate::{
     diagnostic::DiagnosticMessage,
     parser::{
         function::FunctionSignature,
+        r#struct::Struct,
         source_range::SourceRange,
         types::{DataType, Types},
         variable::Variables,
@@ -37,6 +38,11 @@ pub(super) fn diag_expected_types(expected: &Types, actual: &Types) -> Diagnosti
             panic!("no types to get a source range from")
         },
     )
+}
+
+/// Creates a new [`DiagnosticMessage`] labeling the struct.
+pub(super) fn diag_struct_name_label(_struct: &Struct) -> DiagnosticMessage {
+    DiagnosticMessage::new(format!("for struct `{}`", _struct.name()), _struct.source())
 }
 
 /// Creates a new [`DiagnosticMessage`] labeling the function's name.
@@ -84,7 +90,7 @@ pub(super) fn diag_return_types_label(func_sig: &FunctionSignature) -> Option<Di
 /// Provide a [`DataType`] to specify which type the subject is defined with.
 pub(super) fn diag_originally_defined(
     source: SourceRange,
-    ty: Option<DataType>,
+    ty: Option<&DataType>,
 ) -> DiagnosticMessage {
     DiagnosticMessage::new(
         format!(
@@ -101,7 +107,7 @@ pub(super) fn diag_originally_defined(
 
 /// Creates a new [`DiagnosticMessage`] labeling where a subject is newly defined.
 /// Provide a [`DataType`] to specify which type the subject is defined with.
-pub(super) fn diag_newly_defined(source: SourceRange, ty: Option<DataType>) -> DiagnosticMessage {
+pub(super) fn diag_newly_defined(source: SourceRange, ty: Option<&DataType>) -> DiagnosticMessage {
     DiagnosticMessage::new(
         format!(
             "newly defined here{}",

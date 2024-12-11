@@ -25,10 +25,6 @@ impl Variable {
         &self.name
     }
 
-    pub(crate) fn into_name(self) -> Identifier {
-        self.name
-    }
-
     pub(crate) fn get_type(&self) -> &Option<Type> {
         &self.ty
     }
@@ -37,13 +33,13 @@ impl Variable {
         debug_assert!(self.ty.is_none(), "attempted to reassign variable type");
 
         // Keep the variable's name source for its type
-        self.ty = Some(Type::new((*ty).into(), self.name.source()))
+        self.ty = Some(Type::new(ty.clone().into(), self.name.source()))
     }
 
     /// Returns a [`SourceRange`] from the variable name to the variable's explicit type annotation, if present.
     /// If not present, it will just be the variable's name.
     pub(crate) fn source(&self) -> SourceRange {
-        if let Some(ty) = self.ty {
+        if let Some(ty) = &self.ty {
             self.name.source().combine(ty.source())
         } else {
             self.name.source()
@@ -74,7 +70,7 @@ impl Variables {
     /// Panics if any [`Variable`]'s type is [`None`].
     pub(crate) fn types(&self) -> Types {
         self.iter()
-            .map(|var| var.ty.expect(EXPECT_VAR_TYPE))
+            .map(|var| var.ty.clone().expect(EXPECT_VAR_TYPE))
             .collect()
     }
 

@@ -15,12 +15,12 @@ impl BlockVariables {
         }
     }
 
-    pub(super) fn var(&mut self, name: Identifier) -> u32 {
-        match self.variables.get(&name) {
+    pub(super) fn var(&mut self, name: &Identifier) -> u32 {
+        match self.variables.get(name) {
             Some(var_index) => *var_index,
             None => {
                 let index = self.var_index;
-                self.variables.insert(name, index);
+                self.variables.insert(name.clone(), index);
                 self.var_index += 1;
                 index
             }

@@ -5,6 +5,7 @@ use super::{
     scope::Scope,
     source_range::SourceRange,
     variable::{Variable, Variables},
+    Struct,
 };
 
 /// Each type of boolean comparison that can be used in an expression.
@@ -89,6 +90,21 @@ pub(crate) enum Expression {
         expression: Box<Expression>,
         source: SourceRange,
     },
+    /// Represents the instantiation of an existing [`Struct`].
+    ///
+    /// All members of the struct need to be specified when defining a struct instantiation.
+    /// This is to ensure that if a new member is added to the struct in the future,
+    /// all instantiations of the struct can be easily identified and unexpected behavior will not occur.
+    ///
+    /// The struct that is being instantiated can't be parsed from the instantiation itself,
+    /// but can be deduced during semantic analysis.
+    /// Until then, the struct will have a value of [`None`].
+    StructInstantiation {
+        name: Identifier,
+        members: Vec<(Identifier, Expression)>,
+        source: SourceRange,
+        _struct: Option<Struct>,
+    },
     /// Represents returning from a function. This is useful for early returning from an outer function scope.
     FunctionReturn {
         expression: Box<Expression>,
@@ -154,6 +170,7 @@ impl Expression {
                 }
             }
             Expression::Assignment { source, .. } => *source,
+            Expression::StructInstantiation { source, .. } => *source,
             Expression::FunctionReturn { source, .. } => *source,
             Expression::FunctionCall { source, .. } => *source,
             Expression::IfElse { source, .. } => *source,

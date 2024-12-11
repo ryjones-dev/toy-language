@@ -8,32 +8,55 @@ use crate::{
     semantic::EXPECT_VAR_TYPE,
 };
 
-impl From<DataType> for cranelift::codegen::ir::Type {
-    fn from(value: DataType) -> Self {
-        match value {
-            DataType::Int => cranelift::codegen::ir::types::I64,
-            DataType::Float => cranelift::codegen::ir::types::F64,
-            DataType::Bool => cranelift::codegen::ir::types::I8,
+impl DataType {
+    pub(crate) fn size(&self) -> u32 {}
+
+    pub(crate) fn alignment(&self) -> u8 {
+        match self {
+            DataType::Int => 8,
+            DataType::Float => 8,
+            DataType::Bool => 1,
+            DataType::Struct(member_types) => {
+                let mut max_alignment = 0;
+                for member_type in member_types.iter() {
+                    let member_alignment = member_type.alignment();
+                    if member_alignment > max_alignment {
+                        max_alignment = member_alignment;
+                    }
+                }
+
+                max_alignment
+            }
         }
     }
 }
 
-impl From<Type> for cranelift::codegen::ir::Type {
-    fn from(value: Type) -> Self {
-        let ty: DataType = value.into();
-        ty.into()
-    }
-}
+// impl From<DataType> for cranelift::codegen::ir::Type {
+//     fn from(value: DataType) -> Self {
+//         match value {
+//             DataType::Int => cranelift::codegen::ir::types::I64,
+//             DataType::Float => cranelift::codegen::ir::types::F64,
+//             DataType::Bool => cranelift::codegen::ir::types::I8,
+//         }
+//     }
+// }
 
-impl From<&Type> for cranelift::codegen::ir::Type {
-    fn from(value: &Type) -> Self {
-        let ty: DataType = (*value).into();
-        ty.into()
-    }
-}
+// impl From<Type> for cranelift::codegen::ir::Type {
+//     fn from(value: Type) -> Self {
+//         let ty: DataType = value.into();
+//         ty.into()
+//     }
+// }
 
-impl From<&Variable> for cranelift::codegen::ir::Type {
-    fn from(value: &Variable) -> Self {
-        value.get_type().expect(EXPECT_VAR_TYPE).into()
-    }
-}
+// impl From<&Type> for cranelift::codegen::ir::Type {
+//     fn from(value: &Type) -> Self {
+//         let ty: DataType = (*value).into();
+//         ty.into()
+//     }
+// }
+
+// impl From<&Variable> for cranelift::codegen::ir::Type {
+//     fn from(value: &Variable) -> Self {
+//         value.get_type().expect(EXPECT_VAR_TYPE).into()
+//     }
+// }

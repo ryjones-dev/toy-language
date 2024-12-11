@@ -54,11 +54,11 @@
 - [x]  Check that both scopes in an if expression return the same number and type of values, except for function returns
 - [x]  Change `split_return()` to use `split_last()` instead of `split_at()`, have `split_return()` return an Option
 - [x]  Support floating point numbers
+- [ ]  Structs
 - [ ]  Pattern matching
 - [ ]  Add range types that represent a continuous range of values
 - [ ]  Add operator to check if int is in a range
 - [ ]  Make a function an expression
-- [ ]  Support tuples
 - [ ]  Bool condition loop (while loop)
 - [ ]  Range loop (for loop)
 - [ ]  Support optionally getting the index and/or value when iterating over a range

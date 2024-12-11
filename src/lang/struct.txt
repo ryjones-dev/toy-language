@@ -1,0 +1,17 @@
+Object {
+    isEnabled bool,
+    x float,
+    y float,
+}
+
+main(arg1 float, arg2 float) -> float {
+    obj1 = Object{ isEnabled: false, }
+    obj2 = Object {
+        isEnabled: true,
+        x: arg1,
+        y: arg2,
+    }
+
+    obj1.x = obj1.x + obj2.x
+    obj1.x
+}
