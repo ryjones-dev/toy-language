@@ -58,8 +58,8 @@ peg::parser!(pub(crate) grammar parser() for str {
 
     rule function() -> Function
         = _ s:position!() i:identifier() _ "(" _
-        p:((_ i:identifier() _ t:_type() _ { (i, t) }) ** ",") _ ")"
-        r:(_ "->" r:((_ t:_type() _ { t }) ++ ",") {r})? e:position!()
+        p:((_ i:identifier() _ t:_type() _ { (i, t) }) ** ",") ","? _ ")"
+        r:(_ "->" r:((_ t:_type() _ { t }) ++ ",") _ ","? {r})? e:position!()
         _ sc:scope() _ {
             Function {
                 signature: FunctionSignature {
@@ -131,7 +131,7 @@ peg::parser!(pub(crate) grammar parser() for str {
         }
 
     rule assignment() -> Expression
-        = s:position!() vars:((_ i:identifier() _ t:_type()? _ { (i, t) }) ++ ",") _ "=" _ expr:expression() e:position!() {
+        = s:position!() vars:((_ i:identifier() _ t:_type()? _ { (i, t) }) ++ ",") _ "=" _ expr:expression_list() e:position!() {
             Expression::Assignment { variables: vars.into_iter().map(|var|Variable::new(var.0, var.1)).collect(), expression: Box::new(expr), source: (s..=e).into() }
         }
 

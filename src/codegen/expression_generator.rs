@@ -607,10 +607,10 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
             self.builder
                 .inst_results(call)
                 .into_iter()
-                .zip(values.into_iter())
-                .map(|(value, arg_value)| ExpressionValue {
+                .zip(func_sig.returns.into_iter())
+                .map(|(value, ty)| ExpressionValue {
                     val: *value,
-                    ty: arg_value.ty,
+                    ty: (*ty).into(),
                 })
                 .collect(),
             false,
