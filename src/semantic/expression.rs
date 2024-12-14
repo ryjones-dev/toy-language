@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use thiserror::Error;
 
 use crate::{
@@ -461,22 +463,43 @@ pub(super) fn analyze_expression(
             let errors = Vec::new();
             match scope_tracker.get_struct(&*name) {
                 Some(_struct) => {
+                    // Add the struct data to a hashmap for faster and easier lookups
+                    let mut struct_data = HashMap::new();
+                    for member in _struct.members() {
+                        struct_data.insert(member.name(), (member.get_type(), false));
+                    }
+
+                    // Check if each member maps to the struct
                     for (member_name, expression) in members {
-                        let (types, mut errs) =
-                            analyze_expression(expression, scope_tracker, outer_func_sig);
+                        match struct_data.get_key_value(member_name) {
+                            Some((name, (ty, initialized))) => {
+                                if *initialized {
+                                    todo!("Add error for multiple struct member initialization")
+                                }
 
-                        errors.append(&mut errs);
+                                let (types, mut errs) =
+                                    analyze_expression(expression, scope_tracker, outer_func_sig);
+                                errors.append(&mut errs);
 
-                        // TODO: Check that the member exists
-                        // TODO: Get the member's expected type
-
-                        if let Some(err) = expect_single_type(expression, &types, expected_type) {
-                            errors.push(err);
+                                if let Some(err) = expect_single_type(expression, &types, ty.into())
+                                {
+                                    errors.push(err);
+                                }
+                            }
+                            None => todo!("Add error for undefined struct member"),
                         }
                     }
 
-                    // TODO: Check if there are any members that have not been initialized
+                    // Check if there are any members that have not been initialized
+                    let uninitialized_members = struct_data
+                        .into_values()
+                        .filter(|(_, initialized)| !initialized)
+                        .collect();
+                    for uninitialized_member in uninitialized_members {
+                        todo!("Add error for uninitialized member");
+                    }
 
+                    todo!("Return struct type");
                     (types, errors)
                 }
                 None => todo!("Add error for undefined struct"),
