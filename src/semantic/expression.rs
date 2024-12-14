@@ -453,6 +453,35 @@ pub(super) fn analyze_expression(
             // Assignment expressions should return no types
             (Types::new(), errors)
         }
+        Expression::StructInstantiation {
+            name,
+            members,
+            source,
+        } => {
+            let errors = Vec::new();
+            match scope_tracker.get_struct(&*name) {
+                Some(_struct) => {
+                    for (member_name, expression) in members {
+                        let (types, mut errs) =
+                            analyze_expression(expression, scope_tracker, outer_func_sig);
+
+                        errors.append(&mut errs);
+
+                        // TODO: Check that the member exists
+                        // TODO: Get the member's expected type
+
+                        if let Some(err) = expect_single_type(expression, &types, expected_type) {
+                            errors.push(err);
+                        }
+                    }
+
+                    // TODO: Check if there are any members that have not been initialized
+
+                    (types, errors)
+                }
+                None => todo!("Add error for undefined struct"),
+            }
+        }
         Expression::FunctionReturn { expression, .. } => {
             let (types, mut errors) = analyze_expression(expression, scope_tracker, outer_func_sig);
 

@@ -61,7 +61,7 @@ peg::parser!(pub(crate) grammar parser() for str {
         = d:(struct() / function())* { AbstractSyntaxTree(d) }
 
     rule struct() -> Definition
-        = _ s:position!() i:identifier() _ "{" _ m:(_ mi:identifier() _ mt:_type() _ "," _ { (mi, mt) })* _ "}" e:position!() _ {
+        = _ s:position!() i:identifier() _ "{" _ m:((_ i:identifier() _ t:_type() _ { (i, t) }) ** ",") _ ","? _ "}" e:position!() _ {
             Definition::Struct(
                 Struct::new(i, m.into_iter().map(|(member_name, member_type)| StructMember::new(member_name, member_type)).collect(), (s..=e).into())
             )
@@ -90,6 +90,7 @@ peg::parser!(pub(crate) grammar parser() for str {
         s:scope() { Expression::Scope { scope: s, source: (0..=0).into() } }
         --
         a:assignment() { a }
+        i:struct_instantiation() { i }
         r:function_return() { r }
         c:function_call() { c }
         i:if_else() { i }
@@ -143,7 +144,12 @@ peg::parser!(pub(crate) grammar parser() for str {
 
     rule assignment() -> Expression
         = s:position!() vars:((_ i:identifier() _ t:_type()? _ { (i, t) }) ++ ",") _ "=" _ expr:expression_list() e:position!() {
-            Expression::Assignment { variables: vars.into_iter().map(|var|Variable::new(var.0, var.1)).collect(), expression: Box::new(expr), source: (s..=e).into() }
+            Expression::Assignment { variables: vars.into_iter().map(|(var_name, var_type)|Variable::new(var_name, var_type)).collect(), expression: Box::new(expr), source: (s..=e).into() }
+        }
+
+    rule struct_instantiation() -> Expression
+        = s:position!() i:identifier() _ "{" _ m:((_ i:identifier() _ ":" _ e:expression() _ { (i, e) }) ** ",") _ ","? _ "}" e:position!() {
+            Expression::StructInstantiation { name: i, members: m, source: (s..=e).into() }
         }
 
     rule function_return() -> Expression
