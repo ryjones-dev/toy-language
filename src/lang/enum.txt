@@ -1,0 +1,23 @@
+- tagged unions for Result and Option types, as well as to handle errors as values
+- Heap allocations are always either unique or reference counted
+
+enum Error {
+    FileError {
+        message string,
+        filepath string,
+    },
+    ParseError {
+        message string,
+        source string,
+    }
+    WrappedError(Error&)
+}
+
+main() -> int {
+    parsedNum, err = parse_int()
+    match err {
+        Error.FileError: -> 1,
+        Error.ParseError: -> 2,
+        _: -> 0
+    }
+}
