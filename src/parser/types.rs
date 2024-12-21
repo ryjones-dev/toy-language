@@ -1,12 +1,59 @@
 use super::{source_range::SourceRange, Struct};
 
 /// Represents TODO_LANG_NAME data types.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Eq)]
 pub(crate) enum DataType {
     Int,
     Float,
     Bool,
-    Struct(String),
+
+    /// Struct data types contain a reference to the [`Struct`] definition
+    /// that it refers to. This reference cannot be parsed from the source code,
+    /// so it will be [`None`] until it is populated by semantic analysis.
+    Struct {
+        name: String,
+        _struct: Option<Struct>,
+    },
+}
+
+// The optional struct copy should not affect equivalence or hashing
+impl PartialEq for DataType {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (DataType::Int, DataType::Int) => true,
+            (DataType::Float, DataType::Float) => true,
+            (DataType::Bool, DataType::Bool) => true,
+            (
+                DataType::Struct {
+                    name: self_name, ..
+                },
+                DataType::Struct {
+                    name: other_name, ..
+                },
+            ) => self_name == other_name,
+            _ => false,
+        }
+    }
+}
+
+impl std::hash::Hash for DataType {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            DataType::Int => {
+                state.write_u8(1);
+            }
+            DataType::Float => {
+                state.write_u8(2);
+            }
+            DataType::Bool => {
+                state.write_u8(3);
+            }
+            DataType::Struct { name, _struct } => {
+                state.write_u8(4);
+                name.hash(state);
+            }
+        }
+    }
 }
 
 impl From<&str> for DataType {
@@ -15,7 +62,10 @@ impl From<&str> for DataType {
             "int" => DataType::Int,
             "float" => DataType::Float,
             "bool" => DataType::Bool,
-            name => DataType::Struct(name.to_owned()),
+            name => DataType::Struct {
+                name: name.to_owned(),
+                _struct: None,
+            },
         }
     }
 }
@@ -26,7 +76,7 @@ impl std::fmt::Display for DataType {
             DataType::Int => write!(f, "int"),
             DataType::Float => write!(f, "float"),
             DataType::Bool => write!(f, "bool"),
-            DataType::Struct(name) => write!(f, "{}", name),
+            DataType::Struct { name, .. } => write!(f, "{}", name),
         }
     }
 }
@@ -36,31 +86,11 @@ impl std::fmt::Display for DataType {
 pub(crate) struct Type {
     ty: DataType,
     source: SourceRange,
-
-    /// This is only a [`Some`] value if this type has a [`DataType::Struct`] data type.
-    /// This will have a copy of the struct this type refers to, which helps with codegen.
-    _struct: Option<Struct>,
 }
 
 impl Type {
     pub(crate) fn new(ty: DataType, source: SourceRange) -> Self {
-        Self {
-            ty,
-            source,
-            _struct: None,
-        }
-    }
-
-    /// Sets the struct this type refers to.
-    ///
-    /// Can only be used if this type has a [`DataType::Struct`] type.
-    pub(crate) fn set_struct(&mut self, _struct: Struct) {
-        debug_assert!(
-            self.ty == DataType::Struct(_struct.name().to_string()),
-            "attempted to assign struct data to a non-struct type"
-        );
-
-        self._struct = Some(_struct)
+        Self { ty, source }
     }
 
     pub(crate) fn source(&self) -> SourceRange {
@@ -105,6 +135,13 @@ impl From<Type> for DataType {
 impl<'a> From<&'a Type> for &'a DataType {
     fn from(value: &'a Type) -> Self {
         &value.ty
+    }
+}
+
+/// Helper for converting a [`Type`] into a [`DataType`].
+impl<'a> From<&'a mut Type> for &'a mut DataType {
+    fn from(value: &'a mut Type) -> Self {
+        &mut value.ty
     }
 }
 
@@ -153,12 +190,12 @@ impl FromIterator<Type> for Types {
     }
 }
 
-impl<'a> IntoIterator for &'a Types {
-    type Item = &'a Type;
-    type IntoIter = std::slice::Iter<'a, Type>;
+impl IntoIterator for Types {
+    type Item = Type;
+    type IntoIter = std::vec::IntoIter<Type>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.iter()
+        self.0.into_iter()
     }
 }
 

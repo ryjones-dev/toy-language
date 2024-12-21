@@ -16,7 +16,7 @@ impl SourceRange {
     /// Combines two source ranges, returning a new [`SourceRange`] that starts at the start
     /// of this range and ends at the end of the other range.
     pub(crate) fn combine(self, other: Self) -> Self {
-        debug_assert!(self.start <= other.end);
+        assert!(self.start <= other.end);
 
         Self {
             start: self.start,

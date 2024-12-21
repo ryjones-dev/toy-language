@@ -4,14 +4,26 @@ Object {
     y float,
 }
 
+Object2 {
+    obj Object
+}
+
+test(obj Object) -> Object2 {
+    Object2 {
+        obj: obj
+    }
+}
+
 main(arg1 float, arg2 float) -> float {
-    obj1 = Object{ isEnabled: false, }
-    obj2 = Object {
+    obj = Object {
         isEnabled: true,
         x: arg1,
         y: arg2,
     }
 
-    obj1.x = obj1.x + obj2.x
-    obj1.x
+    obj2 = test(obj)
+
+    # obj1.x = obj1.x + obj2.x
+    # obj1.x
+    0.
 }

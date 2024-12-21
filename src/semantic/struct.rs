@@ -9,6 +9,7 @@ use crate::{
 
 use super::{
     diagnostic::{diag_newly_defined, diag_originally_defined, diag_struct_name_label},
+    scope_tracker::ScopeTracker,
     Struct,
 };
 
@@ -24,6 +25,11 @@ pub(super) enum StructError {
     RecursiveStructDefinitionError {
         _struct: Struct,
         recursive_member: StructMember,
+    },
+    #[error("unknown struct member type")]
+    UnknownStructMemberTypeError {
+        _struct: Struct,
+        member: StructMember,
     },
 }
 
@@ -51,14 +57,28 @@ impl From<StructError> for Diagnostic {
             ),
             StructError::RecursiveStructDefinitionError {
                 ref _struct,
-                recursive_member: ref recursive_memeber,
+                ref recursive_member,
             } => Self::new(&err, DiagnosticLevel::Error).with_context(
                 DiagnosticContext::new(DiagnosticMessage::new(
                     format!(
                         "struct has infinite size due to member `{}`",
-                        recursive_memeber.name()
+                        recursive_member.name()
                     ),
-                    recursive_memeber.source(),
+                    recursive_member.source(),
+                ))
+                .with_labels(vec![diag_struct_name_label(_struct)]),
+            ),
+            StructError::UnknownStructMemberTypeError {
+                ref _struct,
+                ref member,
+            } => Self::new(&err, DiagnosticLevel::Error).with_context(
+                DiagnosticContext::new(DiagnosticMessage::new(
+                    format!(
+                        "struct member `{}` has unknown type `{}`",
+                        member.name(),
+                        member.get_type()
+                    ),
+                    member.source(),
                 ))
                 .with_labels(vec![diag_struct_name_label(_struct)]),
             ),
@@ -66,32 +86,61 @@ impl From<StructError> for Diagnostic {
     }
 }
 
-pub(super) fn analyze_struct(_struct: &Struct) -> Vec<StructError> {
+pub(super) fn analyze_struct<'a>(
+    _struct: &'a mut Struct,
+    scope_tracker: &ScopeTracker,
+) -> Vec<StructError> {
     let mut errors = Vec::new();
 
+    // Check for any struct members with the same name
     let mut index = HashSet::new();
     for member in _struct.members() {
-        // Check for any struct members with the same name
         if !index.insert(member) {
             errors.push(StructError::DuplicateMemberError {
                 _struct: _struct.clone(),
-                original: (*index.get(member).expect(
-                    "couldn't find struct member after confirming it was already inserted",
-                ))
+                original: (*index
+                    .get(member)
+                    .expect("couldn't find struct member after it was inserted"))
                 .clone(),
                 new: member.clone(),
             });
         }
+    }
 
-        // Check if the member has the same type as the struct.
-        // We cannot allow this because the struct wouldn't have a defined size
-        // at compile time.
-        if DataType::from(member.get_type().clone()) == DataType::Struct(_struct.name().to_string())
-        {
-            errors.push(StructError::RecursiveStructDefinitionError {
-                _struct: _struct.clone(),
-                recursive_member: member.clone(),
-            });
+    // This is done in a separate loop to satisfy the borrow checker.
+    let struct_clone = _struct.clone();
+    for member in _struct.members_mut() {
+        match member.get_type_mut().into() {
+            // Check if the member has the same type as the struct.
+            // We cannot allow this because the struct would have an infinite size.
+            &mut DataType::Struct { ref name, .. } if *name == struct_clone.name().to_string() => {
+                errors.push(StructError::RecursiveStructDefinitionError {
+                    _struct: struct_clone.clone(),
+                    recursive_member: member.clone(),
+                })
+            }
+
+            // Check if the member refers to a different struct but doesn't have a
+            // copy of the struct populated yet. If not, populate it.
+            &mut DataType::Struct {
+                ref name,
+                _struct: ref mut member_struct,
+            } if member_struct.is_none() => {
+                match scope_tracker.get_struct(&**name) {
+                    Some(s) => {
+                        *member_struct = Some(s.clone().into());
+                    }
+
+                    // The struct this member is referring to doesn't exist.
+                    None => errors.push(StructError::UnknownStructMemberTypeError {
+                        _struct: struct_clone.clone(),
+                        member: member.clone(),
+                    }),
+                }
+            }
+
+            // Don't do anything special for members with non-struct data types.
+            _ => {}
         }
     }
 

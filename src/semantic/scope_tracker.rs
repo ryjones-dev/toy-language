@@ -26,7 +26,7 @@ struct FunctionMetadata {
 #[derive(Debug)]
 struct StructMetadata {
     _struct: Struct,
-    read_count: i32,
+    read_count: RefCell<i32>,
 }
 
 /// A [`ScopeTracker`] captures the definitions and variables that the code within a scope has access to.
@@ -44,7 +44,7 @@ pub(super) struct ScopeTracker<'a> {
     // RefCell is needed so we can update metadata during read access
     variable_metadata: HashMap<String, RefCell<VariableMetadata>>,
     function_metadata: HashMap<String, RefCell<FunctionMetadata>>,
-    struct_metadata: HashMap<String, RefCell<StructMetadata>>,
+    struct_metadata: HashMap<String, StructMetadata>,
 }
 
 impl<'a> ScopeTracker<'a> {
@@ -60,9 +60,9 @@ impl<'a> ScopeTracker<'a> {
 
 impl ScopeTracker<'_> {
     /// Returns a [`Variable`] with the given name, or [`None`] if the variable is not in scope.
-    pub(super) fn get_var<'a>(
+    pub(super) fn get_var<'s>(
         &self,
-        name: impl Into<&'a str> + Eq + std::hash::Hash,
+        name: impl Into<&'s str> + Eq + std::hash::Hash,
     ) -> Option<Ref<Variable>> {
         let name = name.into();
         match self.variable_metadata.get(name) {
@@ -101,9 +101,9 @@ impl ScopeTracker<'_> {
     }
 
     /// Returns a [`FunctionSignature`] with the given name, or [`None`] if the function is not in scope.
-    pub(super) fn get_func_sig<'a>(
+    pub(super) fn get_func_sig<'s>(
         &self,
-        name: impl Into<&'a str> + Eq + std::hash::Hash,
+        name: impl Into<&'s str> + Eq + std::hash::Hash,
     ) -> Option<Ref<FunctionSignature>> {
         let name = name.into();
         match self.function_metadata.get(name) {
@@ -157,17 +157,15 @@ impl ScopeTracker<'_> {
     }
 
     /// Returns a [`Struct`] with the given name, or [`None`] if the struct is not in scope.
-    pub(super) fn get_struct<'a>(
+    pub(super) fn get_struct<'s>(
         &self,
-        name: impl Into<&'a str> + Eq + std::hash::Hash,
-    ) -> Option<Ref<Struct>> {
+        name: impl Into<&'s str> + Eq + std::hash::Hash,
+    ) -> Option<&Struct> {
         let name = name.into();
         match self.struct_metadata.get(name) {
             Some(struct_meta) => {
-                struct_meta.borrow_mut().read_count += 1;
-                Some(Ref::map(struct_meta.borrow(), |struct_meta| {
-                    &struct_meta._struct
-                }))
+                *struct_meta.read_count.borrow_mut() += 1;
+                Some(&struct_meta._struct)
             }
             None => match &self.outer_scope {
                 Some(outer_scope) => outer_scope.get_struct(name),
@@ -180,20 +178,21 @@ impl ScopeTracker<'_> {
     ///
     /// Returns [`None`] if the variable was added successfully,
     /// or the previously defined [`Struct`] if it has already been defined.
-    pub(super) fn insert_struct(&mut self, _struct: Struct) -> Option<Ref<Struct>> {
+    pub(super) fn insert_struct(&mut self, _struct: Struct) -> Option<&Struct> {
         let struct_name: &str = _struct.name().into();
         if self.struct_metadata.contains_key(struct_name) {
-            return self.struct_metadata.get(struct_name).map(|struct_meta| {
-                Ref::map(struct_meta.borrow(), |struct_meta| &struct_meta._struct)
-            });
+            return self
+                .struct_metadata
+                .get(struct_name)
+                .map(|struct_meta| &struct_meta._struct);
         }
 
         self.struct_metadata.insert(
             struct_name.to_string(),
-            RefCell::new(StructMetadata {
+            StructMetadata {
                 _struct,
-                read_count: 0,
-            }),
+                read_count: RefCell::new(0),
+            },
         );
         None
     }
@@ -226,12 +225,10 @@ impl ScopeTracker<'_> {
             }
         }
 
-        for (_, mut struct_meta) in self.struct_metadata {
+        for (_, struct_meta) in self.struct_metadata {
             // Ignore discarded structs
-            if !struct_meta.get_mut()._struct.is_discarded()
-                && struct_meta.get_mut().read_count == 0
-            {
-                unused_structs.push(struct_meta.get_mut()._struct.clone());
+            if !struct_meta._struct.is_discarded() && struct_meta.read_count == 0.into() {
+                unused_structs.push(struct_meta._struct);
             }
         }
 

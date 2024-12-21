@@ -1,7 +1,7 @@
 use cranelift::{
     codegen::ir::{
         condcodes::{FloatCC, IntCC},
-        AbiParam, InstBuilder, StackSlotData, StackSlotKind, Value,
+        AbiParam, InstBuilder, Value,
     },
     frontend::FunctionBuilder,
 };
@@ -13,7 +13,7 @@ use crate::{
         },
         function::FunctionSignature,
         identifier::Identifier,
-        types::DataType,
+        types::{DataType, Type},
         variable::Variable,
     },
     semantic::EXPECT_VAR_TYPE,
@@ -29,20 +29,9 @@ use super::block::BlockVariables;
 /// It is intended to be used in places where it semantically makes sense to represent
 /// an expression's resulting value after evaluation.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(super) enum ExpressionValue {
-    /// Captures data necessary to generate a variable.
-    ///
-    /// Variables in a codegen context refer to basic values such as
-    /// integers and floats. These are values that can be wholly loaded
-    /// into a single register.
-    VariableValue { val: Value, ty: DataType },
-
-    /// Captures data necessary to generate a stack frame.
-    ///
-    /// Stack frames are used to store composite types such as structs.
-    /// In other words, values that can't find in a single register but
-    /// must be kept together.
-    StackValue {},
+pub(super) struct ExpressionValue {
+    val: Value,
+    ty: DataType,
 }
 
 impl From<ExpressionValue> for Value {
@@ -146,54 +135,46 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                 let (values, _) = self.generate(*expression);
 
                 // Declare and define the variables
-                for (i, variable) in variables.into_iter().enumerate() {
+                let mut value_index = 0;
+                for variable in variables.into_iter() {
                     // Only declare and define variables if they are not discarded
                     if !variable.is_discarded() {
-                        let cranelift_variable = cranelift::frontend::Variable::from_u32(
-                            self.block_vars.var(variable.name()),
-                        );
+                        let block_vars = self.block_vars.block_vars(variable);
+                        for block_var in block_vars {
+                            let cranelift_variable =
+                                cranelift::frontend::Variable::from_u32(block_var.index);
 
-                        // Intentionally ignore the error, since we don't care if the variable has already been declared
-                        let _ = self.builder.try_declare_var(
-                            cranelift_variable,
-                            variable.get_type().expect(EXPECT_VAR_TYPE).into(),
-                        );
-                        self.builder.def_var(cranelift_variable, values[i].into());
+                            // Intentionally ignore the error, since we don't care if the variable has already been declared
+                            let _ = self
+                                .builder
+                                .try_declare_var(cranelift_variable, block_var.ty.into());
+
+                            self.builder
+                                .def_var(cranelift_variable, values[value_index].clone().into());
+
+                            value_index += 1;
+                        }
                     }
                 }
 
                 (vec![], false)
             }
             Expression::StructInstantiation {
-                name,
-                members,
-                source,
-                _struct,
+                members, _struct, ..
             } => {
-                for (member_name, member_expression) in members {
-                    let (member_values, _) = self.generate(member_expression);
+                let mut values = Vec::new();
+
+                for (_, member_expression) in members {
+                    let (mut member_values, _) = self.generate(member_expression);
                     semantic_assert!(
                         member_values.len() == 1,
-                        "member expression returns multiple values"
+                        "member expression did not return a single value"
                     );
+
+                    values.append(&mut member_values);
                 }
 
-                let stack_slot = self.builder.create_sized_stack_slot(StackSlotData::new(
-                    StackSlotKind::ExplicitSlot,
-                    member_size,
-                ));
-
-                self.builder
-                    .ins()
-                    .stack_store(member_values[0], stack_slot, offset);
-
-                self.builder.ins().stack_addr(
-                    cranelift::codegen::ir::types::I64,
-                    stack_slot,
-                    offset,
-                );
-
-                (vec![], false)
+                (values, false)
             }
             Expression::FunctionReturn { expression, .. } => {
                 // Generate IR for the return value expression
@@ -202,8 +183,8 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                 // Add the IR instruction to actually return from the function
                 self.builder.ins().return_(
                     &return_values
-                        .iter()
-                        .map(|value| (*value).into())
+                        .into_iter()
+                        .map(|value| value.into())
                         .collect::<Vec<Value>>(),
                 );
 
@@ -230,9 +211,9 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                 let (cond_values, _) = self.generate(*cond_expression);
                 semantic_assert!(
                     cond_values.len() == 1,
-                    "if condition returns multiple values"
+                    "if condition did not return a single value"
                 );
-                let cond_value = cond_values[0];
+                let cond_value = cond_values.into_iter().nth(0).unwrap();
 
                 let then_block = self.builder.create_block();
                 let else_block = self.builder.create_block();
@@ -251,7 +232,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                         merge_block,
                         &then_values
                             .iter()
-                            .map(|val| (*val).into())
+                            .map(|val| val.clone().into())
                             .collect::<Vec<Value>>(),
                     );
                 }
@@ -268,7 +249,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                             merge_block,
                             &else_values
                                 .iter()
-                                .map(|val| (*val).into())
+                                .map(|val| val.clone().into())
                                 .collect::<Vec<Value>>(),
                         );
                     }
@@ -279,14 +260,14 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                     result_values = then_values;
                     for result_value in &result_values {
                         self.builder
-                            .append_block_param(merge_block, result_value.ty.into());
+                            .append_block_param(merge_block, result_value.ty.clone().into());
                     }
                 } else if !else_values.is_empty() && !else_func_return {
                     result_values = else_values;
                     // Only add the merge block params if the then block did a function return and the else block didn't
                     for result_value in &result_values {
                         self.builder
-                            .append_block_param(merge_block, result_value.ty.into());
+                            .append_block_param(merge_block, result_value.ty.clone().into());
                     }
                 }
 
@@ -321,7 +302,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                 vec![self.generate_unary_operation(operation_type, *expression)],
                 false,
             ),
-            Expression::Variable(variable) => (vec![self.generate_variable(variable)], false),
+            Expression::Variable(variable) => (self.generate_variable(variable), false),
             Expression::IntLiteral(literal) => {
                 (vec![self.generate_int_literal(literal.val())], false)
             }
@@ -351,8 +332,8 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
             "right boolean operand expression did not return a single value"
         );
 
-        let left_value = left_values[0];
-        let right_value = right_values[0];
+        let left_value = left_values.into_iter().nth(0).unwrap();
+        let right_value = right_values.into_iter().nth(0).unwrap();
         semantic_assert!(
             left_value.ty == right_value.ty,
             "lhs and rhs types of boolean operation are mismatched"
@@ -376,6 +357,9 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                     ),
                     ty: DataType::Bool,
                 },
+                DataType::Struct { .. } => {
+                    unreachable!("attempted to compare non-comparable values")
+                }
             },
             BooleanComparisonType::NotEqual => match left_value.ty {
                 DataType::Int | DataType::Bool => ExpressionValue {
@@ -394,6 +378,9 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                     ),
                     ty: DataType::Bool,
                 },
+                DataType::Struct { .. } => {
+                    unreachable!("attempted to compare non-comparable values")
+                }
             },
             BooleanComparisonType::LessThan => match left_value.ty {
                 DataType::Int | DataType::Bool => ExpressionValue {
@@ -412,6 +399,9 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                     ),
                     ty: DataType::Bool,
                 },
+                DataType::Struct { .. } => {
+                    unreachable!("attempted to compare non-comparable values")
+                }
             },
             BooleanComparisonType::LessThanEqual => match left_value.ty {
                 DataType::Int | DataType::Bool => ExpressionValue {
@@ -430,6 +420,9 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                     ),
                     ty: DataType::Bool,
                 },
+                DataType::Struct { .. } => {
+                    unreachable!("attempted to compare non-comparable values")
+                }
             },
             BooleanComparisonType::GreaterThan => match left_value.ty {
                 DataType::Int | DataType::Bool => ExpressionValue {
@@ -448,6 +441,9 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                     ),
                     ty: DataType::Bool,
                 },
+                DataType::Struct { .. } => {
+                    unreachable!("attempted to compare non-comparable values")
+                }
             },
             BooleanComparisonType::GreaterThanEqual => match left_value.ty {
                 DataType::Int | DataType::Bool => ExpressionValue {
@@ -466,6 +462,9 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                     ),
                     ty: DataType::Bool,
                 },
+                DataType::Struct { .. } => {
+                    unreachable!("attempted to compare non-comparable values")
+                }
             },
         }
     }
@@ -487,8 +486,8 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
             "right binary operand expression did not return a single value"
         );
 
-        let left_value = left_values[0];
-        let right_value = right_values[0];
+        let left_value = left_values.into_iter().nth(0).unwrap();
+        let right_value = right_values.into_iter().nth(0).unwrap();
         semantic_assert!(
             left_value.ty == right_value.ty,
             "lhs and rhs types of binary operation are mismatched"
@@ -500,68 +499,72 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                     val: self
                         .builder
                         .ins()
-                        .iadd(left_value.into(), right_value.into()),
+                        .iadd(left_value.clone().into(), right_value.into()),
                     ty: left_value.ty,
                 },
                 DataType::Float => ExpressionValue {
                     val: self
                         .builder
                         .ins()
-                        .fadd(left_value.into(), right_value.into()),
+                        .fadd(left_value.clone().into(), right_value.into()),
                     ty: left_value.ty,
                 },
                 DataType::Bool => unreachable!("attempted to add non-numeric values"),
+                DataType::Struct { .. } => unreachable!("attempted to add non-numeric values"),
             },
             BinaryMathOperationType::Subtract => match left_value.ty {
                 DataType::Int => ExpressionValue {
                     val: self
                         .builder
                         .ins()
-                        .isub(left_value.into(), right_value.into()),
+                        .isub(left_value.clone().into(), right_value.into()),
                     ty: left_value.ty,
                 },
                 DataType::Float => ExpressionValue {
                     val: self
                         .builder
                         .ins()
-                        .fsub(left_value.into(), right_value.into()),
+                        .fsub(left_value.clone().into(), right_value.into()),
                     ty: left_value.ty,
                 },
                 DataType::Bool => unreachable!("attempted to subtract non-numeric values"),
+                DataType::Struct { .. } => unreachable!("attempted to subtract non-numeric values"),
             },
             BinaryMathOperationType::Multiply => match left_value.ty {
                 DataType::Int => ExpressionValue {
                     val: self
                         .builder
                         .ins()
-                        .imul(left_value.into(), right_value.into()),
+                        .imul(left_value.clone().into(), right_value.into()),
                     ty: left_value.ty,
                 },
                 DataType::Float => ExpressionValue {
                     val: self
                         .builder
                         .ins()
-                        .fmul(left_value.into(), right_value.into()),
+                        .fmul(left_value.clone().into(), right_value.into()),
                     ty: left_value.ty,
                 },
                 DataType::Bool => unreachable!("attempted to multiply non-numeric values"),
+                DataType::Struct { .. } => unreachable!("attempted to multiply non-numeric values"),
             },
             BinaryMathOperationType::Divide => match left_value.ty {
                 DataType::Int => ExpressionValue {
                     val: self
                         .builder
                         .ins()
-                        .udiv(left_value.into(), right_value.into()),
+                        .udiv(left_value.clone().into(), right_value.into()),
                     ty: left_value.ty,
                 },
                 DataType::Float => ExpressionValue {
                     val: self
                         .builder
                         .ins()
-                        .fdiv(left_value.into(), right_value.into()),
+                        .fdiv(left_value.clone().into(), right_value.into()),
                     ty: left_value.ty,
                 },
                 DataType::Bool => unreachable!("attempted to divide non-numeric values"),
+                DataType::Struct { .. } => unreachable!("attempted to divide non-numeric values"),
             },
         }
     }
@@ -578,17 +581,20 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         );
         match operation_type {
             UnaryMathOperationType::Negate => {
-                let value = values[0];
+                let value = values.into_iter().nth(0).unwrap();
                 match value.ty {
                     DataType::Int => ExpressionValue {
-                        val: self.builder.ins().ineg(value.into()),
+                        val: self.builder.ins().ineg(value.clone().into()),
                         ty: value.ty,
                     },
                     DataType::Float => ExpressionValue {
-                        val: self.builder.ins().fneg(value.into()),
+                        val: self.builder.ins().fneg(value.clone().into()),
                         ty: value.ty,
                     },
                     DataType::Bool => unreachable!("attempted to negate non-numeric value"),
+                    DataType::Struct { .. } => {
+                        unreachable!("attempted to negate non-numeric value")
+                    }
                 }
             }
         }
@@ -606,12 +612,27 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         // This allows for any arbitrary function definition order.
         let mut sig = self.module.make_signature();
 
-        for ty in &func_sig.params.types() {
-            sig.params.push(AbiParam::new(ty.into()))
+        for ty in func_sig.params.types() {
+            let primitive_types = DataType::from(ty).primitive_types();
+            for primitive_type in primitive_types {
+                sig.params.push(AbiParam::new(primitive_type.into()))
+            }
         }
 
-        for ty in &func_sig.returns {
-            sig.returns.push(AbiParam::new(ty.into()));
+        let mut primitive_return_types = Vec::new();
+        for ty in func_sig.returns {
+            let type_source = ty.source();
+
+            let primitive_types = DataType::from(ty).primitive_types();
+            for primitive_type in primitive_types {
+                sig.returns
+                    .push(AbiParam::new(primitive_type.clone().into()));
+
+                // Keep track of the primitive return types so that they can be associated
+                // with the function call's return values.
+                // Use the same type source for each primitive type if it is expanded into multiple.
+                primitive_return_types.push(Type::new(primitive_type, type_source));
+            }
         }
 
         let func_id_to_call = self
@@ -639,8 +660,8 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         let call = self.builder.ins().call(
             func_ref_to_call,
             &values
-                .iter()
-                .map(|val| (*val).into())
+                .into_iter()
+                .map(|val| val.into())
                 .collect::<Vec<Value>>(),
         );
 
@@ -649,30 +670,31 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
             self.builder
                 .inst_results(call)
                 .into_iter()
-                .zip(func_sig.returns.into_iter())
+                .zip(primitive_return_types.into_iter())
                 .map(|(value, ty)| ExpressionValue {
                     val: *value,
-                    ty: (*ty).into(),
+                    ty: ty.into(),
                 })
                 .collect(),
             false,
         )
     }
 
-    fn generate_variable(&mut self, variable: Variable) -> ExpressionValue {
-        semantic_assert!(
-            variable.get_type().is_some(),
-            "variable does not have a type"
-        );
+    fn generate_variable(&mut self, variable: Variable) -> Vec<ExpressionValue> {
+        let var_data_type: DataType = variable.get_type().clone().expect(EXPECT_VAR_TYPE).into();
+        let block_vars = self.block_vars.block_vars(variable);
 
-        ExpressionValue {
-            ty: variable.get_type().unwrap().into(),
-            val: self
-                .builder
-                .use_var(cranelift::frontend::Variable::from_u32(
-                    self.block_vars.var(variable.name()),
-                )),
+        let mut values = Vec::with_capacity(block_vars.len());
+        for block_var in block_vars {
+            values.push(ExpressionValue {
+                ty: var_data_type.clone(),
+                val: self
+                    .builder
+                    .use_var(cranelift::frontend::Variable::from_u32(block_var.index)),
+            });
         }
+
+        values
     }
 
     fn generate_int_literal(&mut self, value: i64) -> ExpressionValue {

@@ -1,7 +1,15 @@
-use cranelift::prelude::*;
+use cranelift::{
+    codegen::ir::AbiParam,
+    frontend::{FunctionBuilder, FunctionBuilderContext, Variable as CraneliftVariable},
+};
 use thiserror::Error;
 
-use crate::parser::{ast::AbstractSyntaxTree, definition::Definition, function::Function};
+use crate::{
+    parser::{
+        ast::AbstractSyntaxTree, definition::Definition, function::Function, types::DataType,
+    },
+    semantic::EXPECT_VAR_TYPE,
+};
 
 use super::{
     block::BlockVariables,
@@ -132,7 +140,7 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
         let mut function_context = FunctionBuilderContext::new();
         for definition in ast {
             match definition {
-                Definition::Struct(_struct) => { /* TODO */ }
+                Definition::Struct(_struct) => {}
                 Definition::Function(function) => {
                     // Only generate functions if they are not discarded
                     if !function.signature.is_discarded() {
@@ -181,33 +189,42 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
 
         // Add the function's parameters to the context
         for param in &signature.params {
-            context
-                .func
-                .signature
-                .params
-                .push(AbiParam::new(param.into()));
+            let primitive_types =
+                DataType::from(param.get_type().clone().expect(EXPECT_VAR_TYPE)).primitive_types();
+            for primitive_type in primitive_types {
+                context
+                    .func
+                    .signature
+                    .params
+                    .push(AbiParam::new(primitive_type.clone().into()));
+            }
         }
 
         // Add the function's return types to the context
-        for return_type in &signature.returns {
-            context
-                .func
-                .signature
-                .returns
-                .push(AbiParam::new(return_type.into()));
+        for return_type in signature.returns {
+            let primitive_types = DataType::from(return_type).primitive_types();
+            for primitive_type in primitive_types {
+                context
+                    .func
+                    .signature
+                    .returns
+                    .push(AbiParam::new(primitive_type.into()));
+            }
         }
+
+        let function_name = signature.name.to_string();
 
         // We can now declare the function to Cranelift from the context
         let function_id = self
             .module
             .declare_function(
-                &signature.name.to_string(),
+                &function_name,
                 cranelift_module::Linkage::Local,
                 &context.func.signature,
             )
             .map_err(|err| {
                 Self::check_codegen_error(&err);
-                CodeGenError::FunctionDeclarationError(signature.name.to_string(), err.to_string())
+                CodeGenError::FunctionDeclarationError(function_name.clone(), err.to_string())
             })?;
 
         // Instantiate the function builder and create the function entry block where IR code will be emitted.
@@ -220,11 +237,17 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
 
         // Prime the block variables with the function parameters
         let mut block_vars = BlockVariables::new();
-        for (i, function_param) in signature.params.iter().enumerate() {
-            let cranelift_variable =
-                cranelift::frontend::Variable::from_u32(block_vars.var(function_param.name()));
-            builder.declare_var(cranelift_variable, function_param.into());
-            builder.def_var(cranelift_variable, builder.block_params(function_block)[i]);
+        for function_param in signature.params.into_iter() {
+            let b_vars = block_vars.block_vars(function_param);
+            for b_var in b_vars {
+                let cranelift_variable = CraneliftVariable::from_u32(b_var.index);
+
+                builder.declare_var(cranelift_variable, b_var.ty.into());
+                builder.def_var(
+                    cranelift_variable,
+                    builder.block_params(function_block)[b_var.index as usize],
+                );
+            }
         }
 
         // Now we can generate the function scope by generating each expression in the scope
@@ -242,11 +265,11 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
             .define_function(function_id, context)
             .map_err(|err| {
                 Self::check_codegen_error(&err);
-                CodeGenError::FunctionDefinitionError(signature.name.to_string(), err.to_string())
+                CodeGenError::FunctionDefinitionError(function_name.clone(), err.to_string())
             })?;
 
         // Take note if this is the main function
-        if signature.name.to_string() == "main" {
+        if function_name == "main" {
             self.main_function_id = Some(function_id);
         }
 
@@ -269,7 +292,7 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
     fn check_codegen_error(err: &cranelift_module::ModuleError) {
         match err {
             cranelift_module::ModuleError::Compilation(ref inner_err) => match inner_err {
-                codegen::CodegenError::Verifier(inner_err) => panic!(
+                cranelift::codegen::CodegenError::Verifier(inner_err) => panic!(
                     "Codegen error. This is a bug in the compiler.\n{}:\n{}",
                     err.to_string(),
                     inner_err.to_string()

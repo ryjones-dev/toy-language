@@ -62,7 +62,7 @@ pub(super) enum ExpressionError {
         struct_instance_source: SourceRange,
     },
     #[error("unknown struct")]
-    StructUnknownError(Identifier, SourceRange),
+    StructUnknownError(String, SourceRange),
     #[error("return value mismatch")]
     FunctionReturnValueMismatchError {
         func_sig: FunctionSignature,
@@ -550,7 +550,10 @@ pub(super) fn analyze_expression(
                     }
                 }
                 None => {
-                    errors.push(ExpressionError::StructUnknownError(name.clone(), *source));
+                    errors.push(ExpressionError::StructUnknownError(
+                        name.to_string(),
+                        *source,
+                    ));
                     return (types, errors);
                 }
             }
@@ -604,7 +607,13 @@ pub(super) fn analyze_expression(
                 });
             }
 
-            types.push(Type::new(DataType::Struct(name.to_string()), name.source()));
+            types.push(Type::new(
+                DataType::Struct {
+                    name: _struct.as_ref().expect(EXPECT_STRUCT).name().to_string(),
+                    _struct: _struct.clone(),
+                },
+                name.source(),
+            ));
 
             (types, errors)
         }
@@ -754,7 +763,10 @@ pub(super) fn analyze_expression(
                     BooleanComparisonType::Equal | BooleanComparisonType::NotEqual => {
                         match expect_single_equal_types(lhs, rhs, &lhs_types, &rhs_types) {
                             Ok(ty) => match ty.into() {
-                                &DataType::Struct(ref _name) => {
+                                &DataType::Struct {
+                                    name: _,
+                                    _struct: _,
+                                } => {
                                     unimplemented!(
                                         "comparing equality for structs is not yet implemented"
                                     )
@@ -782,7 +794,10 @@ pub(super) fn analyze_expression(
                                         source_range: *source,
                                     })
                                 }
-                                &DataType::Struct(ref _name) => {
+                                &DataType::Struct {
+                                    name: _,
+                                    _struct: _,
+                                } => {
                                     unimplemented!(
                                         "comparing ordering for structs is not yet implemented"
                                     )
@@ -832,7 +847,10 @@ pub(super) fn analyze_expression(
                                         source_range: *source,
                                     })
                                 }
-                                &DataType::Struct(ref _name) => {
+                                &DataType::Struct {
+                                    name: _,
+                                    _struct: _,
+                                } => {
                                     unimplemented!("binary math for structs is not yet implemented")
                                 }
                             },
@@ -875,7 +893,10 @@ pub(super) fn analyze_expression(
                                         source_range: *source,
                                     })
                                 }
-                                &DataType::Struct(ref _name) => {
+                                &DataType::Struct {
+                                    name: _,
+                                    _struct: _,
+                                } => {
                                     unimplemented!("unary math for structs is not yet implemented")
                                 }
                             },
@@ -936,7 +957,7 @@ pub(super) fn analyze_function_call(
     argument_expression: &mut Option<Expression>,
     source: &SourceRange,
     scope_tracker: &mut ScopeTracker,
-    func_sig: &FunctionSignature,
+    outer_func_sig: &FunctionSignature,
 ) -> (Option<FunctionSignature>, Vec<ExpressionError>) {
     let mut errors = Vec::new();
 
@@ -944,7 +965,8 @@ pub(super) fn analyze_function_call(
     let mut argument_types = Types::new();
 
     if let Some(argument_expression) = argument_expression {
-        let (types, mut errs) = analyze_expression(argument_expression, scope_tracker, func_sig);
+        let (types, mut errs) =
+            analyze_expression(argument_expression, scope_tracker, outer_func_sig);
         argument_types = types;
         errors.append(&mut errs);
     }

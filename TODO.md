@@ -54,7 +54,12 @@
 - [x]  Check that both scopes in an if expression return the same number and type of values, except for function returns
 - [x]  Change `split_return()` to use `split_last()` instead of `split_at()`, have `split_return()` return an Option
 - [x]  Support floating point numbers
-- [ ]  Structs
+- [x]  Struct definitions
+- [ ]  Rework references to structs (and function signatures?) in the AST to fix passing structs between functions
+- [ ]  Read source from a file instead of baking it in to the executable
+- [ ]  Allow struct definitions in function/local scopes
+- [ ]  Read or write to a struct field
+- [ ]  Pass by reference
 - [ ]  Pattern matching
 - [ ]  Add range types that represent a continuous range of values
 - [ ]  Add operator to check if int is in a range

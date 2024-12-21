@@ -23,6 +23,14 @@ impl StructMember {
         &self.ty
     }
 
+    pub(crate) fn get_type_mut(&mut self) -> &mut Type {
+        &mut self.ty
+    }
+
+    pub(crate) fn into_type(self) -> Type {
+        self.ty
+    }
+
     /// Returns a [`SourceRange`] from the start of the name to the end of the type.
     pub(crate) fn source(&self) -> SourceRange {
         self.name.source().combine(self.ty.source())
@@ -50,7 +58,7 @@ impl std::hash::Hash for StructMember {
 ///
 /// These members can be any type except for the struct type itself.
 /// Members can be accessed with a dot syntax (struct.member).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Eq)]
 pub(crate) struct Struct {
     name: Identifier,
     members: Vec<StructMember>,
@@ -74,12 +82,34 @@ impl Struct {
         &self.members
     }
 
+    pub(crate) fn members_mut(&mut self) -> &mut Vec<StructMember> {
+        &mut self.members
+    }
+
+    pub(crate) fn into_members(self) -> Vec<StructMember> {
+        self.members
+    }
+
     pub(crate) fn source(&self) -> SourceRange {
         self.source
     }
 
     pub(crate) fn is_discarded(&self) -> bool {
         self.name.is_discarded()
+    }
+}
+
+// The source range should not affect equivalence or hashing.
+// Only the name is used for equivalence and hashing.
+impl PartialEq for Struct {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl std::hash::Hash for Struct {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
     }
 }
 

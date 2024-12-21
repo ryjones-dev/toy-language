@@ -1,16 +1,17 @@
-use crate::semantic::EXPECT_VAR_TYPE;
+use crate::{parser::types::DataType, semantic::EXPECT_VAR_TYPE};
 
 use super::{
     identifier::Identifier,
     source_range::SourceRange,
     types::{Type, Types},
+    Struct,
 };
 
 /// A distinct type that is used to represent a variable.
 ///
 /// Only the name is parsable from the source code. The type will be [`None`]
 /// until semantic analysis can determine the type.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct Variable {
     name: Identifier,
     ty: Option<Type>,
@@ -30,10 +31,34 @@ impl Variable {
     }
 
     pub(crate) fn set_type(&mut self, ty: &Type) {
-        debug_assert!(self.ty.is_none(), "attempted to reassign variable type");
+        assert!(self.ty.is_none(), "attempted to reassign variable type");
 
         // Keep the variable's name source for its type
         self.ty = Some(Type::new(ty.clone().into(), self.name.source()))
+    }
+
+    pub(crate) fn update_struct_data_type(&mut self, _struct: Struct) {
+        match &mut self.ty {
+            Some(ty) => match ty.into() {
+                &mut DataType::Int | &mut DataType::Float | &mut DataType::Bool => {
+                    panic!("attempted to update struct data of variable with non-struct type")
+                }
+                &mut DataType::Struct {
+                    _struct: ref mut existing_struct,
+                    ..
+                } => match existing_struct {
+                    Some(_) => panic!(
+                        "attempted to update struct data of variable with existing struct data"
+                    ),
+                    None => *existing_struct = Some(_struct.into()),
+                },
+            },
+            None => panic!("attempted to update struct data of variable with no type set"),
+        }
+    }
+
+    pub(crate) fn into_type(self) -> Option<Type> {
+        self.ty
     }
 
     /// Returns a [`SourceRange`] from the variable name to the variable's explicit type annotation, if present.

@@ -1,3 +1,4 @@
+use expression::ExpressionError;
 use r#struct::{analyze_struct, StructError};
 use thiserror::Error;
 
@@ -5,7 +6,7 @@ use crate::{
     diagnostic::{Diagnostic, DiagnosticContext, DiagnosticLevel, DiagnosticMessage},
     parser::{
         ast::AbstractSyntaxTree, definition::Definition, function::FunctionSignature,
-        r#struct::Struct,
+        r#struct::Struct, types::DataType,
     },
 };
 
@@ -97,8 +98,9 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Vec<SemanticErr
 
     let mut global_scope_tracker = ScopeTracker::new(None);
 
-    // Add each definition to the global scope.
-    // This needs to be done first so that definition order does not matter.
+    // Add each struct definition to the global scope.
+    // This needs to be done first so that function parameters and return types
+    // can refer to the struct.
     for definition in ast.iter() {
         match definition {
             Definition::Struct(_struct) => {
@@ -109,7 +111,59 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Vec<SemanticErr
                     });
                 }
             }
+            Definition::Function(_) => {}
+        }
+    }
+
+    // Now that all structs have been added to the global scope, populate function
+    // parameters and return types with those struct types, and add the function
+    // to the global scope.
+    for definition in ast.iter_mut() {
+        match definition {
+            Definition::Struct(_) => {}
             Definition::Function(function) => {
+                // Populate the parameter's data type with the referenced struct if applicable
+                for param in function.signature.params.iter_mut() {
+                    match param.get_type().as_ref().expect(EXPECT_VAR_TYPE).into() {
+                        &DataType::Struct {
+                            ref name,
+                            ref _struct,
+                        } => match global_scope_tracker.get_struct(&**name) {
+                            Some(existing_struct) => {
+                                param.update_struct_data_type(existing_struct.clone())
+                            }
+                            None => errors.push(SemanticError::ScopeError(
+                                ScopeError::ExpressionError(ExpressionError::StructUnknownError(
+                                    name.clone(),
+                                    param.source(),
+                                )),
+                            )),
+                        },
+                        _ => {}
+                    };
+                }
+
+                // Populate the return data type with the referenced struct if applicable
+                for return_type in function.signature.returns.iter_mut() {
+                    match return_type.into() {
+                        &mut DataType::Struct {
+                            ref name,
+                            ref mut _struct,
+                        } => match global_scope_tracker.get_struct(&**name) {
+                            Some(existing_struct) => {
+                                *_struct = Some(existing_struct.clone().into())
+                            }
+                            None => errors.push(SemanticError::ScopeError(
+                                ScopeError::ExpressionError(ExpressionError::StructUnknownError(
+                                    name.clone(),
+                                    return_type.source(),
+                                )),
+                            )),
+                        },
+                        _ => {}
+                    };
+                }
+
                 if let Some(func_sig) =
                     global_scope_tracker.insert_func_sig(function.signature.clone())
                 {
@@ -126,7 +180,7 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Vec<SemanticErr
     for definition in ast.iter_mut() {
         match definition {
             Definition::Struct(_struct) => {
-                let errs = analyze_struct(_struct);
+                let errs = analyze_struct(_struct, &global_scope_tracker);
                 errors.append(
                     &mut errs
                         .into_iter()
@@ -135,7 +189,7 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Vec<SemanticErr
                 );
             }
             Definition::Function(function) => {
-                let errs = analyze_function(function, &mut global_scope_tracker);
+                let errs = analyze_function(function, &global_scope_tracker);
                 errors.append(
                     &mut errs
                         .into_iter()

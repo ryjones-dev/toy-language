@@ -6,7 +6,7 @@
 #[macro_export]
 macro_rules! semantic_assert {
         ($expression:expr, $($args:expr),*) => {
-            debug_assert!($expression, "{}. This should be caught by semantic analysis.", $($args)*);
+            assert!($expression, "{}. This should be caught by semantic analysis.", $($args)*);
         };
     }
 
