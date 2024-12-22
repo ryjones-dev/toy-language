@@ -1,3 +1,9 @@
+test(obj Object) -> Object2 {
+    Object2 {
+        obj: obj
+    }
+}
+
 Object {
     isEnabled bool,
     x float,
@@ -6,12 +12,6 @@ Object {
 
 Object2 {
     obj Object
-}
-
-test(obj Object) -> Object2 {
-    Object2 {
-        obj: obj
-    }
 }
 
 main(arg1 float, arg2 float) -> float {
@@ -25,5 +25,5 @@ main(arg1 float, arg2 float) -> float {
 
     # obj1.x = obj1.x + obj2.x
     # obj1.x
-    0.
+    1.
 }

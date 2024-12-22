@@ -166,11 +166,6 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
 
                 for (_, member_expression) in members {
                     let (mut member_values, _) = self.generate(member_expression);
-                    semantic_assert!(
-                        member_values.len() == 1,
-                        "member expression did not return a single value"
-                    );
-
                     values.append(&mut member_values);
                 }
 

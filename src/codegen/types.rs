@@ -69,10 +69,12 @@ impl DataType {
             DataType::Int => vec![self],
             DataType::Float => vec![self],
             DataType::Bool => vec![self],
-            DataType::Struct { _struct, .. } => {
+            DataType::Struct {
+                struct_data_types, ..
+            } => {
                 let mut types = Vec::new();
-                for member in _struct.expect(EXPECT_STRUCT).into_members() {
-                    types.append(&mut DataType::from(member.into_type()).primitive_types());
+                for data_type in struct_data_types.expect(EXPECT_STRUCT) {
+                    types.append(&mut data_type.primitive_types());
                 }
                 types
             }

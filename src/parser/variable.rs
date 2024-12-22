@@ -44,13 +44,21 @@ impl Variable {
                     panic!("attempted to update struct data of variable with non-struct type")
                 }
                 &mut DataType::Struct {
-                    _struct: ref mut existing_struct,
+                    ref mut struct_data_types,
                     ..
-                } => match existing_struct {
+                } => match struct_data_types {
                     Some(_) => panic!(
                         "attempted to update struct data of variable with existing struct data"
                     ),
-                    None => *existing_struct = Some(_struct.into()),
+                    None => {
+                        *struct_data_types = Some(
+                            _struct
+                                .into_members()
+                                .into_iter()
+                                .map(|member| member.into_type().into())
+                                .collect(),
+                        )
+                    }
                 },
             },
             None => panic!("attempted to update struct data of variable with no type set"),

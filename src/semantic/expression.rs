@@ -610,7 +610,12 @@ pub(super) fn analyze_expression(
             types.push(Type::new(
                 DataType::Struct {
                     name: _struct.as_ref().expect(EXPECT_STRUCT).name().to_string(),
-                    _struct: _struct.clone(),
+                    struct_data_types: _struct.clone().map(|s| {
+                        s.into_members()
+                            .into_iter()
+                            .map(|member| member.into_type().into())
+                            .collect()
+                    }),
                 },
                 name.source(),
             ));
@@ -765,7 +770,7 @@ pub(super) fn analyze_expression(
                             Ok(ty) => match ty.into() {
                                 &DataType::Struct {
                                     name: _,
-                                    _struct: _,
+                                    struct_data_types: _,
                                 } => {
                                     unimplemented!(
                                         "comparing equality for structs is not yet implemented"
@@ -796,7 +801,7 @@ pub(super) fn analyze_expression(
                                 }
                                 &DataType::Struct {
                                     name: _,
-                                    _struct: _,
+                                    struct_data_types: _,
                                 } => {
                                     unimplemented!(
                                         "comparing ordering for structs is not yet implemented"
@@ -849,7 +854,7 @@ pub(super) fn analyze_expression(
                                 }
                                 &DataType::Struct {
                                     name: _,
-                                    _struct: _,
+                                    struct_data_types: _,
                                 } => {
                                     unimplemented!("binary math for structs is not yet implemented")
                                 }
@@ -895,7 +900,7 @@ pub(super) fn analyze_expression(
                                 }
                                 &DataType::Struct {
                                     name: _,
-                                    _struct: _,
+                                    struct_data_types: _,
                                 } => {
                                     unimplemented!("unary math for structs is not yet implemented")
                                 }

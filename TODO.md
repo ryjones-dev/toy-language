@@ -55,7 +55,9 @@
 - [x]  Change `split_return()` to use `split_last()` instead of `split_at()`, have `split_return()` return an Option
 - [x]  Support floating point numbers
 - [x]  Struct definitions
-- [ ]  Rework references to structs (and function signatures?) in the AST to fix passing structs between functions
+- [x]  Reduce a `DataType`'s struct data from a copy of the whole struct to just the struct member data types
+- [x]  Fix a bug where functions with struct return types were not having their `DataType`'s struct data correctly populated
+- [ ]  Allow for arbitrary struct definition order
 - [ ]  Read source from a file instead of baking it in to the executable
 - [ ]  Allow struct definitions in function/local scopes
 - [ ]  Read or write to a struct field

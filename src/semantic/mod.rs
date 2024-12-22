@@ -98,12 +98,21 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Vec<SemanticErr
 
     let mut global_scope_tracker = ScopeTracker::new(None);
 
-    // Add each struct definition to the global scope.
+    // Analyze each struct definition and add them to the global scope.
     // This needs to be done first so that function parameters and return types
     // can refer to the struct.
-    for definition in ast.iter() {
+    // This currently doesn't allow for arbitrary struct definition ordering.
+    for definition in ast.iter_mut() {
         match definition {
             Definition::Struct(_struct) => {
+                let errs = analyze_struct(_struct, &global_scope_tracker);
+                errors.append(
+                    &mut errs
+                        .into_iter()
+                        .map(|err| SemanticError::StructError(err))
+                        .collect(),
+                );
+
                 if let Some(s) = global_scope_tracker.insert_struct(_struct.clone()) {
                     errors.push(SemanticError::StructAlreadyDefinedError {
                         original: s.clone(),
@@ -125,10 +134,9 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Vec<SemanticErr
                 // Populate the parameter's data type with the referenced struct if applicable
                 for param in function.signature.params.iter_mut() {
                     match param.get_type().as_ref().expect(EXPECT_VAR_TYPE).into() {
-                        &DataType::Struct {
-                            ref name,
-                            ref _struct,
-                        } => match global_scope_tracker.get_struct(&**name) {
+                        &DataType::Struct { ref name, .. } => match global_scope_tracker
+                            .get_struct(&**name)
+                        {
                             Some(existing_struct) => {
                                 param.update_struct_data_type(existing_struct.clone())
                             }
@@ -148,10 +156,17 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Vec<SemanticErr
                     match return_type.into() {
                         &mut DataType::Struct {
                             ref name,
-                            ref mut _struct,
+                            ref mut struct_data_types,
                         } => match global_scope_tracker.get_struct(&**name) {
                             Some(existing_struct) => {
-                                *_struct = Some(existing_struct.clone().into())
+                                *struct_data_types = Some(
+                                    existing_struct
+                                        .clone()
+                                        .into_members()
+                                        .into_iter()
+                                        .map(|member| member.into_type().into())
+                                        .collect(),
+                                );
                             }
                             None => errors.push(SemanticError::ScopeError(
                                 ScopeError::ExpressionError(ExpressionError::StructUnknownError(
@@ -176,18 +191,11 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Vec<SemanticErr
         }
     }
 
-    // Analyze each definition
+    // Analyze each function definition.
+    // Doing this in a separate loop allows for arbitrary function definition order.
     for definition in ast.iter_mut() {
         match definition {
-            Definition::Struct(_struct) => {
-                let errs = analyze_struct(_struct, &global_scope_tracker);
-                errors.append(
-                    &mut errs
-                        .into_iter()
-                        .map(|err| SemanticError::StructError(err))
-                        .collect(),
-                );
-            }
+            Definition::Struct(_struct) => {}
             Definition::Function(function) => {
                 let errs = analyze_function(function, &global_scope_tracker);
                 errors.append(

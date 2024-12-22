@@ -1,4 +1,4 @@
-use super::{source_range::SourceRange, Struct};
+use super::source_range::SourceRange;
 
 /// Represents TODO_LANG_NAME data types.
 #[derive(Debug, Clone, Eq)]
@@ -7,12 +7,12 @@ pub(crate) enum DataType {
     Float,
     Bool,
 
-    /// Struct data types contain a reference to the [`Struct`] definition
-    /// that it refers to. This reference cannot be parsed from the source code,
+    /// Struct data types contain a list of other data types that make up the [`Struct`]
+    /// that it refers to. This list cannot be parsed from the source code,
     /// so it will be [`None`] until it is populated by semantic analysis.
     Struct {
         name: String,
-        _struct: Option<Struct>,
+        struct_data_types: Option<Vec<DataType>>,
     },
 }
 
@@ -48,7 +48,7 @@ impl std::hash::Hash for DataType {
             DataType::Bool => {
                 state.write_u8(3);
             }
-            DataType::Struct { name, _struct } => {
+            DataType::Struct { name, .. } => {
                 state.write_u8(4);
                 name.hash(state);
             }
@@ -64,7 +64,7 @@ impl From<&str> for DataType {
             "bool" => DataType::Bool,
             name => DataType::Struct {
                 name: name.to_owned(),
-                _struct: None,
+                struct_data_types: None,
             },
         }
     }

@@ -124,11 +124,17 @@ pub(super) fn analyze_struct<'a>(
             // copy of the struct populated yet. If not, populate it.
             &mut DataType::Struct {
                 ref name,
-                _struct: ref mut member_struct,
-            } if member_struct.is_none() => {
+                ref mut struct_data_types,
+            } if struct_data_types.is_none() => {
                 match scope_tracker.get_struct(&**name) {
                     Some(s) => {
-                        *member_struct = Some(s.clone().into());
+                        *struct_data_types = Some(
+                            s.clone()
+                                .into_members()
+                                .into_iter()
+                                .map(|member| member.into_type().into())
+                                .collect(),
+                        );
                     }
 
                     // The struct this member is referring to doesn't exist.
