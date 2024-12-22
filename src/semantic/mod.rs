@@ -98,21 +98,11 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Vec<SemanticErr
 
     let mut global_scope_tracker = ScopeTracker::new(None);
 
-    // Analyze each struct definition and add them to the global scope.
-    // This needs to be done first so that function parameters and return types
-    // can refer to the struct.
-    // This currently doesn't allow for arbitrary struct definition ordering.
-    for definition in ast.iter_mut() {
+    // Add each struct definition to the global scope.
+    // This needs to be done first so that other definitions can refer to the struct.
+    for definition in ast.iter() {
         match definition {
             Definition::Struct(_struct) => {
-                let errs = analyze_struct(_struct, &global_scope_tracker);
-                errors.append(
-                    &mut errs
-                        .into_iter()
-                        .map(|err| SemanticError::StructError(err))
-                        .collect(),
-                );
-
                 if let Some(s) = global_scope_tracker.insert_struct(_struct.clone()) {
                     errors.push(SemanticError::StructAlreadyDefinedError {
                         original: s.clone(),
@@ -124,9 +114,26 @@ pub(crate) fn semantic_analysis(ast: &mut AbstractSyntaxTree) -> Vec<SemanticErr
         }
     }
 
-    // Now that all structs have been added to the global scope, populate function
-    // parameters and return types with those struct types, and add the function
-    // to the global scope.
+    // Analyze each struct definition.
+    // Doing this in a separate loop allows for arbitrary struct definition order.
+    for definition in ast.iter_mut() {
+        match definition {
+            Definition::Struct(_struct) => {
+                let errs = analyze_struct(_struct, &mut global_scope_tracker);
+                errors.append(
+                    &mut errs
+                        .into_iter()
+                        .map(|err| SemanticError::StructError(err))
+                        .collect(),
+                );
+            }
+            Definition::Function(_) => {}
+        }
+    }
+
+    // Now that all structs have been analyzed and added to the global scope,
+    // populate function parameters and return types with those struct types,
+    // and add the function to the global scope.
     for definition in ast.iter_mut() {
         match definition {
             Definition::Struct(_) => {}

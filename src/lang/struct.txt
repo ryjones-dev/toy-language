@@ -4,14 +4,14 @@ test(obj Object) -> Object2 {
     }
 }
 
+Object2 {
+    obj Object
+}
+
 Object {
     isEnabled bool,
     x float,
     y float,
-}
-
-Object2 {
-    obj Object
 }
 
 main(arg1 float, arg2 float) -> float {

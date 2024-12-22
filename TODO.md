@@ -57,7 +57,7 @@
 - [x]  Struct definitions
 - [x]  Reduce a `DataType`'s struct data from a copy of the whole struct to just the struct member data types
 - [x]  Fix a bug where functions with struct return types were not having their `DataType`'s struct data correctly populated
-- [ ]  Allow for arbitrary struct definition order
+- [x]  Allow for arbitrary struct definition order
 - [ ]  Read source from a file instead of baking it in to the executable
 - [ ]  Allow struct definitions in function/local scopes
 - [ ]  Read or write to a struct field

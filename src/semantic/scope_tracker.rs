@@ -5,6 +5,8 @@ use std::{
 
 use crate::parser::{function::FunctionSignature, r#struct::Struct, variable::Variable};
 
+use super::DataType;
+
 /// A wrapping struct to keep track of how many times a [`Variable`] is read.
 /// This is later used to determine unused variables.
 #[derive(Debug)]
@@ -174,6 +176,22 @@ impl ScopeTracker<'_> {
         }
     }
 
+    // Internal use only. Used to get a mutable reference to a struct so that its member
+    // data types can be updated once the struct types are known.
+    fn get_struct_mut<'s>(
+        &mut self,
+        name: impl Into<&'s str> + Eq + std::hash::Hash,
+    ) -> Option<&mut Struct> {
+        let name = name.into();
+        match self.struct_metadata.get_mut(name) {
+            Some(struct_meta) => {
+                *struct_meta.read_count.get_mut() += 1;
+                Some(&mut struct_meta._struct)
+            }
+            None => panic!("can only get mutable references to structs in the current scope"),
+        }
+    }
+
     /// Adds the given [`Struct`] to the scope.
     ///
     /// Returns [`None`] if the variable was added successfully,
@@ -195,6 +213,31 @@ impl ScopeTracker<'_> {
             },
         );
         None
+    }
+
+    /// Finds the given struct member in the given struct that has a [`Struct`] data type,
+    /// and updates that data type with the [`DataType`]s of that [`Struct`].
+    pub(super) fn update_struct_data_types<'s>(
+        &mut self,
+        name: impl Into<&'s str> + Eq + std::hash::Hash,
+        member_name: impl Into<&'s str> + Eq,
+        data_types: Vec<DataType>,
+    ) {
+        let member_name = member_name.into();
+        if let Some(_struct) = self.get_struct_mut(name) {
+            for member in _struct.members_mut() {
+                if member.name().to_string() == member_name {
+                    if let &mut DataType::Struct {
+                        ref mut struct_data_types,
+                        ..
+                    } = member.get_type_mut().into()
+                    {
+                        *struct_data_types = Some(data_types.clone());
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     /// Consumes the [`ScopeTracker`] and returns a list of [`Variable`]s, [`FunctionSignature`]s, and [`Struct`]s

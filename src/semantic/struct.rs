@@ -88,7 +88,7 @@ impl From<StructError> for Diagnostic {
 
 pub(super) fn analyze_struct<'a>(
     _struct: &'a mut Struct,
-    scope_tracker: &ScopeTracker,
+    scope_tracker: &mut ScopeTracker,
 ) -> Vec<StructError> {
     let mut errors = Vec::new();
 
@@ -128,12 +128,20 @@ pub(super) fn analyze_struct<'a>(
             } if struct_data_types.is_none() => {
                 match scope_tracker.get_struct(&**name) {
                     Some(s) => {
-                        *struct_data_types = Some(
-                            s.clone()
-                                .into_members()
-                                .into_iter()
-                                .map(|member| member.into_type().into())
-                                .collect(),
+                        let data_types: Vec<DataType> = s
+                            .clone()
+                            .into_members()
+                            .into_iter()
+                            .map(|member| member.into_type().into())
+                            .collect();
+
+                        *struct_data_types = Some(data_types.clone());
+
+                        // Update the struct data types in the scope tracker as well.
+                        scope_tracker.update_struct_data_types(
+                            struct_clone.name(),
+                            member.name(),
+                            data_types,
                         );
                     }
 
