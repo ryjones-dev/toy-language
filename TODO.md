@@ -58,9 +58,9 @@
 - [x]  Reduce a `DataType`'s struct data from a copy of the whole struct to just the struct member data types
 - [x]  Fix a bug where functions with struct return types were not having their `DataType`'s struct data correctly populated
 - [x]  Allow for arbitrary struct definition order
+- [x]  Fix bug with recursive struct definitions between two or more structs causing codegen crashes
+- [ ]  Read from or write to a struct field
 - [ ]  Read source from a file instead of baking it in to the executable
-- [ ]  Allow struct definitions in function/local scopes
-- [ ]  Read or write to a struct field
 - [ ]  Pass by reference
 - [ ]  Pattern matching
 - [ ]  Add range types that represent a continuous range of values
@@ -78,6 +78,7 @@
 - [ ]  Look into ways to insert recommended code in diagnostic messages
 - [ ]  Make `FunctionSignature` generic with fixed sized arrays
 - [ ]  Take a second pass over doc comments, and add more where necessary
+- [ ]  Allow struct definitions in function/local scopes
 - [ ]  Support lambdas/nested functions (might need to add func keyword for this?)
 - [ ]  Add scenario tests for testing each feature of the language
 - [ ]  Decide how variable shadowing should be handled

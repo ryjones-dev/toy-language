@@ -1,4 +1,4 @@
-test(obj Object) -> Object2 {
+create_object2(obj Object) -> Object2 {
     Object2 {
         obj: obj
     }
@@ -21,9 +21,7 @@ main(arg1 float, arg2 float) -> float {
         y: arg2,
     }
 
-    obj2 = test(obj)
-
-    # obj1.x = obj1.x + obj2.x
-    # obj1.x
+    obj2 = create_object2(obj)
+    # obj2.obj.x
     1.
 }
