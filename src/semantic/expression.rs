@@ -63,7 +63,7 @@ pub(super) enum ExpressionError {
     },
     #[error("cannot access member on a non-struct type")]
     NonStructMemberAccessError {
-        variable: Variable,
+        variable_name: Identifier,
         member: Identifier,
     },
     #[error("unknown struct")]
@@ -247,14 +247,13 @@ impl From<ExpressionError> for Diagnostic {
                 .with_labels(vec![diag_struct_name_label(_struct)]),
             ),
             ExpressionError::NonStructMemberAccessError {
-                ref variable,
+                ref variable_name,
                 ref member,
             } => Self::new(&err, DiagnosticLevel::Error).with_context(DiagnosticContext::new(
                 DiagnosticMessage::new(
                     format!(
                         "`{}` is not a struct and cannot have member `{}`",
-                        variable.name(),
-                        member
+                        variable_name, member
                     ),
                     member.source(),
                 ),
@@ -655,8 +654,8 @@ pub(super) fn analyze_expression(
         }
         Expression::StructMemberAccess {
             variable,
-            member_name,
-            _struct,
+            member_names,
+            structs,
         } => {
             let mut types = Types::new();
             let mut errors = Vec::new();
@@ -676,39 +675,37 @@ pub(super) fn analyze_expression(
                         // so that the type is available in code generation.
                         variable.set_type(var_type);
 
-                        match var_type.into() {
-                            &DataType::Struct { ref name, .. } => {
-                                match scope_tracker.get_struct(&**name) {
-                                    Some(s) => {
-                                        *_struct = Some(s.clone());
-                                        match s.members().iter().find_map(|member| {
-                                            if *member.name() == *member_name {
-                                                Some(member.get_type().clone())
-                                            } else {
-                                                None
-                                            }
-                                        }) {
-                                            Some(member_type) => {
-                                                types.push(member_type);
-                                            }
-                                            None => errors.push(
-                                                ExpressionError::StructMemberUnknownError {
-                                                    _struct: s.clone(),
-                                                    member_name: member_name.clone(),
-                                                },
-                                            ),
-                                        };
-                                    }
-                                    None => errors.push(ExpressionError::StructUnknownError(
-                                        name.clone(),
-                                        variable.source(),
-                                    )),
+                        assert!(member_names.len() > 0, "should have at least one member name to be considered a struct member access");
+
+                        // Check the type for each level of access to ensure the access is valid
+                        let mut prev_member_name = variable.name();
+                        let mut current_member_type = var_type;
+                        let mut found_err = false;
+                        for member_name in member_names.iter() {
+                            match struct_data_and_member_type(
+                                current_member_type,
+                                member_name,
+                                scope_tracker,
+                                prev_member_name,
+                            ) {
+                                Ok(result) => {
+                                    prev_member_name = member_name;
+
+                                    let current_member_struct;
+                                    (current_member_struct, current_member_type) = result;
+
+                                    structs.push(current_member_struct.clone());
+                                }
+                                Err(err) => {
+                                    errors.push(err);
+                                    found_err = true;
+                                    break;
                                 }
                             }
-                            _ => errors.push(ExpressionError::NonStructMemberAccessError {
-                                variable: variable.clone(),
-                                member: member_name.clone(),
-                            }),
+                        }
+
+                        if !found_err {
+                            types.push(current_member_type.clone());
                         }
                     }
                 }
@@ -1112,6 +1109,41 @@ pub(super) fn analyze_function_call(
             ));
             (None, errors)
         }
+    }
+}
+
+/// Given a [`Type`] and member name, return the [`Struct`] data that the type refers to along with the [`Type`] of the member.
+fn struct_data_and_member_type<'a>(
+    ty: &Type,
+    member_name: &Identifier,
+    scope_tracker: &'a ScopeTracker,
+    var_name: &Identifier,
+) -> Result<(&'a Struct, &'a Type), ExpressionError> {
+    match ty.into() {
+        &DataType::Struct { ref name, .. } => match scope_tracker.get_struct(&**name) {
+            Some(s) => s
+                .members()
+                .iter()
+                .find_map(|member| {
+                    if *member.name() == *member_name {
+                        Some((s, member.get_type()))
+                    } else {
+                        None
+                    }
+                })
+                .ok_or(ExpressionError::StructMemberUnknownError {
+                    _struct: s.clone(),
+                    member_name: member_name.clone(),
+                }),
+            None => Err(ExpressionError::StructUnknownError(
+                name.clone(),
+                var_name.source(),
+            )),
+        },
+        _ => Err(ExpressionError::NonStructMemberAccessError {
+            variable_name: var_name.clone(),
+            member: member_name.clone(),
+        }),
     }
 }
 

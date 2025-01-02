@@ -112,12 +112,12 @@ pub(crate) enum Expression {
     /// This expression can appear on the left hand side and/or the right hand side of an [`Expression::Assignment`].
     /// On the left hand side the variable is written to, and on the right hand side the variable is read from.
     ///
-    /// The struct that is being accessed can't be parsed from the access itself, but can be deduced during semantic analysis.
-    /// Until then, the struct will have a value of [`None`].
+    /// The structs that are being accessed can't be parsed from the access itself, but can be deduced during semantic analysis.
+    /// Until then, the structs will be empty.
     StructMemberAccess {
         variable: Variable,
-        member_name: Identifier,
-        _struct: Option<Struct>,
+        member_names: Vec<Identifier>,
+        structs: Vec<Struct>,
     },
     /// Represents returning from a function. This is useful for early returning from an outer function scope.
     FunctionReturn {
@@ -187,9 +187,15 @@ impl Expression {
             Expression::StructInstantiation { source, .. } => *source,
             Expression::StructMemberAccess {
                 variable,
-                member_name,
+                member_names,
                 ..
-            } => variable.source().combine(member_name.source()),
+            } => {
+                if let Some(last_member) = member_names.last() {
+                    variable.source().combine(last_member.source())
+                } else {
+                    variable.source()
+                }
+            }
             Expression::FunctionReturn { source, .. } => *source,
             Expression::FunctionCall { source, .. } => *source,
             Expression::IfElse { source, .. } => *source,

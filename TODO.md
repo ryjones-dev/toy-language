@@ -59,7 +59,7 @@
 - [x]  Fix a bug where functions with struct return types were not having their `DataType`'s struct data correctly populated
 - [x]  Allow for arbitrary struct definition order
 - [x]  Fix bug with recursive struct definitions between two or more structs causing codegen crashes
-- [ ]  Read from or write to a struct field
+- [x]  Read from or write to a struct field
 - [ ]  Read source from a file instead of baking it in to the executable
 - [ ]  Pass by reference
 - [ ]  Pattern matching

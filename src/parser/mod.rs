@@ -144,10 +144,10 @@ peg::parser!(pub(crate) grammar parser() for str {
         }
 
     rule assignment() -> Expression
-        = s:position!() lhs:((_
-            i:identifier() _ t:_type()? _ { Expression::Variable(Variable::new(i, t)) }
-            / v:identifier() _ "." _ i:identifier() _ { Expression::StructMemberAccess { variable: Variable::new(v, None), member_name: i, _struct: None } }
-        ) ++ ",") _ "=" _ rhs:expression_list() e:position!() {
+        = s:position!() lhs:(
+            (_ s:struct_member_access() _ { s }
+            / _ i:identifier() _ t:_type()? _ { Expression::Variable(Variable::new(i, t)) }
+            ) ++ ",") _ "=" _ rhs:expression_list() e:position!() {
             Expression::Assignment { lhs, rhs: Box::new(rhs), source: (s..=e).into() }
         }
 
@@ -157,8 +157,8 @@ peg::parser!(pub(crate) grammar parser() for str {
         }
 
     rule struct_member_access() -> Expression
-        = s:position!() v:identifier() _ "." _ i:identifier() e:position!() {
-            Expression::StructMemberAccess { variable: Variable::new(v, None), member_name: i, _struct: None }
+        = s:position!() v:identifier() _ m:("." _ i:identifier() { i })+ e:position!() {
+            Expression::StructMemberAccess { variable: Variable::new(v, None), member_names: m, structs: Vec::new() }
         }
 
     rule function_return() -> Expression

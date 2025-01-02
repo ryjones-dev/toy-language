@@ -16,7 +16,7 @@ use crate::{
         types::{DataType, Type},
         variable::Variable,
     },
-    semantic::{EXPECT_STRUCT, EXPECT_VAR_TYPE},
+    semantic::EXPECT_VAR_TYPE,
     semantic_assert,
 };
 
@@ -134,23 +134,24 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                 let mut value_index = 0;
                 for lhs_expression in lhs {
                     match lhs_expression {
-                        Expression::StructMemberAccess { variable, member_name, _struct } => {
-                            let mut index = None;
-                            for (i, struct_member) in _struct
-                                .expect(EXPECT_STRUCT)
-                                .into_members()
+                        Expression::StructMemberAccess { variable, member_names, structs } => {
+                            semantic_assert!(structs.len() > 0, "structs must be populated by this point");
+
+                            let mut index = 0;
+                            for (s, member_name) in structs
                                 .into_iter()
-                                .enumerate()
+                                .zip(member_names.into_iter())
                             {
-                                if member_name == *struct_member.name() {
-                                    index = Some(i);
-                                    break;
+                                for struct_member in s.into_members().into_iter() {
+                                    if *struct_member.name() == member_name {
+                                        break;
+                                    }
+
+                                    index += DataType::from(struct_member.into_type()).primitive_types().len();
                                 }
                             }
 
-                            semantic_assert!(index != None, "struct member must exist");
-                            
-                            let block_var = &self.block_vars.block_vars(variable)[index.unwrap()];
+                            let block_var = &self.block_vars.block_vars(variable)[index];
                                 let cranelift_variable =
                                     cranelift::frontend::Variable::from_u32(block_var.index);
 
@@ -199,28 +200,37 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
             }
             Expression::StructMemberAccess {
                 variable,
-                member_name,
-                _struct,
+                member_names,
+                structs,
             } => {
-                let mut index = None;
+                semantic_assert!(structs.len() > 0, "structs must be populated by this point");
+
+                let mut index = 0;
                 let mut ty = None;
-                for (i, struct_member) in _struct
-                    .expect(EXPECT_STRUCT)
-                    .into_members()
+                let len = structs.len();
+                for (struct_index, (s, member_name)) in structs
                     .into_iter()
+                    .zip(member_names.into_iter())
                     .enumerate()
                 {
-                    if member_name == *struct_member.name() {
-                        index = Some(i);
-                        ty = Some(struct_member.into_type().into());
-                        break;
+                    for struct_member in s.into_members().into_iter() {
+                        if *struct_member.name() == member_name {
+                            if struct_index == len - 1 {
+                                ty = Some(struct_member.into_type().into());
+                            }
+
+                            break;
+                        }
+
+                        index += DataType::from(struct_member.into_type())
+                            .primitive_types()
+                            .len();
                     }
                 }
 
-                semantic_assert!(index != None, "struct member must exist");
                 semantic_assert!(ty != None, "struct member must have a type");
 
-                let block_var = &self.block_vars.block_vars(variable)[index.unwrap()];
+                let block_var = &self.block_vars.block_vars(variable)[index];
 
                 (
                     vec![ExpressionValue {
