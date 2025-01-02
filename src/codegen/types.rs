@@ -8,8 +8,6 @@ use crate::{
     semantic::EXPECT_VAR_TYPE,
 };
 
-const EXPECT_STRUCT: &str = "struct type should have been linked to a struct by this point";
-
 impl DataType {
     // TODO: This doesn't work yet but isn't needed
     // pub(crate) fn size(&self) -> u32 {
@@ -73,7 +71,9 @@ impl DataType {
                 struct_data_types, ..
             } => {
                 let mut types = Vec::new();
-                for data_type in struct_data_types.expect(EXPECT_STRUCT) {
+                for data_type in struct_data_types
+                    .expect("struct member data types should be known by this point")
+                {
                     types.append(&mut data_type.primitive_types());
                 }
                 types

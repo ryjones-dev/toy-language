@@ -30,7 +30,7 @@ impl PartialEq for DataType {
                 DataType::Struct {
                     name: other_name, ..
                 },
-            ) => self_name == other_name,
+            ) => *self_name == *other_name,
             _ => false,
         }
     }

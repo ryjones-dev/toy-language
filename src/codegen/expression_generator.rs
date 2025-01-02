@@ -16,7 +16,7 @@ use crate::{
         types::{DataType, Type},
         variable::Variable,
     },
-    semantic::EXPECT_VAR_TYPE,
+    semantic::{EXPECT_STRUCT, EXPECT_VAR_TYPE},
     semantic_assert,
 };
 
@@ -126,34 +126,60 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                 }
                 (values, function_return)
             }
-            Expression::Assignment {
-                variables,
-                expression,
-                ..
-            } => {
+            Expression::Assignment { lhs, rhs, .. } => {
                 // Generate IR for the expression on the right-hand side of the equals sign
-                let (values, _) = self.generate(*expression);
+                let (values, _) = self.generate(*rhs);
 
                 // Declare and define the variables
                 let mut value_index = 0;
-                for variable in variables.into_iter() {
-                    // Only declare and define variables if they are not discarded
-                    if !variable.is_discarded() {
-                        let block_vars = self.block_vars.block_vars(variable);
-                        for block_var in block_vars {
-                            let cranelift_variable =
-                                cranelift::frontend::Variable::from_u32(block_var.index);
+                for lhs_expression in lhs {
+                    match lhs_expression {
+                        Expression::StructMemberAccess { variable, member_name, _struct } => {
+                            let mut index = None;
+                            for (i, struct_member) in _struct
+                                .expect(EXPECT_STRUCT)
+                                .into_members()
+                                .into_iter()
+                                .enumerate()
+                            {
+                                if member_name == *struct_member.name() {
+                                    index = Some(i);
+                                    break;
+                                }
+                            }
 
-                            // Intentionally ignore the error, since we don't care if the variable has already been declared
-                            let _ = self
-                                .builder
-                                .try_declare_var(cranelift_variable, block_var.ty.into());
+                            semantic_assert!(index != None, "struct member must exist");
+                            
+                            let block_var = &self.block_vars.block_vars(variable)[index.unwrap()];
+                                let cranelift_variable =
+                                    cranelift::frontend::Variable::from_u32(block_var.index);
 
-                            self.builder
-                                .def_var(cranelift_variable, values[value_index].clone().into());
+                                self.builder
+                                    .def_var(cranelift_variable, values[value_index].clone().into());
 
-                            value_index += 1;
-                        }
+                                value_index += 1;
+                        },
+                        Expression::Variable(variable) => {
+                            // Only declare and define variables if they are not discarded
+                            if !variable.is_discarded() {
+                                let block_vars = self.block_vars.block_vars(variable);
+                                for block_var in block_vars {
+                                    let cranelift_variable =
+                                        cranelift::frontend::Variable::from_u32(block_var.index);
+
+                                    // Intentionally ignore the error, since we don't care if the variable has already been declared
+                                    let _ = self
+                                        .builder
+                                        .try_declare_var(cranelift_variable, block_var.ty.into());
+
+                                    self.builder
+                                        .def_var(cranelift_variable, values[value_index].clone().into());
+
+                                    value_index += 1;
+                                }
+                            }
+                        },
+                        _ => unreachable!("parsing guarantees no other expressions are possible on the left hand side")
                     }
                 }
 
@@ -170,6 +196,41 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                 }
 
                 (values, false)
+            }
+            Expression::StructMemberAccess {
+                variable,
+                member_name,
+                _struct,
+            } => {
+                let mut index = None;
+                let mut ty = None;
+                for (i, struct_member) in _struct
+                    .expect(EXPECT_STRUCT)
+                    .into_members()
+                    .into_iter()
+                    .enumerate()
+                {
+                    if member_name == *struct_member.name() {
+                        index = Some(i);
+                        ty = Some(struct_member.into_type().into());
+                        break;
+                    }
+                }
+
+                semantic_assert!(index != None, "struct member must exist");
+                semantic_assert!(ty != None, "struct member must have a type");
+
+                let block_var = &self.block_vars.block_vars(variable)[index.unwrap()];
+
+                (
+                    vec![ExpressionValue {
+                        ty: ty.unwrap(),
+                        val: self
+                            .builder
+                            .use_var(cranelift::frontend::Variable::from_u32(block_var.index)),
+                    }],
+                    false,
+                )
             }
             Expression::FunctionReturn { expression, .. } => {
                 // Generate IR for the return value expression

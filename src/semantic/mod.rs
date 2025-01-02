@@ -25,6 +25,7 @@ mod scope_tracker;
 mod r#struct;
 
 pub(crate) const EXPECT_VAR_TYPE: &str = "variable should have a type by this point";
+pub(crate) const EXPECT_STRUCT: &str = "struct should have a type by this point";
 
 #[derive(Debug, Error)]
 pub(super) enum SemanticError {

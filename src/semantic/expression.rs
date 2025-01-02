@@ -13,7 +13,7 @@ use crate::{
         r#struct::StructMember,
         source_range::SourceRange,
         types::{DataType, Type, Types},
-        variable::{Variable, Variables},
+        variable::Variable,
     },
 };
 
@@ -25,7 +25,7 @@ use super::{
     },
     scope::{analyze_scope, ScopeError},
     scope_tracker::ScopeTracker,
-    Struct, EXPECT_VAR_TYPE,
+    Struct, EXPECT_STRUCT, EXPECT_VAR_TYPE,
 };
 
 #[derive(Debug, Error)]
@@ -34,12 +34,12 @@ pub(super) enum ExpressionError {
     AssignmentWrongNumberOfVariablesError {
         expression: Expression,
         expected: Types,
-        actual: Variables,
+        actual: Types,
     },
     #[error("assignment type mismatch")]
     AssignmentTypeMismatchError {
         expected_type: Type,
-        var: Variable,
+        actual_type: Type,
         assignment_source: SourceRange,
         expression: Expression,
     },
@@ -50,16 +50,21 @@ pub(super) enum ExpressionError {
         original_member: Identifier,
         new_member: Identifier,
     },
-    #[error("unknown struct member")]
-    StructMemberUnknownError {
-        _struct: Struct,
-        member_name: Identifier,
-    },
     #[error("struct member not initialized")]
     StructMemberNotInitializedError {
         _struct: Struct,
         member_name: Identifier,
         struct_instance_source: SourceRange,
+    },
+    #[error("unknown struct member")]
+    StructMemberUnknownError {
+        _struct: Struct,
+        member_name: Identifier,
+    },
+    #[error("cannot access member on a non-struct type")]
+    NonStructMemberAccessError {
+        variable: Variable,
+        member: Identifier,
     },
     #[error("unknown struct")]
     StructUnknownError(String, SourceRange),
@@ -154,22 +159,21 @@ impl From<ExpressionError> for Diagnostic {
             ),
             ExpressionError::AssignmentTypeMismatchError {
                 ref expected_type,
-                ref var,
+                ref actual_type,
                 assignment_source,
                 ref expression,
             } => Self::new(&err, DiagnosticLevel::Error).with_context(
                 DiagnosticContext::new(DiagnosticMessage::new(
                     format!(
                         "attempted to assign result of type `{}` to variable of type `{}`",
-                        expected_type,
-                        var.get_type().as_ref().expect(EXPECT_VAR_TYPE)
+                        expected_type, actual_type
                     ),
                     assignment_source,
                 ))
                 .with_labels({
                     let mut labels = vec![DiagnosticMessage::new(
                         "variable type defined here",
-                        var.get_type().as_ref().expect(EXPECT_VAR_TYPE).source(),
+                        actual_type.source(),
                     )];
                     if let Expression::FunctionCall {
                         function_signature, ..
@@ -217,6 +221,17 @@ impl From<ExpressionError> for Diagnostic {
                     diag_newly_defined(new_member.source(), None),
                 ]),
             ),
+            ExpressionError::StructMemberNotInitializedError {
+                ref _struct,
+                ref member_name,
+                struct_instance_source,
+            } => Self::new(&err, DiagnosticLevel::Error).with_context(
+                DiagnosticContext::new(DiagnosticMessage::new(
+                    format!("struct member `{}` has not been initialized", member_name),
+                    struct_instance_source,
+                ))
+                .with_labels(vec![diag_struct_name_label(_struct)]),
+            ),
             ExpressionError::StructMemberUnknownError {
                 ref _struct,
                 ref member_name,
@@ -231,17 +246,19 @@ impl From<ExpressionError> for Diagnostic {
                 ))
                 .with_labels(vec![diag_struct_name_label(_struct)]),
             ),
-            ExpressionError::StructMemberNotInitializedError {
-                ref _struct,
-                ref member_name,
-                struct_instance_source,
-            } => Self::new(&err, DiagnosticLevel::Error).with_context(
-                DiagnosticContext::new(DiagnosticMessage::new(
-                    format!("struct member `{}` has not been initialized", member_name),
-                    struct_instance_source,
-                ))
-                .with_labels(vec![diag_struct_name_label(_struct)]),
-            ),
+            ExpressionError::NonStructMemberAccessError {
+                ref variable,
+                ref member,
+            } => Self::new(&err, DiagnosticLevel::Error).with_context(DiagnosticContext::new(
+                DiagnosticMessage::new(
+                    format!(
+                        "`{}` is not a struct and cannot have member `{}`",
+                        variable.name(),
+                        member
+                    ),
+                    member.source(),
+                ),
+            )),
             ExpressionError::StructUnknownError(ref name, source) => {
                 Self::new(&err, DiagnosticLevel::Error).with_context(DiagnosticContext::new(
                     DiagnosticMessage::new(
@@ -468,38 +485,24 @@ pub(super) fn analyze_expression(
 
             (types, errors)
         }
-        Expression::Assignment {
-            variables,
-            expression,
-            source,
-        } => {
-            let (types, mut errors) = analyze_expression(expression, scope_tracker, outer_func_sig);
+        Expression::Assignment { lhs, rhs, source } => {
+            let mut errors = Vec::new();
 
-            if types.len() != variables.len() {
-                errors.push(ExpressionError::AssignmentWrongNumberOfVariablesError {
-                    expression: *expression.clone(),
-                    expected: types,
-                    actual: variables.clone(),
-                });
-            } else {
-                // Only continue if the expression did not have errors,
-                // otherwise adding type errors will add noise
-                if errors.len() == 0 {
-                    for (i, variable) in variables.iter_mut().enumerate() {
-                        if let Some(var_type) = variable.get_type() {
-                            // Check if the expression's corresponding type matches the variable's annotated type
-                            if *var_type != types[i] {
-                                errors.push(ExpressionError::AssignmentTypeMismatchError {
-                                    expected_type: types[i].clone(),
-                                    var: variable.clone(),
-                                    assignment_source: *source,
-                                    expression: *expression.clone(),
-                                });
-                            }
-                        } else {
-                            // Variable has not been explicitly assigned a type,
-                            // so give it the same type as the expression's corresponding type
-                            variable.set_type(&types[i]);
+            // Analyze the right hand side expressions first to get the expected types
+            let (rhs_types, mut errs) = analyze_expression(rhs, scope_tracker, outer_func_sig);
+            errors.append(&mut errs);
+
+            let mut lhs_types = Types::new();
+
+            for (i, lhs_expression) in lhs.iter_mut().enumerate() {
+                // If the lhs expression is a variable expression, we don't want to analyze it right away.
+                // First we need to add that variable to the scope and potentially set its type if it doesn't have a type annotation.
+                match lhs_expression {
+                    Expression::Variable(variable) => {
+                        if let None = variable.get_type() {
+                            // Variable has not been annotated with a type,
+                            // so give it the same type as the corresponding rhs expression's type
+                            variable.set_type(&rhs_types[i]);
                         }
 
                         // Add the variable to the scope
@@ -515,6 +518,37 @@ pub(super) fn analyze_expression(
                             }
                         }
                     }
+
+                    // We only want to update types for variables
+                    _ => {}
+                };
+
+                let (mut types, mut errs) =
+                    analyze_expression(lhs_expression, scope_tracker, outer_func_sig);
+                lhs_types.append(&mut types);
+                errors.append(&mut errs);
+            }
+
+            if lhs_types.len() != rhs_types.len() {
+                errors.push(ExpressionError::AssignmentWrongNumberOfVariablesError {
+                    expression: *rhs.clone(),
+                    expected: rhs_types,
+                    actual: lhs_types,
+                });
+            } else {
+                // Only continue if the expressions did not have errors,
+                // otherwise adding type errors will add noise
+                if errors.len() == 0 {
+                    for (i, _) in lhs.iter().enumerate() {
+                        if lhs_types[i] != rhs_types[i] {
+                            errors.push(ExpressionError::AssignmentTypeMismatchError {
+                                expected_type: rhs_types[i].clone(),
+                                actual_type: lhs_types[i].clone(),
+                                assignment_source: *source,
+                                expression: *rhs.clone(),
+                            });
+                        }
+                    }
                 }
             }
 
@@ -527,9 +561,6 @@ pub(super) fn analyze_expression(
             source,
             _struct,
         } => {
-            const EXPECT_STRUCT: &str =
-                "struct instantiation should have been linked to a struct by this point";
-
             let mut types = Types::new();
             let mut errors = Vec::new();
 
@@ -619,6 +650,72 @@ pub(super) fn analyze_expression(
                 },
                 name.source(),
             ));
+
+            (types, errors)
+        }
+        Expression::StructMemberAccess {
+            variable,
+            member_name,
+            _struct,
+        } => {
+            let mut types = Types::new();
+            let mut errors = Vec::new();
+
+            match scope_tracker.get_var(variable.name()) {
+                Some(scope_var) => {
+                    // Throw an error when trying to read from a discarded variable
+                    if scope_var.is_discarded() {
+                        errors.push(ExpressionError::VariableReadFromDiscardedError {
+                            variable: variable.clone(),
+                            scope_var: scope_var.clone(),
+                        });
+                    } else {
+                        let var_type = scope_var.get_type().as_ref().expect(EXPECT_VAR_TYPE);
+
+                        // We have to set the variable type on this AST node
+                        // so that the type is available in code generation.
+                        variable.set_type(var_type);
+
+                        match var_type.into() {
+                            &DataType::Struct { ref name, .. } => {
+                                match scope_tracker.get_struct(&**name) {
+                                    Some(s) => {
+                                        *_struct = Some(s.clone());
+                                        match s.members().iter().find_map(|member| {
+                                            if *member.name() == *member_name {
+                                                Some(member.get_type().clone())
+                                            } else {
+                                                None
+                                            }
+                                        }) {
+                                            Some(member_type) => {
+                                                types.push(member_type);
+                                            }
+                                            None => errors.push(
+                                                ExpressionError::StructMemberUnknownError {
+                                                    _struct: s.clone(),
+                                                    member_name: member_name.clone(),
+                                                },
+                                            ),
+                                        };
+                                    }
+                                    None => errors.push(ExpressionError::StructUnknownError(
+                                        name.clone(),
+                                        variable.source(),
+                                    )),
+                                }
+                            }
+                            _ => errors.push(ExpressionError::NonStructMemberAccessError {
+                                variable: variable.clone(),
+                                member: member_name.clone(),
+                            }),
+                        }
+                    }
+                }
+                None => {
+                    errors.push(ExpressionError::VariableUnknownError(variable.clone()));
+                }
+            }
 
             (types, errors)
         }
@@ -925,11 +1022,15 @@ pub(super) fn analyze_expression(
                             scope_var: scope_var.clone(),
                         });
                     } else {
-                        // Because parsing a variable expression doesn't say anything about the variable's type,
-                        // the Variable won't have its type set. Since the variable has already been added to the scope,
-                        // we can update the variable's type here so as to not leave any undefined types in the AST.
-                        variable.set_type(scope_var.get_type().as_ref().expect(EXPECT_VAR_TYPE));
-                        types.push(variable.get_type().clone().unwrap());
+                        let var_type = scope_var.get_type().clone().unwrap();
+
+                        if let None = variable.get_type() {
+                            // We may have to set the variable type on this AST node
+                            // so that the type is available in code generation.
+                            variable.set_type(&var_type);
+                        }
+
+                        types.push(var_type);
                     }
                 }
                 None => {

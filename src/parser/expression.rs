@@ -1,11 +1,6 @@
 use super::{
-    function::FunctionSignature,
-    identifier::Identifier,
-    literal::Literal,
-    scope::Scope,
-    source_range::SourceRange,
-    variable::{Variable, Variables},
-    Struct,
+    function::FunctionSignature, identifier::Identifier, literal::Literal, scope::Scope,
+    source_range::SourceRange, variable::Variable, Struct,
 };
 
 /// Each type of boolean comparison that can be used in an expression.
@@ -81,13 +76,20 @@ pub(crate) enum Expression {
         expressions: Vec<Expression>,
         source: SourceRange,
     },
-    /// Assignments must have an equal number of variables compared with the expression's return values.
+    /// Assignments store the results of the expressions on the right hand side of the equals sign
+    /// into the variables retrieved from the expressions on the left hand side of the equals sign.
     ///
-    /// If the results of an expression are not needed, they still must be assigned to a variable.
+    /// The expressions on the left hand side can only be [`Expression::Variable`] or [`Expression::StructMemberAccess`],
+    /// otherwise the assignment is not valid and will return a compiler error.
+    ///
+    /// Assignments must have an equal number of expressions on the left hand side
+    /// compared with the return values of the expressions on the right hand side.
+    ///
+    /// If the results of an expression on the right hand side are not needed, they still must be assigned to a variable.
     /// A discarded variable can be used to signify that the results are intentionally being ignored.
     Assignment {
-        variables: Variables,
-        expression: Box<Expression>,
+        lhs: Vec<Expression>,
+        rhs: Box<Expression>,
         source: SourceRange,
     },
     /// Represents the instantiation of an existing [`Struct`].
@@ -103,6 +105,18 @@ pub(crate) enum Expression {
         name: Identifier,
         members: Vec<(Identifier, Expression)>,
         source: SourceRange,
+        _struct: Option<Struct>,
+    },
+    /// Access to a member of a [`Struct`].
+    ///
+    /// This expression can appear on the left hand side and/or the right hand side of an [`Expression::Assignment`].
+    /// On the left hand side the variable is written to, and on the right hand side the variable is read from.
+    ///
+    /// The struct that is being accessed can't be parsed from the access itself, but can be deduced during semantic analysis.
+    /// Until then, the struct will have a value of [`None`].
+    StructMemberAccess {
+        variable: Variable,
+        member_name: Identifier,
         _struct: Option<Struct>,
     },
     /// Represents returning from a function. This is useful for early returning from an outer function scope.
@@ -171,6 +185,11 @@ impl Expression {
             }
             Expression::Assignment { source, .. } => *source,
             Expression::StructInstantiation { source, .. } => *source,
+            Expression::StructMemberAccess {
+                variable,
+                member_name,
+                ..
+            } => variable.source().combine(member_name.source()),
             Expression::FunctionReturn { source, .. } => *source,
             Expression::FunctionCall { source, .. } => *source,
             Expression::IfElse { source, .. } => *source,

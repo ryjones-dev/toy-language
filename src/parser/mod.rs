@@ -94,6 +94,7 @@ peg::parser!(pub(crate) grammar parser() for str {
         r:function_return() { r }
         c:function_call() { c }
         i:if_else() { i }
+        s:struct_member_access() { s }
         --
         a:(@) _ "==" _ b:@ { Expression::BooleanComparison { comparison_type: BooleanComparisonType::Equal, lhs: Box::new(a), rhs: Box::new(b), source: (0..=0).into() }}
         a:(@) _ "!=" _ b:@ { Expression::BooleanComparison { comparison_type: BooleanComparisonType::NotEqual, lhs: Box::new(a), rhs: Box::new(b), source: (0..=0).into() }}
@@ -143,13 +144,21 @@ peg::parser!(pub(crate) grammar parser() for str {
         }
 
     rule assignment() -> Expression
-        = s:position!() vars:((_ i:identifier() _ t:_type()? _ { (i, t) }) ++ ",") _ "=" _ expr:expression_list() e:position!() {
-            Expression::Assignment { variables: vars.into_iter().map(|(var_name, var_type)|Variable::new(var_name, var_type)).collect(), expression: Box::new(expr), source: (s..=e).into() }
+        = s:position!() lhs:((_
+            i:identifier() _ t:_type()? _ { Expression::Variable(Variable::new(i, t)) }
+            / v:identifier() _ "." _ i:identifier() _ { Expression::StructMemberAccess { variable: Variable::new(v, None), member_name: i, _struct: None } }
+        ) ++ ",") _ "=" _ rhs:expression_list() e:position!() {
+            Expression::Assignment { lhs, rhs: Box::new(rhs), source: (s..=e).into() }
         }
 
     rule struct_instantiation() -> Expression
         = s:position!() i:identifier() _ "{" _ m:((_ i:identifier() _ ":" _ e:expression() _ { (i, e) }) ** ",") _ ","? _ "}" e:position!() {
             Expression::StructInstantiation { name: i, members: m, source: (s..=e).into(), _struct: None }
+        }
+
+    rule struct_member_access() -> Expression
+        = s:position!() v:identifier() _ "." _ i:identifier() e:position!() {
+            Expression::StructMemberAccess { variable: Variable::new(v, None), member_name: i, _struct: None }
         }
 
     rule function_return() -> Expression
