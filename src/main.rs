@@ -1,3 +1,5 @@
+use std::{env, fs};
+
 use codegen::options::CodeGenOptions;
 use diagnostic::RenderErrorFailure;
 
@@ -25,7 +27,20 @@ macro_rules! execute_jit {
 }
 
 fn main() -> Result<(), RenderErrorFailure> {
-    let source_code = include_str!("lang/struct.txt");
+    let args: Vec<String> = env::args().collect();
+
+    if args.len() < 2 {
+        println!("missing source filepath argument");
+        return Ok(());
+    }
+
+    let source_code = match fs::read_to_string(&args[1]) {
+        Ok(source_code) => source_code,
+        Err(err) => {
+            println!("{}", err);
+            return Ok(());
+        }
+    };
 
     let codegen_options = CodeGenOptions::new()
         .enable(true)
@@ -35,7 +50,7 @@ fn main() -> Result<(), RenderErrorFailure> {
         .with_ast(false)
         .with_codegen_options(codegen_options);
 
-    match compile_jit(source_code, compile_options)? {
+    match compile_jit(&source_code, compile_options)? {
         JitCompileResults::Success {
             code,
             ast,
