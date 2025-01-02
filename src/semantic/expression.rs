@@ -33,8 +33,9 @@ pub(super) enum ExpressionError {
     #[error("wrong number of variables in assignment")]
     AssignmentWrongNumberOfVariablesError {
         expression: Expression,
-        expected: Types,
-        actual: Types,
+        expected_len: usize,
+        actual_len: usize,
+        actual_source: SourceRange,
     },
     #[error("assignment type mismatch")]
     AssignmentTypeMismatchError {
@@ -125,37 +126,34 @@ impl From<ExpressionError> for Diagnostic {
         match err {
             ExpressionError::AssignmentWrongNumberOfVariablesError {
                 ref expression,
-                ref expected,
-                ref actual,
+                expected_len,
+                actual_len,
+                actual_source,
             } => Self::new(&err, DiagnosticLevel::Error).with_context(
-                DiagnosticContext::new(diag_expected(
-                    &expected.len(),
-                    &actual.len(),
-                    actual.source().unwrap(), // There must be at least 1 variable for this error to occur
-                ))
-                .with_labels({
-                    let mut labels = vec![DiagnosticMessage::new(
-                        format!(
-                            "expression returns {} value{}",
-                            expected.len(),
-                            if expected.len() == 1 { "" } else { "s" }
-                        ),
-                        expression.source(),
-                    )];
+                DiagnosticContext::new(diag_expected(&expected_len, &actual_len, actual_source))
+                    .with_labels({
+                        let mut labels = vec![DiagnosticMessage::new(
+                            format!(
+                                "expression returns {} value{}",
+                                expected_len,
+                                if expected_len == 1 { "" } else { "s" }
+                            ),
+                            expression.source(),
+                        )];
 
-                    if let Expression::FunctionCall {
-                        function_signature, ..
-                    } = expression
-                    {
-                        if let Some(func_sig) = function_signature {
-                            if let Some(label) = diag_return_types_label(func_sig) {
-                                labels.push(label);
+                        if let Expression::FunctionCall {
+                            function_signature, ..
+                        } = expression
+                        {
+                            if let Some(func_sig) = function_signature {
+                                if let Some(label) = diag_return_types_label(func_sig) {
+                                    labels.push(label);
+                                }
                             }
                         }
-                    }
 
-                    labels
-                }),
+                        labels
+                    }),
             ),
             ExpressionError::AssignmentTypeMismatchError {
                 ref expected_type,
@@ -485,11 +483,19 @@ pub(super) fn analyze_expression(
             (types, errors)
         }
         Expression::Assignment { lhs, rhs, source } => {
+            assert!(lhs.len() > 0, "there must always be at least one expression on the left hand side to form a valid assignment expression");
+
             let mut errors = Vec::new();
 
             // Analyze the right hand side expressions first to get the expected types
             let (rhs_types, mut errs) = analyze_expression(rhs, scope_tracker, outer_func_sig);
             errors.append(&mut errs);
+
+            // Early return if there are errors on the rhs,
+            // since we won't know what the expected types should be.
+            if errors.len() > 0 {
+                return (Types::new(), errors);
+            }
 
             let mut lhs_types = Types::new();
 
@@ -531,8 +537,14 @@ pub(super) fn analyze_expression(
             if lhs_types.len() != rhs_types.len() {
                 errors.push(ExpressionError::AssignmentWrongNumberOfVariablesError {
                     expression: *rhs.clone(),
-                    expected: rhs_types,
-                    actual: lhs_types,
+                    expected_len: rhs_types.len(),
+                    actual_len: lhs_types.len(),
+                    actual_source: lhs_types.source().unwrap_or(
+                        lhs.first()
+                            .unwrap()
+                            .source()
+                            .combine(lhs.last().unwrap().source()),
+                    ),
                 });
             } else {
                 // Only continue if the expressions did not have errors,
