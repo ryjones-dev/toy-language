@@ -172,7 +172,7 @@ peg::parser!(pub(crate) grammar parser() for str {
         }
 
     rule if_else() -> Expression
-        = s:position!() "if" _ c:expression() _ t:expression() _ "else"? _ el:expression()? e:position!() {
+        = s:position!() "if" _ c:expression() _ t:expression() _ el:("else" _ el:expression() { el })? e:position!() {
             Expression::IfElse { cond_expression: Box::new(c), then_expression: Box::new(t), else_expression: Box::new(el), source: (s..=e).into() }
         }
 
