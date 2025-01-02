@@ -60,7 +60,9 @@
 - [x]  Allow for arbitrary struct definition order
 - [x]  Fix bug with recursive struct definitions between two or more structs causing codegen crashes
 - [x]  Read from or write to a struct field
-- [ ]  Read source from a file instead of baking it in to the executable
+- [x]  Read source from a file instead of baking it in to the executable
+- [ ]  Fix assignment to unread variable in if block when it has been read in the if condition
+- [ ]  Fix error for too any return values to fit in registers
 - [ ]  Pass by reference
 - [ ]  Pattern matching
 - [ ]  Add range types that represent a continuous range of values
