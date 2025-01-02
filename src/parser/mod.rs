@@ -200,5 +200,5 @@ peg::parser!(pub(crate) grammar parser() for str {
     rule comment() = "#" (!"\n" [_])* ("\n" / ![_])
 
     // Ignore whitespace and line comments
-    rule _() = quiet!{ ([' ' | '\t' | '\n'] / comment())* }
+    rule _() = quiet!{ ([' ' | '\t' | '\r' | '\n'] / comment())* }
 });
