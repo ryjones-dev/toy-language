@@ -500,9 +500,9 @@ pub(super) fn analyze_expression(
             let mut lhs_types = Types::new();
 
             for (i, lhs_expression) in lhs.iter_mut().enumerate() {
-                // If the lhs expression is a variable expression, we don't want to analyze it right away.
-                // First we need to add that variable to the scope and potentially set its type if it doesn't have a type annotation.
                 match lhs_expression {
+                    // Handle variable expressions separately to not "read" the variable,
+                    // which would prevent the variable from ever being unused.
                     Expression::Variable(variable) => {
                         if let None = variable.get_type() {
                             // Variable has not been annotated with a type,
@@ -522,16 +522,20 @@ pub(super) fn analyze_expression(
                                 );
                             }
                         }
+
+                        lhs_types.push(variable.get_type().as_ref().unwrap().clone());
                     }
 
-                    // We only want to update types for variables
-                    _ => {}
-                };
+                    Expression::StructMemberAccess {
+                        ..
+                    } => {
+                        let (mut types, mut errs) = analyze_expression(lhs_expression, scope_tracker, outer_func_sig);
+                        lhs_types.append(&mut types);
+                        errors.append(&mut errs);
+                    }
 
-                let (mut types, mut errs) =
-                    analyze_expression(lhs_expression, scope_tracker, outer_func_sig);
-                lhs_types.append(&mut types);
-                errors.append(&mut errs);
+                    _ => unreachable!("parsing guarantees that lhs expressions can only be variable or struct member access expressions")
+                };
             }
 
             if lhs_types.len() != rhs_types.len() {
@@ -1031,15 +1035,11 @@ pub(super) fn analyze_expression(
                             scope_var: scope_var.clone(),
                         });
                     } else {
-                        let var_type = scope_var.get_type().clone().unwrap();
+                        // We have to set the variable type on this AST node
+                        // so that the type is available in code generation.
+                        variable.set_type(scope_var.get_type().as_ref().expect(EXPECT_VAR_TYPE));
 
-                        if let None = variable.get_type() {
-                            // We may have to set the variable type on this AST node
-                            // so that the type is available in code generation.
-                            variable.set_type(&var_type);
-                        }
-
-                        types.push(var_type);
+                        types.push(variable.get_type().clone().unwrap());
                     }
                 }
                 None => {
