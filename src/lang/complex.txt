@@ -1,0 +1,70 @@
+# --- STRUCTS ---
+
+ChildObj {
+    isActive bool,
+    isResponding bool,
+    isTalking bool
+}
+
+ParentObj {
+    isActive bool,
+    hasActiveChild bool,
+    child ChildObj,
+    isTalking bool,
+    isResponding bool,
+    uniqueResponseCode float,
+    numResponsesGiven int
+}
+
+# --- DEFAULT FUNCTIONS ---
+
+createDefaultParentObj(defaultChild ChildObj, responseCode float) -> ParentObj {
+    ParentObj {
+        isActive: false,
+        hasActiveChild: false,
+        child: defaultChild,
+        isTalking: false,
+        isResponding: false,
+        uniqueResponseCode: responseCode,
+        numResponsesGiven: 0
+    }
+}
+
+createDefaultChildObject() -> ChildObj {
+    ChildObj {
+        isActive: false,
+        isResponding: false,
+        isTalking: false
+    }
+}
+
+createParentDeepCopy(original ParentObj) -> ParentObj {
+    ParentObj {
+        isActive: original.isActive,
+        hasActiveChild: original.hasActiveChild,
+        child: original.child,
+        isTalking: original.isTalking,
+        isResponding: original.isResponding,
+        uniqueResponseCode: original.uniqueResponseCode + 1.0, # We want this to be unique always, so increment by 1 if making a copy TODO: Create handleSetResponseCode()
+        numResponsesGiven: 0 # We need to make a deep copy of the original, but we want to track the data of the new object from the beginning, so set numResponsesGiven = 0
+    }
+}
+
+# --- UTIL FUNCTIONS ---
+
+handleSetResponseCode(responseCode float) -> float {
+    if responseCode < 1.0 {
+        responseCode = 1.0
+    }
+    -> responseCode + 1.0
+}
+
+# --- LOGIC ---
+
+main(arg1 float, arg2 float) -> float {
+    initialResponseCode = handleSetResponseCode(0.0) # We are initializing response codes so that we can keep each one unique throughout the program. By passing 0.0, we're saying "this is the start, please initialize".
+    child = createDefaultChildObject()
+    parent = createDefaultParentObj(child, initialResponseCode)
+
+    parent.uniqueResponseCode
+}
