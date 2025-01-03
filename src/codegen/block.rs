@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    parser::{identifier::Identifier, types::DataType, variable::Variable},
+    parser::{types::DataType, variable::Variable},
     semantic::EXPECT_VAR_TYPE,
 };
 
@@ -13,7 +13,7 @@ pub(super) struct BlockVariable {
 }
 
 pub(super) struct BlockVariables {
-    variables: HashMap<Identifier, Vec<BlockVariable>>,
+    variables: HashMap<String, Vec<BlockVariable>>,
     index_counter: u32,
 }
 
@@ -30,7 +30,14 @@ impl BlockVariables {
     /// A semantic [`Variable`] may decompose into multiple [`BlockVariable`]s
     /// if the [`Variable`] represents a composite type such as a [`Struct`].
     pub(super) fn block_vars(&mut self, variable: Variable) -> Vec<BlockVariable> {
-        match self.variables.get(variable.name()) {
+        // Key the variable on its name and type so that variables with the same name that are used
+        // during the other's assignment can have different types.
+        let var_key = format!(
+            "{}:{}",
+            variable.name(),
+            variable.get_type().as_ref().expect(EXPECT_VAR_TYPE)
+        );
+        match self.variables.get(&var_key) {
             Some(var_indices) => return var_indices.clone(),
             None => {
                 let block_vars =
@@ -45,8 +52,7 @@ impl BlockVariables {
                         .collect::<Vec<BlockVariable>>();
 
                 self.index_counter += block_vars.len() as u32;
-                self.variables
-                    .insert(variable.name().clone(), block_vars.clone());
+                self.variables.insert(var_key, block_vars.clone());
 
                 block_vars
             }

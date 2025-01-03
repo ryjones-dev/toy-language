@@ -62,6 +62,8 @@ impl<'a> ScopeTracker<'a> {
 
 impl ScopeTracker<'_> {
     /// Returns a [`Variable`] with the given name, or [`None`] if the variable is not in scope.
+    ///
+    /// Getting back a [`Some`] value from this method tells the ScopeTracker that the variable has been used.
     pub(super) fn get_var<'s>(
         &self,
         name: impl Into<&'s str> + Eq + std::hash::Hash,

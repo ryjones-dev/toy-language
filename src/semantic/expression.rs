@@ -335,7 +335,7 @@ impl From<ExpressionError> for Diagnostic {
                         labels.push(diag_func_param_label(&function_signature.params));
                     }
 
-                    for expression in argument_expression {
+                    if let Some(expression) = argument_expression {
                         if let Expression::FunctionCall {
                             function_signature, ..
                         } = expression

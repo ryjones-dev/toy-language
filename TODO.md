@@ -62,6 +62,7 @@
 - [x]  Read from or write to a struct field
 - [x]  Read source from a file instead of baking it in to the executable
 - [x]  Fix assignment to unread variable in inner scope when it is read in an outer scope
+- [x]  Fix codegen error when attempting to assign a value to a variable within a rhs scope that has the same name as a variable on the lhs of an encasing assignment expression
 - [ ]  Fix error for too many return values to fit in registers
 - [ ]  Pass by reference
 - [ ]  Pattern matching
