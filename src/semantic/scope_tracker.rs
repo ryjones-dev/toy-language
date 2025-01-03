@@ -85,21 +85,56 @@ impl ScopeTracker<'_> {
     /// or the previously defined [`Variable`] if it has already been defined.
     pub(super) fn insert_var(&mut self, variable: Variable) -> Option<Ref<Variable>> {
         let var_name: &str = variable.name().into();
-        if self.variable_metadata.contains_key(var_name) {
-            return self
-                .variable_metadata
-                .get(var_name)
-                .map(|var_meta| Ref::map(var_meta.borrow(), |var_meta| &var_meta.variable));
-        }
 
-        self.variable_metadata.insert(
-            var_name.to_string(),
-            RefCell::new(VariableMetadata {
-                variable,
-                read_count: 0,
-            }),
-        );
-        None
+        // TODO: It would be more convenient to just use [`Self::get_var_meta`] instead,
+        // but borrow checker limitations prevent matching on variable metadata here.
+        // When Polonius is released this should be fixed.
+        // See https://rust-lang.github.io/rfcs/2094-nll.html#problem-case-3-conditional-control-flow-across-functions
+        // for a description of the problem.
+        if self.has_var_meta(var_name) {
+            Some(Ref::map(
+                self.get_var_meta(var_name).unwrap().borrow(),
+                |var_meta| &var_meta.variable,
+            ))
+        } else {
+            self.variable_metadata.insert(
+                var_name.to_string(),
+                RefCell::new(VariableMetadata {
+                    variable,
+                    read_count: 0,
+                }),
+            );
+
+            None
+        }
+    }
+
+    /// Gets the variable metadata of a given variable name.
+    ///
+    /// Returns [`None`] if the variable name is not in this scope or any outer scope.
+    fn get_var_meta<'s>(
+        &self,
+        var_name: impl Into<&'s str> + Eq + std::hash::Hash,
+    ) -> Option<&RefCell<VariableMetadata>> {
+        let var_name = var_name.into();
+        match self.variable_metadata.get(var_name) {
+            Some(var_meta) => Some(var_meta),
+            None => match self.outer_scope {
+                Some(outer_scope) => outer_scope.get_var_meta(var_name),
+                None => None,
+            },
+        }
+    }
+
+    fn has_var_meta<'s>(&self, name: impl Into<&'s str> + Eq + std::hash::Hash) -> bool {
+        let name = name.into();
+        match self.variable_metadata.get(name) {
+            Some(_) => true,
+            None => match self.outer_scope {
+                Some(outer_scope) => outer_scope.has_var_meta(name),
+                None => false,
+            },
+        }
     }
 
     /// Returns a [`FunctionSignature`] with the given name, or [`None`] if the function is not in scope.
