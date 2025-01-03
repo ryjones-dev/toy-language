@@ -35,6 +35,7 @@ pub(super) enum ExpressionError {
         expression: Expression,
         expected_len: usize,
         actual_len: usize,
+        expected_source: SourceRange,
         actual_source: SourceRange,
     },
     #[error("assignment type mismatch")]
@@ -128,6 +129,7 @@ impl From<ExpressionError> for Diagnostic {
                 ref expression,
                 expected_len,
                 actual_len,
+                expected_source,
                 actual_source,
             } => Self::new(&err, DiagnosticLevel::Error).with_context(
                 DiagnosticContext::new(diag_expected(&expected_len, &actual_len, actual_source))
@@ -138,7 +140,7 @@ impl From<ExpressionError> for Diagnostic {
                                 expected_len,
                                 if expected_len == 1 { "" } else { "s" }
                             ),
-                            expression.source(),
+                            expected_source,
                         )];
 
                         if let Expression::FunctionCall {
@@ -491,9 +493,21 @@ pub(super) fn analyze_expression(
             let (rhs_types, mut errs) = analyze_expression(rhs, scope_tracker, outer_func_sig);
             errors.append(&mut errs);
 
-            // Early return if there are errors on the rhs,
-            // since we won't know what the expected types should be.
-            if errors.len() > 0 {
+            // If the number of lhs expressions does not equal the number of rhs types,
+            // then we already know we have an error and cannot proceed with the rest of the analysis.
+            if lhs.len() != rhs_types.len() {
+                errors.push(ExpressionError::AssignmentWrongNumberOfVariablesError {
+                    expression: *rhs.clone(),
+                    expected_len: rhs_types.len(),
+                    actual_len: lhs.len(),
+                    expected_source: rhs_types.source().unwrap_or(rhs.source()),
+                    actual_source: lhs
+                        .first()
+                        .unwrap()
+                        .source()
+                        .combine(lhs.last().unwrap().source()),
+                });
+
                 return (Types::new(), errors);
             }
 
@@ -506,7 +520,7 @@ pub(super) fn analyze_expression(
                     Expression::Variable(variable) => {
                         if let None = variable.get_type() {
                             // Variable has not been annotated with a type,
-                            // so give it the same type as the corresponding rhs expression's type
+                            // so give it the same type as the corresponding rhs expression's type.
                             variable.set_type(&rhs_types[i]);
                         }
 
@@ -538,32 +552,15 @@ pub(super) fn analyze_expression(
                 };
             }
 
-            if lhs_types.len() != rhs_types.len() {
-                errors.push(ExpressionError::AssignmentWrongNumberOfVariablesError {
-                    expression: *rhs.clone(),
-                    expected_len: rhs_types.len(),
-                    actual_len: lhs_types.len(),
-                    actual_source: lhs_types.source().unwrap_or(
-                        lhs.first()
-                            .unwrap()
-                            .source()
-                            .combine(lhs.last().unwrap().source()),
-                    ),
-                });
-            } else {
-                // Only continue if the expressions did not have errors,
-                // otherwise adding type errors will add noise
-                if errors.len() == 0 {
-                    for (i, _) in lhs.iter().enumerate() {
-                        if lhs_types[i] != rhs_types[i] {
-                            errors.push(ExpressionError::AssignmentTypeMismatchError {
-                                expected_type: rhs_types[i].clone(),
-                                actual_type: lhs_types[i].clone(),
-                                assignment_source: *source,
-                                expression: *rhs.clone(),
-                            });
-                        }
-                    }
+            // Make sure that every corresponding type matches
+            for (i, _) in lhs_types.iter().enumerate() {
+                if lhs_types[i] != rhs_types[i] {
+                    errors.push(ExpressionError::AssignmentTypeMismatchError {
+                        expected_type: rhs_types[i].clone(),
+                        actual_type: lhs_types[i].clone(),
+                        assignment_source: *source,
+                        expression: *rhs.clone(),
+                    });
                 }
             }
 
@@ -684,45 +681,45 @@ pub(super) fn analyze_expression(
                             variable: variable.clone(),
                             scope_var: scope_var.clone(),
                         });
-                    } else {
-                        let var_type = scope_var.get_type().as_ref().expect(EXPECT_VAR_TYPE);
+                    }
 
-                        // We have to set the variable type on this AST node
-                        // so that the type is available in code generation.
-                        variable.set_type(var_type);
+                    let var_type = scope_var.get_type().as_ref().expect(EXPECT_VAR_TYPE);
 
-                        assert!(member_names.len() > 0, "should have at least one member name to be considered a struct member access");
+                    // We have to set the variable type on this AST node
+                    // so that the type is available in code generation.
+                    variable.set_type(var_type);
 
-                        // Check the type for each level of access to ensure the access is valid
-                        let mut prev_member_name = variable.name();
-                        let mut current_member_type = var_type;
-                        let mut found_err = false;
-                        for member_name in member_names.iter() {
-                            match struct_data_and_member_type(
-                                current_member_type,
-                                member_name,
-                                scope_tracker,
-                                prev_member_name,
-                            ) {
-                                Ok(result) => {
-                                    prev_member_name = member_name;
+                    assert!(member_names.len() > 0, "should have at least one member name to be considered a struct member access");
 
-                                    let current_member_struct;
-                                    (current_member_struct, current_member_type) = result;
+                    // Check the type for each level of access to ensure the access is valid
+                    let mut prev_member_name = variable.name();
+                    let mut current_member_type = var_type;
+                    let mut found_err = false;
+                    for member_name in member_names.iter() {
+                        match struct_data_and_member_type(
+                            current_member_type,
+                            member_name,
+                            scope_tracker,
+                            prev_member_name,
+                        ) {
+                            Ok(result) => {
+                                prev_member_name = member_name;
 
-                                    structs.push(current_member_struct.clone());
-                                }
-                                Err(err) => {
-                                    errors.push(err);
-                                    found_err = true;
-                                    break;
-                                }
+                                let current_member_struct;
+                                (current_member_struct, current_member_type) = result;
+
+                                structs.push(current_member_struct.clone());
+                            }
+                            Err(err) => {
+                                errors.push(err);
+                                found_err = true;
+                                break;
                             }
                         }
+                    }
 
-                        if !found_err {
-                            types.push(current_member_type.clone());
-                        }
+                    if !found_err {
+                        types.push(current_member_type.clone());
                     }
                 }
                 None => {
@@ -1034,13 +1031,13 @@ pub(super) fn analyze_expression(
                             variable: variable.clone(),
                             scope_var: scope_var.clone(),
                         });
-                    } else {
-                        // We have to set the variable type on this AST node
-                        // so that the type is available in code generation.
-                        variable.set_type(scope_var.get_type().as_ref().expect(EXPECT_VAR_TYPE));
-
-                        types.push(variable.get_type().clone().unwrap());
                     }
+
+                    // We have to set the variable type on this AST node
+                    // so that the type is available in code generation.
+                    variable.set_type(scope_var.get_type().as_ref().expect(EXPECT_VAR_TYPE));
+
+                    types.push(variable.get_type().clone().unwrap());
                 }
                 None => {
                     errors.push(ExpressionError::VariableUnknownError(variable.clone()));

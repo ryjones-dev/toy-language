@@ -5,8 +5,8 @@ main(arg1 float, arg2 float) -> float {
         if false {
             -> 1.
         } else {
-            add = 5
-            _test = add
+            add = false
+            val = add # This produces an unused variable warning
             2.1, 1.0
         }
     }

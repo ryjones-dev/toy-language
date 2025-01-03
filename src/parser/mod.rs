@@ -146,7 +146,7 @@ peg::parser!(pub(crate) grammar parser() for str {
     rule assignment() -> Expression
         = s:position!() lhs:(
             (_ s:struct_member_access() _ { s }
-            / _ i:identifier() _ t:_type()? _ { Expression::Variable(Variable::new(i, t)) }
+            / _ i:identifier() _ t:(":" _ t:_type() { t })? _ { Expression::Variable(Variable::new(i, t)) }
             ) ++ ",") _ "=" _ rhs:expression_list() e:position!() {
             Expression::Assignment { lhs, rhs: Box::new(rhs), source: (s..=e).into() }
         }
