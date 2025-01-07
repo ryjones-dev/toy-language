@@ -1,6 +1,7 @@
 use cranelift::{
-    codegen::ir::AbiParam,
+    codegen::ir::InstBuilder,
     frontend::{FunctionBuilder, FunctionBuilderContext, Variable as CraneliftVariable},
+    prelude::MemFlags,
 };
 use thiserror::Error;
 
@@ -12,10 +13,11 @@ use crate::{
 };
 
 use super::{
-    block::BlockVariables,
     context::CodeGenContext,
     expression_generator::ExpressionGenerator,
     options::{CodeGenOptions, OptimizationLevel},
+    types::{FunctionParam, ParameterMode},
+    vars::{CodegenVariable, CodegenVariables},
 };
 
 /// An error that captures all errors that can be thrown during code generation.
@@ -187,29 +189,35 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
 
         let Function { signature, scope } = function;
 
-        // Add the function's parameters to the context
-        for param in &signature.params {
-            let primitive_types =
-                DataType::from(param.get_type().clone().expect(EXPECT_VAR_TYPE)).primitive_types();
-            for primitive_type in primitive_types {
+        // Add the function's return types to the context
+        for return_type in signature.returns {
+            let data_type = return_type.into();
+
+            // If the function returns a struct, add the return area pointer to the beginning of the parameter list
+            if let DataType::Struct { .. } = data_type {
                 context
                     .func
                     .signature
                     .params
-                    .push(AbiParam::new(primitive_type.clone().into()));
+                    .push(FunctionParam::new(&data_type, ParameterMode::Output).into());
             }
+
+            context
+                .func
+                .signature
+                .returns
+                .push(FunctionParam::new(&data_type, ParameterMode::Output).into());
         }
 
-        // Add the function's return types to the context
-        for return_type in signature.returns {
-            let primitive_types = DataType::from(return_type).primitive_types();
-            for primitive_type in primitive_types {
-                context
-                    .func
-                    .signature
-                    .returns
-                    .push(AbiParam::new(primitive_type.into()));
-            }
+        // Add the function's parameters to the context
+        for param in &signature.params {
+            context.func.signature.params.push(
+                FunctionParam::new(
+                    param.get_type().as_ref().expect(EXPECT_VAR_TYPE).into(),
+                    ParameterMode::Input,
+                )
+                .into(),
+            );
         }
 
         let function_name = signature.name.to_string();
@@ -235,24 +243,41 @@ impl<M: CodeGeneratorModule> CodeGenerator<M> {
         builder.switch_to_block(function_block);
         builder.seal_block(function_block);
 
-        // Prime the block variables with the function parameters
-        let mut block_vars = BlockVariables::new();
-        for function_param in signature.params.into_iter() {
-            let b_vars = block_vars.block_vars(function_param);
-            for b_var in b_vars {
-                let cranelift_variable = CraneliftVariable::from_u32(b_var.index);
+        // Prime the codegen variables with the function parameters
+        let mut codegen_vars = CodegenVariables::new();
+        for (i, function_param) in signature.params.into_iter().enumerate() {
+            let param_value = builder.block_params(function_block)[i];
 
-                builder.declare_var(cranelift_variable, b_var.ty.into());
-                builder.def_var(
-                    cranelift_variable,
-                    builder.block_params(function_block)[b_var.index as usize],
-                );
+            let codegen_var = codegen_vars.codegen_var(function_param);
+            match codegen_var {
+                // For primitive values that fit in registers, just define a variable for them as normal
+                CodegenVariable::Primitive { data_type, index } => {
+                    let cranelift_variable = CraneliftVariable::from_u32(*index);
+                    builder.declare_var(cranelift_variable, data_type.into());
+                    builder.def_var(cranelift_variable, param_value);
+                }
+                // For composite values that don't fit in registers, Cranelift will give us a pointer where this argument
+                // lives on the stack. Load each primitive type from the stack pointer using the appropriate offset.
+                CodegenVariable::Composite { layout, indices } => {
+                    for (j, member) in layout.members.iter().enumerate() {
+                        let cranelift_variable = CraneliftVariable::from_u32(indices[j]);
+                        builder.declare_var(cranelift_variable, (&member.data_type).into());
+
+                        let value = builder.ins().load(
+                            (&member.data_type).into(),
+                            MemFlags::new(),
+                            param_value,
+                            member.offset as i32,
+                        );
+                        builder.def_var(cranelift_variable, value);
+                    }
+                }
             }
         }
 
         // Now we can generate the function scope by generating each expression in the scope
         let mut expression_generator =
-            ExpressionGenerator::new(&mut self.module, &mut builder, &mut block_vars);
+            ExpressionGenerator::new(&mut self.module, &mut builder, &mut codegen_vars);
 
         for expression in scope {
             expression_generator.generate(expression);

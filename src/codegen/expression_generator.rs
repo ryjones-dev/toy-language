@@ -1,7 +1,7 @@
 use cranelift::{
     codegen::ir::{
         condcodes::{FloatCC, IntCC},
-        AbiParam, InstBuilder, Value,
+        InstBuilder, MemFlags, StackSlotData, StackSlotKind, Value,
     },
     frontend::FunctionBuilder,
 };
@@ -13,14 +13,17 @@ use crate::{
         },
         function::FunctionSignature,
         identifier::Identifier,
-        types::{DataType, Type},
+        types::DataType,
         variable::Variable,
     },
-    semantic::EXPECT_VAR_TYPE,
+    semantic::EXPECT_STRUCT,
     semantic_assert,
 };
 
-use super::block::BlockVariables;
+use super::{
+    types::{FunctionParam, ParameterMode},
+    vars::{CodegenVariable, CodegenVariables},
+};
 
 /// Represents the value of an evaluated [`Expression`].
 ///
@@ -40,37 +43,43 @@ impl From<ExpressionValue> for Value {
     }
 }
 
+impl From<&ExpressionValue> for Value {
+    fn from(value: &ExpressionValue) -> Self {
+        value.val
+    }
+}
+
 /// Helper type that is responsible for generating Cranelift IR from expressions.
 pub(super) struct ExpressionGenerator<
     'module,
     'ctx: 'builder,
     'builder,
-    'block,
+    'vars,
     M: cranelift_module::Module + 'module,
 > {
     builder: &'builder mut FunctionBuilder<'ctx>,
     module: &'module mut M,
-    block_vars: &'block mut BlockVariables,
+    codegen_vars: &'vars mut CodegenVariables,
 }
 
-impl<'module, 'ctx: 'builder, 'builder, 'block, M: cranelift_module::Module>
-    ExpressionGenerator<'module, 'ctx, 'builder, 'block, M>
+impl<'module, 'ctx: 'builder, 'builder, 'vars, M: cranelift_module::Module>
+    ExpressionGenerator<'module, 'ctx, 'builder, 'vars, M>
 {
     pub(super) fn new(
         module: &'module mut M,
         builder: &'builder mut FunctionBuilder<'ctx>,
-        block_vars: &'block mut BlockVariables,
+        codegen_vars: &'vars mut CodegenVariables,
     ) -> Self {
         Self {
             builder,
             module,
-            block_vars,
+            codegen_vars,
         }
     }
 }
 
-impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'module>
-    ExpressionGenerator<'module, 'ctx, 'builder, 'var, M>
+impl<'module, 'ctx: 'builder, 'builder, 'vars, M: cranelift_module::Module + 'module>
+    ExpressionGenerator<'module, 'ctx, 'builder, 'vars, M>
 {
     /// Generate IR for a given expression.
     ///
@@ -135,6 +144,20 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                 for lhs_expression in lhs {
                     match lhs_expression {
                         Expression::StructMemberAccess { variable, member_names, structs } => {
+                            let codegen_var = self.codegen_vars.codegen_var(variable);
+                            match codegen_var {
+                                CodegenVariable::Primitive { data_type, index } => unreachable!("primitives cannot have struct member access"),
+                                CodegenVariable::Composite { layout, indices } => {
+                                    // Write the value to the struct pointer whose offset represents the struct member
+                                    self.builder.ins().store(MemFlags::new(), values[0], stack_pointer, offset);
+                                },
+                            }
+
+
+
+
+
+
                             semantic_assert!(structs.len() > 0, "structs must be populated by this point");
 
                             let mut index = 0;
@@ -151,9 +174,9 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                                 }
                             }
 
-                            let block_var = &self.block_vars.block_vars(variable)[index];
+                            let codegen_var = &self.codegen_vars.codegen_var(variable)[index];
                                 let cranelift_variable =
-                                    cranelift::frontend::Variable::from_u32(block_var.index);
+                                    cranelift::frontend::Variable::from_u32(codegen_var.index);
 
                                 self.builder
                                     .def_var(cranelift_variable, values[value_index].clone().into());
@@ -163,21 +186,24 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
                         Expression::Variable(variable) => {
                             // Only declare and define variables if they are not discarded
                             if !variable.is_discarded() {
-                                let block_vars = self.block_vars.block_vars(variable);
-                                for block_var in block_vars {
-                                    let cranelift_variable =
-                                        cranelift::frontend::Variable::from_u32(block_var.index);
+                                let codegen_var = self.codegen_vars.codegen_var(variable);
+                                match codegen_var {
+                                    CodegenVariable::Primitive { data_type, index } => {
+                                        let cranelift_variable =
+                                        cranelift::frontend::Variable::from_u32(*index);
 
-                                    // Intentionally ignore the error, since we don't care if the variable has already been declared
+                                        // Intentionally ignore the error, since we don't care if the variable has already been declared
                                     let _ = self
-                                        .builder
-                                        .try_declare_var(cranelift_variable, block_var.ty.into());
+                                    .builder
+                                    .try_declare_var(cranelift_variable, data_type.into());
 
-                                    self.builder
-                                        .def_var(cranelift_variable, values[value_index].clone().into());
+                                self.builder
+                                    .def_var(cranelift_variable, values[value_index].clone().into());
 
-                                    value_index += 1;
-                                }
+                                value_index += 1;
+                                    },
+                                    CodegenVariable::Composite { layout, indices } => todo!(),
+                                }                                    
                             }
                         },
                         _ => unreachable!("parsing guarantees no other expressions are possible on the left hand side")
@@ -189,14 +215,57 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
             Expression::StructInstantiation {
                 members, _struct, ..
             } => {
+                // Generate a struct data type so that the layout can be calculated
+                let struct_layout = DataType::Struct {
+                    name: _struct.expect(EXPECT_STRUCT).name().to_string(),
+                    struct_data_types: Some(
+                        _struct
+                            .expect(EXPECT_STRUCT)
+                            .into_members()
+                            .into_iter()
+                            .map(|member| member.into_type().into())
+                            .collect(),
+                    ),
+                }
+                .layout(0);
+
+                // Allocate the struct to the stack
+                let stack_slot = self.builder.create_sized_stack_slot(StackSlotData::new(
+                    StackSlotKind::ExplicitSlot,
+                    struct_layout.size,
+                    16, // Needs to be 16 byte aligned to support SIMD instructions
+                ));
+
                 let mut values = Vec::new();
 
+                // Generate all the member expressions
                 for (_, member_expression) in members {
                     let (mut member_values, _) = self.generate(member_expression);
                     values.append(&mut member_values);
                 }
 
-                (values, false)
+                // Store the values from the member expressions into the stack slot
+                for (i, value) in values.iter().enumerate() {
+                    self.builder.ins().stack_store(
+                        value.into(),
+                        stack_slot,
+                        struct_layout.members[i].offset as i32,
+                    );
+                }
+
+                // Return a pointer to the stack slot
+                let stack_addr = self.builder.ins().stack_addr(
+                    cranelift::codegen::ir::types::I64,
+                    stack_slot,
+                    0,
+                );
+                (
+                    vec![ExpressionValue {
+                        val: stack_addr,
+                        ty: struct_layout.data_type,
+                    }],
+                    false,
+                )
             }
             Expression::StructMemberAccess {
                 variable,
@@ -230,14 +299,22 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
 
                 semantic_assert!(ty != None, "struct member must have a type");
 
-                let block_var = &self.block_vars.block_vars(variable)[index];
+                let codegen_var = self.codegen_vars.codegen_var(variable);
+                match codegen_var {
+                    CodegenVariable::Primitive { data_type, index } => {
+                        unreachable!("primitive types cannot have struct member access")
+                    }
+                    CodegenVariable::Composite { layout, indices } => {
+                        
+                    },
+                }
 
                 (
                     vec![ExpressionValue {
                         ty: ty.unwrap(),
                         val: self
                             .builder
-                            .use_var(cranelift::frontend::Variable::from_u32(block_var.index)),
+                            .use_var(cranelift::frontend::Variable::from_u32(codegen_var.index)),
                     }],
                     false,
                 )
@@ -678,27 +755,23 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
         // This allows for any arbitrary function definition order.
         let mut sig = self.module.make_signature();
 
-        for ty in func_sig.params.types() {
-            let primitive_types = DataType::from(ty).primitive_types();
-            for primitive_type in primitive_types {
-                sig.params.push(AbiParam::new(primitive_type.into()))
+        let mut struct_return_sizes = Vec::new();
+        for ty in func_sig.returns {
+            let data_type = ty.into();
+
+            // If the function returns a struct, add the return area pointer to the beginning of the parameter list
+            if let DataType::Struct { .. } = data_type {
+                sig.params
+                    .push(FunctionParam::new(&data_type, ParameterMode::Output).into());
             }
+
+            sig.returns
+                .push(FunctionParam::new(&data_type, ParameterMode::Output).into());
         }
 
-        let mut primitive_return_types = Vec::new();
-        for ty in func_sig.returns {
-            let type_source = ty.source();
-
-            let primitive_types = DataType::from(ty).primitive_types();
-            for primitive_type in primitive_types {
-                sig.returns
-                    .push(AbiParam::new(primitive_type.clone().into()));
-
-                // Keep track of the primitive return types so that they can be associated
-                // with the function call's return values.
-                // Use the same type source for each primitive type if it is expanded into multiple.
-                primitive_return_types.push(Type::new(primitive_type, type_source));
-            }
+        for ty in func_sig.params.types() {
+            sig.params
+                .push(FunctionParam::new(&ty.into(), ParameterMode::Input).into());
         }
 
         let func_id_to_call = self
@@ -736,7 +809,7 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
             self.builder
                 .inst_results(call)
                 .into_iter()
-                .zip(primitive_return_types.into_iter())
+                .zip(return_types.into_iter())
                 .map(|(value, ty)| ExpressionValue {
                     val: *value,
                     ty: ty.into(),
@@ -747,20 +820,27 @@ impl<'module, 'ctx: 'builder, 'builder, 'var, M: cranelift_module::Module + 'mod
     }
 
     fn generate_variable(&mut self, variable: Variable) -> Vec<ExpressionValue> {
-        let var_data_type: DataType = variable.get_type().clone().expect(EXPECT_VAR_TYPE).into();
-        let block_vars = self.block_vars.block_vars(variable);
-
-        let mut values = Vec::with_capacity(block_vars.len());
-        for block_var in block_vars {
-            values.push(ExpressionValue {
-                ty: var_data_type.clone(),
+        let codegen_var = self.codegen_vars.codegen_var(variable);
+        match codegen_var {
+            CodegenVariable::Primitive { data_type, index } => vec![ExpressionValue {
+                ty: data_type.clone().into(),
                 val: self
                     .builder
-                    .use_var(cranelift::frontend::Variable::from_u32(block_var.index)),
-            });
+                    .use_var(cranelift::frontend::Variable::from_u32(*index)),
+            }],
+            CodegenVariable::Composite { layout, indices } => {
+                let mut values = Vec::with_capacity(layout.members.len());
+                for (i, member_layout) in layout.members.iter().enumerate() {
+                    values.push(ExpressionValue {
+                        ty: member_layout.data_type.clone().into(),
+                        val: self
+                            .builder
+                            .use_var(cranelift::frontend::Variable::from_u32(indices[i])),
+                    });
+                }
+                values
+            }
         }
-
-        values
     }
 
     fn generate_int_literal(&mut self, value: i64) -> ExpressionValue {
